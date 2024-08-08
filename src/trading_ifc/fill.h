@@ -1,10 +1,11 @@
 #pragma once
 
-#include <string>
 #include "common.h"
 #include "timer.h"
 #include "instrument.h"
+#include "fixed.h"
 #include <vector>
+#include <string>
 
 namespace trading_api {
 
