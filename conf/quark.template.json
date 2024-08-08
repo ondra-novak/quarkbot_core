@@ -31,6 +31,10 @@
             "instruments":["Bitcoin","Ethereum"],
             "settings":{
                 "key":"value"
+            },
+            "database":{
+                "path":"/data/main",
+                "key":"main"
             }
         }
     }
