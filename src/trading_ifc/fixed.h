@@ -12,7 +12,6 @@ namespace trading_api {
 class FixedNumber {
 public:
 
-
     constexpr explicit FixedNumber(std::int64_t raw):_num_data(raw) {}
     constexpr FixedNumber(std::int64_t mantisa, int exponent):_num_data(make_number(mantisa, exponent)) {}
     constexpr FixedNumber(double v)
@@ -23,19 +22,30 @@ public:
         :_num_data(string2raw(v)) {}
 
     friend constexpr FixedNumber operator+(const FixedNumber &a, const FixedNumber &b) {
-        if (a.get_exponent() != b.get_exponent()) {
-            FixedNumber new_b = b.set_exponent(a.get_exponent());
-            return a + new_b;
+        auto am = a.get_mantisa();
+        auto ae = a.get_exponent();
+        auto bm = b.get_mantisa();
+        auto be = b.get_exponent();
+        if (ae < be) {
+            if (can_dec_exp(bm)) return a + b.set_exponent(be-1);
+            else return a.set_exponent(be) + b;
         }
-        return FixedNumber(a.get_mantisa()+b.get_mantisa(),a.get_exponent());
+        else if (ae > be) {
+            if (can_dec_exp(am)) return a.set_exponent(ae-1)+ b;
+            return a + b.set_exponent(ae);
+        }
+        else {
+            auto r = a.get_mantisa()+b.get_mantisa();
+            if (must_inc_exp(r)) {
+                return FixedNumber(r/10, ae+1);
+            } else {
+                return FixedNumber(r, ae);
+            }
+        }
     }
 
     friend constexpr FixedNumber operator-(const FixedNumber &a, const FixedNumber &b) {
-        if (a.get_exponent() != b.get_exponent()) {
-            FixedNumber new_b = b.set_exponent(a.get_exponent());
-            return a - new_b;
-        }
-        return FixedNumber(a.get_mantisa()-b.get_mantisa(),a.get_exponent());
+        return a + (-b);
     }
 
     friend constexpr FixedNumber operator*(const FixedNumber &a, const FixedNumber &b) {
@@ -51,11 +61,11 @@ public:
         auto bcb = bit_count(bm);
         while (bca+bcb > 55) {
             if (bcb>bca) {
-                bm/=10;
+                bm=(bm+5)/10;
                 ++be;
                 bcb = bit_count(bm);
             } else {
-                am/=10;
+                am=(am+5)/10;
                 ++ae;
                 bca = bit_count(am);
             }
@@ -66,18 +76,23 @@ public:
     }
 
     friend constexpr FixedNumber operator/(const FixedNumber &a, const FixedNumber &b) {
+        auto bm = b.get_mantisa();
         auto am = a.get_mantisa();
         auto ae = a.get_exponent();
-        auto bm = b.get_mantisa();
         auto be = b.get_exponent();
         bool an = am < 0;
         bool bn = bm < 0;
         if (an) am = -am;
         if (bn) bm = -bm;
-        while (bit_count(am) < 50) {
+        while (can_dec_exp(am)) {
             am*=10;
             --ae;
         }
+        while (can_inc_exp_for_div(bm)) {
+            bm = (bm+5)/10;
+            ++be;
+        }
+        if (!bm) return FixedNumber(0);
         auto res = am / bm;
         if (an != bn) res = -res;
         return FixedNumber(res, ae-be);
@@ -122,12 +137,12 @@ public:
         }
     }
 
-    constexpr std::string_view to_sci_string(std::vector<char> &buffer) const {
-        buffer.clear();
+    template<std::output_iterator<char> Iter>
+    constexpr Iter to_sci_string(Iter iter) const {
         auto e = get_exponent();
         auto m = get_mantisa();
         if (m < 0) {
-            buffer.push_back('-');
+            *iter = '-';++iter;
             m = -m;
         }
         char tmp[24];
@@ -140,27 +155,27 @@ public:
             ++digits;
         }
         if (digits == 0) {
-            buffer.push_back('0');
+            *iter = '0'; ++iter;
             e = 0;
         } else if (digits == 1) {
-            buffer.push_back(*a);
+            *iter = *a; ++iter;
         } else {
-            buffer.push_back(*a);
+            *iter = *a; ++iter;
             ++a;
-            buffer.push_back('.');
+            *iter = '.'; ++iter;
             for (int i=1; i < digits;++i) {
-                buffer.push_back(*a);
+                *iter = *a; ++iter;
                 ++a;
             }
             e += digits-1;
         }
-        buffer.push_back('e');
+        *iter = 'e'; ++iter;
         digits = 0;
         if (e == 0) {
-            buffer.push_back('0');
+            *iter = '0'; ++iter;
         } else {
             if (e < 0) {
-                buffer.push_back('-');
+                *iter = '-'; ++iter;
                 e = -e;
             }
             while (e) {
@@ -170,19 +185,19 @@ public:
                 ++digits;
             }
             for (int i = 0; i < digits; ++i) {
-                buffer.push_back(*a);
+                *iter = *a; ++iter;
                 ++a;
             }
         }
-        return {buffer.data(), buffer.size()};
+        return iter;
     }
 
-    constexpr std::string_view to_fixed_string(std::vector<char> &buffer) const {
-        buffer.clear();
+    template<std::output_iterator<char> Iter>
+    constexpr Iter to_fixed_string(Iter iter) const {
         auto e = get_exponent();
         auto m = get_mantisa();
         if (m < 0) {
-            buffer.push_back('-');
+            *iter = '-'; ++iter;
             m = -m;
         }
         char tmp[24];
@@ -196,24 +211,32 @@ public:
         }
         if (e >= 0) {
             for (int i = 0; i < digits; ++i) {
-                buffer.push_back(a[i]);
+                *iter = a[i]; ++iter;
             }
             for (int i = 0; i < e; ++i) {
-                buffer.push_back('0');
+                *iter = '0'; ++iter;
             }
         } else if (e <= -digits) {
-            buffer.push_back('0');
-            buffer.push_back('.');
+            *iter = '0'; ++iter;
+            *iter = '.'; ++iter;
             int zrs = -e - digits;
-            for (int i = 0; i < zrs; ++i) buffer.push_back('0');
-            for (int i = 0; i < digits; ++i) buffer.push_back(a[i]);
+            for (int i = 0; i < zrs; ++i) {
+                *iter = '0'; ++iter;
+            }
+            for (int i = 0; i < digits; ++i) {
+                *iter = a[i]; ++iter;
+            }
         } else {
             int dn = digits + e;
-            for (int i = 0; i < dn; ++i) buffer.push_back(a[i]);
-            buffer.push_back('.');
-            for (int i = dn; i < digits; ++i) buffer.push_back(a[i]);
+            for (int i = 0; i < dn; ++i) {
+                *iter = a[i]; ++iter;
+            }
+            *iter = '.'; ++iter;
+            for (int i = dn; i < digits; ++i) {
+                *iter = a[i]; ++iter;
+            }
         }
-        return {buffer.data(), buffer.size()};
+        return iter;
     }
 
     constexpr FixedNumber set_exponent(int new_exponent) const {
@@ -221,11 +244,11 @@ public:
         auto old_e = get_exponent();
         auto expdiff = new_exponent - old_e;
         if (expdiff < 0) {
-            m = m * pow10(-expdiff);
+            m = m * pow(10,-expdiff);
         } else {
-            m = m / pow10(expdiff);
+            m = m / pow(10,expdiff);
         }
-        return FixedNumber(m, new_exponent);
+        return FixedNumber(make_number_denorm(m, new_exponent));
     }
 
     constexpr std::int64_t get_mantisa() const {
@@ -240,6 +263,10 @@ protected:
 
 
     constexpr static std::int64_t make_number(std::int64_t value, int exponent) {
+        return make_number_denorm(value,exponent);
+    }
+
+    constexpr static std::int64_t make_number_denorm(std::int64_t value, int exponent) {
         auto eadj = static_cast<std::int64_t>(exponent+128) & 0xFF;
         return (value << 8) | eadj;
     }
@@ -287,12 +314,12 @@ protected:
 
 
     static constexpr int log10(double number)  {
-        if (number > 0) {
+        if (number > 0.0) {
             auto low = minexp;
             auto high = maxexp+1;
             while (low < high) {
                 auto mid = (low+ high - 2*minexp)/2 + minexp;
-                auto v = pow10(mid);
+                auto v = pow(10,mid);
                 auto adj = number/v;
                 if (adj < 1.0) high = mid;
                 else if (adj >= 10.0) low = mid+1;
@@ -311,9 +338,10 @@ protected:
 
     static constexpr std::int64_t double2raw(double v) {
         if (!v) return make_number(0, 0);
+        double r = v < 0?-0.5:0.5;
         int exponent = static_cast<int>(log10(abs(v))) - 8;
         double base = pow(10, exponent);
-        double num = v/base;
+        double num = (v/base)+r;
         std::int64_t n = static_cast<std::int64_t>(num);
         return make_number(n, exponent);
     }
@@ -340,7 +368,7 @@ protected:
                 if (exp) ++exp;
                 else {
                     m = m * 10 + (c - '0');
-                    if (m > 0x7FFFFFFFFFFFFFLL) {
+                    if (must_inc_exp(m)) {
                         m/=10;
                         ++exp;
                     }
@@ -359,7 +387,7 @@ protected:
                 if (c>='0' && c<='9') {
                     if (exp <= 0) {
                         m = m * 10 + (c - '0');
-                        if (m > 0x7FFFFFFFFFFFFFLL)  {
+                        if (must_inc_exp(m))  {
                             m/=10;
                         } else {
                             --exp;
@@ -403,6 +431,17 @@ protected:
         }
     }
 
+    static constexpr bool can_dec_exp(std::int64_t mantisa) {
+        return mantisa && mantisa < (1LL << 50) && mantisa > (-1LL << 50);
+    }
+    static constexpr bool can_inc_exp_for_div(std::int64_t mantisa) {
+        return mantisa && ((mantisa % 10) == 0  || mantisa >= (1LL << 25) || mantisa <= (-1LL << 25));
+    }
+    static constexpr bool must_inc_exp(std::int64_t mantisa) {
+        return mantisa >= (1LL << 56) || mantisa <= (-1LL << 56);
+    }
+
 };
+
 
 }
