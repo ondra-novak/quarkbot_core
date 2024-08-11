@@ -9,46 +9,65 @@
 namespace trading_api {
 
 
-class FixedNumber {
+class Decimal {
 public:
+#if __cpp_lib_constexpr_cmath > 202306L
+    static constexpr bool cmath_is_const = true;
+#else
+    static constexpr bool cmath_is_const = false;
+#endif
+    static constexpr int mantisa_shift = 8;
+    static constexpr int mantisa_bits = (sizeof(std::uint64_t)*8 - mantisa_shift);
+    static constexpr int exponent_mask = 0xFF;
+    static constexpr int exponent_ofs = exponent_mask>>1;
+    static constexpr std::int64_t mantisa_max = (1LL << mantisa_bits) - 1;
+    static constexpr std::int64_t mantisa_half =  (1LL << (mantisa_bits/2)) - 1;
 
-    constexpr explicit FixedNumber(std::int64_t raw):_num_data(raw) {}
-    constexpr FixedNumber(std::int64_t mantisa, int exponent):_num_data(make_number(mantisa, exponent)) {}
-    constexpr FixedNumber(double v)
+
+    constexpr Decimal():_num_data(make_number(0,0)) {}
+    constexpr Decimal(std::int64_t mantisa, int exponent)
+        :_num_data(make_number(mantisa, exponent)) {}
+    template<typename T> requires (std::is_floating_point_v<T>)
+    constexpr Decimal(T v)
         :_num_data(double2raw(v)) {}
-    constexpr FixedNumber(int v)
-        :_num_data(make_number(v, 0)) {}
-    constexpr FixedNumber(std::string_view v)
+    template<typename T> requires (std::is_integral_v<T>)
+    constexpr Decimal(T v)
+        :_num_data(integral2raw(v)) {}
+    constexpr Decimal(std::string_view v)
         :_num_data(string2raw(v)) {}
 
-    friend constexpr FixedNumber operator+(const FixedNumber &a, const FixedNumber &b) {
+    static constexpr Decimal nan()  {
+        return Decimal(0, -exponent_ofs);
+    }
+
+    friend constexpr Decimal operator+(const Decimal &a, const Decimal &b) {
         auto am = a.get_mantisa();
         auto ae = a.get_exponent();
         auto bm = b.get_mantisa();
         auto be = b.get_exponent();
         if (ae < be) {
-            if (can_dec_exp(bm)) return a + b.set_exponent(be-1);
-            else return a.set_exponent(be) + b;
+            if (can_dec_exp(bm)) return a + b.adjust_exponent(be-1);
+            else return a.adjust_exponent(be) + b;
         }
         else if (ae > be) {
-            if (can_dec_exp(am)) return a.set_exponent(ae-1)+ b;
-            return a + b.set_exponent(ae);
+            if (can_dec_exp(am)) return a.adjust_exponent(ae-1)+ b;
+            return a + b.adjust_exponent(ae);
         }
         else {
             auto r = a.get_mantisa()+b.get_mantisa();
             if (must_inc_exp(r)) {
-                return FixedNumber(r/10, ae+1);
+                return Decimal(r/10, ae+1);
             } else {
-                return FixedNumber(r, ae);
+                return Decimal(r, ae);
             }
         }
     }
 
-    friend constexpr FixedNumber operator-(const FixedNumber &a, const FixedNumber &b) {
+    friend constexpr Decimal operator-(const Decimal &a, const Decimal &b) {
         return a + (-b);
     }
 
-    friend constexpr FixedNumber operator*(const FixedNumber &a, const FixedNumber &b) {
+    friend constexpr Decimal operator*(const Decimal &a, const Decimal &b) {
         auto am = a.get_mantisa();
         auto ae = a.get_exponent();
         auto bm = b.get_mantisa();
@@ -57,25 +76,25 @@ public:
         bool bn = bm < 0;
         if (an) am = -am;
         if (bn) bm = -bm;
-        auto bca = bit_count(am);
-        auto bcb = bit_count(bm);
-        while (bca+bcb > 55) {
+        auto bca = count_bits(am);
+        auto bcb = count_bits(bm);
+        while (bca+bcb > mantisa_bits) {
             if (bcb>bca) {
                 bm=(bm+5)/10;
                 ++be;
-                bcb = bit_count(bm);
+                bcb = count_bits(bm);
             } else {
                 am=(am+5)/10;
                 ++ae;
-                bca = bit_count(am);
+                bca = count_bits(am);
             }
         }
         auto res = am * bm;
         if (an != bn) res = -res;
-        return FixedNumber(res, ae+be);
+        return Decimal(res, ae+be);
     }
 
-    friend constexpr FixedNumber operator/(const FixedNumber &a, const FixedNumber &b) {
+    friend constexpr Decimal operator/(const Decimal &a, const Decimal &b) {
         auto bm = b.get_mantisa();
         auto am = a.get_mantisa();
         auto ae = a.get_exponent();
@@ -92,170 +111,234 @@ public:
             bm = (bm+5)/10;
             ++be;
         }
-        if (!bm) return FixedNumber(0);
+        if (!bm) return Decimal::nan();
         auto res = am / bm;
         if (an != bn) res = -res;
-        return FixedNumber(res, ae-be);
+        return Decimal(res, ae-be);
     }
 
 
-    constexpr FixedNumber &operator+=(const FixedNumber &a) {
+    constexpr Decimal &operator+=(const Decimal &a) {
         (*this) = (*this) + a;
         return *this;
     }
 
-    constexpr FixedNumber &operator-=(const FixedNumber &a) {
+    constexpr Decimal &operator-=(const Decimal &a) {
         (*this) = (*this) - a;
         return *this;
     }
 
-    friend constexpr FixedNumber operator-(const FixedNumber &a) {
-        return FixedNumber(-a.get_mantisa(), a.get_exponent());
+    friend constexpr Decimal operator-(const Decimal &a) {
+        return Decimal(-a.get_mantisa(), a.get_exponent());
     }
 
-    friend constexpr bool operator==(const FixedNumber &a, const FixedNumber &b) {
-        int ea = a.get_exponent();
-        int eb = b.get_exponent();
-        if (ea != eb) {
-            int ecmn = std::max(ea,eb);
-            return a.set_exponent(ecmn) == b.set_exponent(ecmn);
-        } else {
-            return a.get_mantisa() == b.get_mantisa();
-        }
+    friend constexpr bool operator==(const Decimal &a, const Decimal &b) {
+        auto r = a - b;
+        return (r.get_mantisa() == 0);
     }
 
-    friend constexpr std::strong_ordering operator<=>(const FixedNumber &a, const FixedNumber &b) {
-        int ea = a.get_exponent();
-        int eb = b.get_exponent();
-        if (ea != eb) {
-            int ecmn = std::max(ea,eb);
-            return a.set_exponent(ecmn) <=> b.set_exponent(ecmn);
-        } else {
-            auto am = a.get_mantisa();
-            auto bm = b.get_mantisa();
-            return am < bm? std::strong_ordering::less:am>bm?std::strong_ordering::greater:std::strong_ordering::equal;
-        }
+    friend constexpr std::strong_ordering operator<=>(const Decimal &a, const Decimal &b) {
+        auto r = a - b;
+        auto m = r.get_mantisa();
+        if (m < 0) return std::strong_ordering::less;
+        else if (m > 0) return std::strong_ordering::greater;
+        else return std::strong_ordering::equal;
     }
+
+
+    enum class OutputMode {
+        autoselect,
+        decimals,
+        scientific
+    };
 
     template<std::output_iterator<char> Iter>
-    constexpr Iter to_sci_string(Iter iter) const {
+    constexpr Iter to_string(Iter iter, OutputMode mode = OutputMode::autoselect) const {
         auto e = get_exponent();
         auto m = get_mantisa();
+        if (!m) {
+            if (e == -exponent_ofs) {
+                constexpr std::string_view nan = "nan";
+                return std::copy(nan.begin(), nan.end(), iter);
+            } else {
+                *iter = '0';++iter;
+                return iter;
+            }
+        }
         if (m < 0) {
             *iter = '-';++iter;
             m = -m;
         }
-        char tmp[24];
-        char *a = tmp+sizeof(tmp);
-        int digits = 0;
-        while (m) {
-            --a;
-            *a = '0' + (m % 10);
-            m/=10;
-            ++digits;
+        if (e == exponent_ofs+1) {
+                constexpr std::string_view nan = "inf";
+                return std::copy(nan.begin(), nan.end(), iter);
         }
-        if (digits == 0) {
-            *iter = '0'; ++iter;
-            e = 0;
-        } else if (digits == 1) {
-            *iter = *a; ++iter;
+        std::string mstr = std::to_string(m);
+        auto mtst = m;
+        auto E = e;
+        while (mtst > 9) {
+            mtst/=10;
+            E++;
+        }
+        bool scnt;
+        switch (mode) {
+            case OutputMode::scientific: scnt = true; break;
+            case OutputMode::decimals: scnt = false; break;
+            default: scnt = E > 8 || E < -3;break;
+        };
+        while (mstr.back() == '0')  {
+            mstr.pop_back();
+            ++e;
+        }
+        auto bstr = mstr.begin();
+        auto estr = mstr.end();
+        if (scnt) {
+            *iter = *bstr;
+            ++iter; ++bstr;
+            if (bstr != estr) {
+                *iter = '.'; ++iter;
+                iter = std::copy(bstr, estr, iter);
+            }
+            *iter = 'E'; ++iter;
+            mstr = std::to_string(E);
+            iter = std::copy(mstr.begin(), mstr.end(),  iter);
+            return iter;
         } else {
-            *iter = *a; ++iter;
-            ++a;
-            *iter = '.'; ++iter;
-            for (int i=1; i < digits;++i) {
-                *iter = *a; ++iter;
-                ++a;
+            int dot = mstr.size() + e;
+            if (dot <= 0) {
+                *iter = '0'; ++iter;
+                if (dot < 0) {
+                    *iter = '.'; ++iter;
+                    while (dot < 0) {
+                        *iter = '0'; ++iter;
+                        ++dot;
+                    }
+                }
             }
-            e += digits-1;
+            auto dotpos = estr;
+            std::advance(dotpos, e);
+            while (bstr != estr) {
+                if (bstr == dotpos) {
+                    *iter = '.';++iter;
+                }
+                *iter = *bstr;
+                ++bstr; ++iter;
+            }
+            while (e > 0) {
+                *iter = '0';++iter;
+                --e;
+            }
+            return iter;
         }
-        *iter = 'e'; ++iter;
-        digits = 0;
-        if (e == 0) {
-            *iter = '0'; ++iter;
-        } else {
-            if (e < 0) {
-                *iter = '-'; ++iter;
-                e = -e;
-            }
-            while (e) {
-                --a;
-                *a = '0' + (e % 10);
-                e/=10;
-                ++digits;
-            }
-            for (int i = 0; i < digits; ++i) {
-                *iter = *a; ++iter;
-                ++a;
-            }
-        }
-        return iter;
+    }
+#if __cpp_lib_constexpr_string >= 201907L
+    constexpr
+#endif
+    std::string to_string(OutputMode md = OutputMode::autoselect)const {
+        std::string out;
+        to_string(std::back_inserter(out), md);
+        return out;
     }
 
-    template<std::output_iterator<char> Iter>
-    constexpr Iter to_fixed_string(Iter iter) const {
-        auto e = get_exponent();
-        auto m = get_mantisa();
-        if (m < 0) {
-            *iter = '-'; ++iter;
-            m = -m;
+
+    friend std::ostream &operator<<(std::ostream &os, const Decimal &n) {
+        std::ios::fmtflags f = os.flags();
+
+        OutputMode mode = OutputMode::autoselect;
+        if (f & std::ios::scientific) {
+            mode = OutputMode::scientific;
+        } else if (f & std::ios::fixed) {
+            mode = OutputMode::decimals;
         }
-        char tmp[24];
-        char *a = tmp+sizeof(tmp);
-        int digits = 0;
-        while (m) {
-            --a;
-            *a = '0' + (m % 10);
-            m/=10;
-            ++digits;
-        }
-        if (e >= 0) {
-            for (int i = 0; i < digits; ++i) {
-                *iter = a[i]; ++iter;
-            }
-            for (int i = 0; i < e; ++i) {
-                *iter = '0'; ++iter;
-            }
-        } else if (e <= -digits) {
-            *iter = '0'; ++iter;
-            *iter = '.'; ++iter;
-            int zrs = -e - digits;
-            for (int i = 0; i < zrs; ++i) {
-                *iter = '0'; ++iter;
-            }
-            for (int i = 0; i < digits; ++i) {
-                *iter = a[i]; ++iter;
-            }
-        } else {
-            int dn = digits + e;
-            for (int i = 0; i < dn; ++i) {
-                *iter = a[i]; ++iter;
-            }
-            *iter = '.'; ++iter;
-            for (int i = dn; i < digits; ++i) {
-                *iter = a[i]; ++iter;
-            }
-        }
-        return iter;
+        n.to_string(std::ostreambuf_iterator<char>(os), mode);
+        return os;
     }
 
-    constexpr FixedNumber set_exponent(int new_exponent) const {
+    friend constexpr Decimal floor(const Decimal &n, int decimals = 0) {
+        auto e = n.get_exponent();
+        auto sf = -e-decimals;
+        if (sf <= 0) return n;
+        if (sf > 17) return Decimal();
+        auto m = n.get_mantisa();
+        auto dv = pow10(sf);
+        if ((m < 0) && (m % dv)) {
+            m = (m / dv) - 1;
+        } else {
+            m = m/dv;
+        }
+        return Decimal(m, -decimals);
+    }
+
+    friend constexpr Decimal ceil(const Decimal &n, int decimals = 0) {
+        auto e = n.get_exponent();
+        auto sf = -e-decimals;
+        if (sf <= 0) return n;
+        if (sf > 17) return Decimal();
+        auto m = n.get_mantisa();
+        auto dv = pow10(sf);
+        if ((m > 0) && (m % dv)) {
+            m = (m / dv) + 1;
+        } else {
+            m = m/dv;
+        }
+        return Decimal(m, -decimals);
+    }
+
+    friend constexpr Decimal round(const Decimal &n, int decimals = 0) {
+        auto e = n.get_exponent();
+        auto sf = -e-decimals;
+        if (sf <= 0) return n;
+        if (sf > 17) return Decimal();
+        auto m = n.get_mantisa();
+        auto dv = pow10(sf);
+        auto hf = dv/2;
+        m = (m + hf)/dv;
+        return Decimal(m, -decimals);
+    }
+
+
+    constexpr Decimal adjust_exponent(int new_exponent) const {
         auto m = get_mantisa();
         auto old_e = get_exponent();
         auto expdiff = new_exponent - old_e;
         if (expdiff < 0) {
-            m = m * pow(10,-expdiff);
+            m = m * pow10(-expdiff);
         } else {
-            m = m / pow(10,expdiff);
+            m = m / pow10(expdiff);
         }
-        return FixedNumber(make_number_denorm(m, new_exponent));
+        return Decimal(m, new_exponent);
     }
 
     constexpr std::int64_t get_mantisa() const {
-        return _num_data>>8;
+        return _num_data>>mantisa_shift;
     }
     constexpr int get_exponent() const {
-        return static_cast<int>(_num_data & 0xFF)-128;
+        return static_cast<int>(_num_data & exponent_mask)-exponent_ofs;
+    }
+
+    template<typename T>
+    constexpr T as() const {
+        if constexpr(std::is_integral_v<T>) {
+            auto n = round(*this).adjust_exponent(0).get_mantisa();
+            return static_cast<T>(n);
+        } else {
+            static_assert(std::is_floating_point_v<T>,"Only numerics are supported");
+            return static_cast<T>(get_mantisa()) * pow(T(10),get_exponent());
+        }
+    }
+
+
+    friend bool is_nan(const Decimal &n) {
+        return n.get_exponent() == -exponent_ofs && n.get_mantisa() == 0;
+    }
+
+    friend bool is_finite(const Decimal &n) {
+        return n.get_exponent() <= exponent_ofs;
+    }
+
+    friend int sgn(const Decimal &n) {
+        auto m = n.get_mantisa();
+        return m <0?-1:m>0?1:0;
     }
 
 protected:
@@ -263,72 +346,97 @@ protected:
 
 
     constexpr static std::int64_t make_number(std::int64_t value, int exponent) {
-        return make_number_denorm(value,exponent);
-    }
-
-    constexpr static std::int64_t make_number_denorm(std::int64_t value, int exponent) {
-        auto eadj = static_cast<std::int64_t>(exponent+128) & 0xFF;
-        return (value << 8) | eadj;
-    }
-
-    constexpr static std::int64_t pow10(int exp) {
-        std::int64_t r = 1;
-        while (exp > 0) {
-            r = r * 10;
-            --exp;
+        if (std::is_constant_evaluated()) {
+            if (value >= mantisa_max || value <= -mantisa_max) throw "mantisa overflow";
+            if (exponent > exponent_ofs || exponent < -exponent_ofs) throw "exponent overflow";
+        } else {
+            if (exponent > exponent_ofs) {
+                if (value) {
+                    exponent = exponent_ofs+1;
+                    value = (mantisa_max>>1)-(value>0);
+                } else {
+                    exponent = 0;
+                }
+            }
         }
-        return r;
+        auto eadj = static_cast<std::int64_t>(exponent+exponent_ofs) & exponent_mask;
+        return (value << mantisa_shift) | eadj;
     }
 
-
-    constexpr static int bit_count(std::uint64_t x) {
-        int n = 0;
-        while (x) {
-            ++n;
-            x = x >> 1;
-        }
-        return n;
+    static constexpr int count_bits(std::int64_t number) {
+        #if defined(__GNUC__) || defined(__clang__)
+            return 64 - __builtin_clzll(number);
+        #else
+            int bits = 0;
+            while (number != 0) {
+                number >>= 1;
+                bits++;
+            }
+            return bits;
+        #endif
     }
 
-    static constexpr int minexp = std::numeric_limits<double>::min_exponent10;
-    static constexpr int maxexp = std::numeric_limits<double>::max_exponent10;
+    static constexpr std::int64_t pow10(unsigned int exp) {
+        std::int64_t x = 1;
+        while (exp) {x = x * 10; --exp;}
+        return x;
+    }
 
-    static constexpr double pow_cont(double base, int exponent) {
+    template<typename T>
+    static constexpr T pow_cont(T base, int exponent) {
          if (exponent == 0) return 1.0;
          if (exponent % 2 == 0) {
-             double halfPower = pow_cont(base, exponent / 2);
+             T halfPower = pow_cont(base, exponent / 2);
              return halfPower * halfPower;
          } else {
              return base * pow_cont(base, exponent - 1);
          }
      }
 
-    static constexpr double pow(double base, int exponent) {
-         if (exponent == 1) return base;
-         if (exponent < 0) {
-             base = 1.0 / base;
-             exponent = -exponent;
-         }
-         return pow_cont(base, exponent);
+    template<typename T>
+    static constexpr T pow(T base, int exponent) {
+        if constexpr(cmath_is_const) {
+            return std::pow(base, exponent);
+        } else {
+            if (std::is_constant_evaluated()) {
+                if (exponent == 1) return base;
+                if (exponent < 0) {
+                    base = 1.0 / base;
+                    exponent = -exponent;
+                }
+                return pow_cont(base, exponent);
+            } else {
+                return std::pow(base, exponent);
+            }
+        }
      }
 
 
-    static constexpr int log10(double number)  {
-        if (number > 0.0) {
-            auto low = minexp;
-            auto high = maxexp+1;
-            while (low < high) {
-                auto mid = (low+ high - 2*minexp)/2 + minexp;
-                auto v = pow(10,mid);
-                auto adj = number/v;
-                if (adj < 1.0) high = mid;
-                else if (adj >= 10.0) low = mid+1;
-                else return mid;
-
-            }
-            return low;
+    template<typename T>
+    static constexpr int log10(T number)  {
+        if constexpr(cmath_is_const) {
+            return static_cast<int>(std::log10(number));
         } else {
-            return 0;
+            if (std::is_constant_evaluated()) {
+                if (number > 0.0) {
+                    auto low = std::numeric_limits<T>::min_exponent10;
+                    auto minexp = std::numeric_limits<T>::max_exponent10+1;
+                    auto high = minexp;
+                    while (low < high) {
+                        auto mid = (low+ high - 2*minexp)/2 + minexp;
+                        auto v = pow<T>(10,mid);
+                        auto adj = number/v;
+                        if (adj < 1.0) high = mid;
+                        else if (adj >= 10.0) low = mid+1;
+                        else return mid;
+                    }
+                    return low;
+                } else {
+                    return 0;
+                }
+            } else {
+                return static_cast<int>(std::log10(number));
+            }
         }
     }
 
@@ -336,14 +444,36 @@ protected:
         return x<0?-x:x;
     }
 
-    static constexpr std::int64_t double2raw(double v) {
+    template<typename T>
+    static constexpr std::int64_t double2raw(T v) {
         if (!v) return make_number(0, 0);
-        double r = v < 0?-0.5:0.5;
-        int exponent = static_cast<int>(log10(abs(v))) - 8;
-        double base = pow(10, exponent);
-        double num = (v/base)+r;
+        T r (v < 0?-0.5:0.5);
+        int exponent = static_cast<int>(log10(abs(v))) - std::numeric_limits<T>::max_digits10 + 2;
+        T base = pow(T(10), exponent);
+        T num = (v/base)+r;
         std::int64_t n = static_cast<std::int64_t>(num);
         return make_number(n, exponent);
+    }
+
+    template<typename T>
+    static constexpr std::int64_t integral2raw(T v) {
+        if constexpr(std::is_unsigned_v<T>) {
+            using C = std::common_type_t<T, std::uint64_t>;
+            int e = 0;
+            while (static_cast<C>(v) >= static_cast<C>(mantisa_max)) {
+                ++e;
+                v = v/10;
+            }
+            return make_number(static_cast<std::int64_t>(v),e);
+        } else {
+            using C = std::common_type_t<T, std::int64_t>;
+            int e = 0;
+            while (static_cast<C>(v) >= static_cast<C>(mantisa_max) || static_cast<C>(v) <= -static_cast<C>(mantisa_max)) {
+                ++e;
+                v = v/10;
+            }
+            return make_number(static_cast<std::int64_t>(v),e);
+        }
     }
 
     static constexpr std::int64_t string2raw(std::string_view number) {
@@ -432,16 +562,15 @@ protected:
     }
 
     static constexpr bool can_dec_exp(std::int64_t mantisa) {
-        return mantisa && mantisa < (1LL << 50) && mantisa > (-1LL << 50);
+        return mantisa && mantisa < mantisa_max/10 && mantisa>-mantisa_max/10;
     }
     static constexpr bool can_inc_exp_for_div(std::int64_t mantisa) {
-        return mantisa && ((mantisa % 10) == 0  || mantisa >= (1LL << 25) || mantisa <= (-1LL << 25));
+        return mantisa && ((mantisa % 10) == 0  || mantisa > mantisa_half);
     }
     static constexpr bool must_inc_exp(std::int64_t mantisa) {
-        return mantisa >= (1LL << 56) || mantisa <= (-1LL << 56);
+        return mantisa >= mantisa_max || mantisa <= -mantisa_max;
     }
 
 };
-
 
 }
