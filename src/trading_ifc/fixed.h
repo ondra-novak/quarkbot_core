@@ -9,6 +9,7 @@
 namespace trading_api {
 
 
+
 class Decimal {
 public:
 #if __cpp_lib_constexpr_cmath > 202306L
@@ -54,7 +55,7 @@ public:
             return a + b.adjust_exponent(ae);
         }
         else {
-            auto r = a.get_mantisa()+b.get_mantisa();
+            auto r = am+bm;
             if (must_inc_exp(r)) {
                 return Decimal(r/10, ae+1);
             } else {
@@ -72,25 +73,20 @@ public:
         auto ae = a.get_exponent();
         auto bm = b.get_mantisa();
         auto be = b.get_exponent();
-        bool an = am < 0;
-        bool bn = bm < 0;
-        if (an) am = -am;
-        if (bn) bm = -bm;
         auto bca = count_bits(am);
         auto bcb = count_bits(bm);
-        while (bca+bcb > mantisa_bits) {
+        while (bca+bcb >= mantisa_bits) {
             if (bcb>bca) {
-                bm=(bm+5)/10;
+                bm=bm/10;
                 ++be;
                 bcb = count_bits(bm);
             } else {
-                am=(am+5)/10;
+                am=am/10;
                 ++ae;
                 bca = count_bits(am);
             }
         }
         auto res = am * bm;
-        if (an != bn) res = -res;
         return Decimal(res, ae+be);
     }
 
@@ -99,21 +95,16 @@ public:
         auto am = a.get_mantisa();
         auto ae = a.get_exponent();
         auto be = b.get_exponent();
-        bool an = am < 0;
-        bool bn = bm < 0;
-        if (an) am = -am;
-        if (bn) bm = -bm;
         while (can_dec_exp(am)) {
             am*=10;
             --ae;
         }
         while (can_inc_exp_for_div(bm)) {
-            bm = (bm+5)/10;
+            bm = bm/10;
             ++be;
         }
         if (!bm) return Decimal::nan();
         auto res = am / bm;
-        if (an != bn) res = -res;
         return Decimal(res, ae-be);
     }
 
@@ -341,6 +332,7 @@ public:
         return m <0?-1:m>0?1:0;
     }
 
+
 protected:
     std::int64_t _num_data;
 
@@ -365,9 +357,10 @@ protected:
 
     static constexpr int count_bits(std::int64_t number) {
         #if defined(__GNUC__) || defined(__clang__)
-            return 64 - __builtin_clzll(number);
+            return 64 - __builtin_clrsbll(number);
         #else
-            int bits = 0;
+            if (number < 0) number = -number;
+            int bits = 1;
             while (number != 0) {
                 number >>= 1;
                 bits++;
@@ -565,12 +558,17 @@ protected:
         return mantisa && mantisa < mantisa_max/10 && mantisa>-mantisa_max/10;
     }
     static constexpr bool can_inc_exp_for_div(std::int64_t mantisa) {
-        return mantisa && ((mantisa % 10) == 0  || mantisa > mantisa_half);
+        return mantisa && ((mantisa % 10) == 0  || mantisa > mantisa_half || mantisa < -mantisa_half);
     }
     static constexpr bool must_inc_exp(std::int64_t mantisa) {
         return mantisa >= mantisa_max || mantisa <= -mantisa_max;
     }
 
 };
+
+
+constexpr Decimal operator"" _dec(const char *x) {
+    return Decimal(std::string_view(x));
+}
 
 }
