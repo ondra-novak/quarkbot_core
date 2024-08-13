@@ -346,15 +346,6 @@ const Config &BasicContext::get_config() const {
     return _config;
 }
 
-void BasicContext::enum_vars(std::string_view start, std::string_view end,
-        Function<void(std::string_view,std::string_view)> &fn) const {
-    _storage->enum_vars(start,end, fn);
-}
-void BasicContext::enum_vars(std::string_view prefix,
-        Function<void(std::string_view,std::string_view)> &fn) const {
-    _storage->enum_vars(prefix, fn);
-
-}
 
 void BasicContext::on_unhandled_exception()  {
     std::lock_guard _(_queue_mx);
@@ -435,6 +426,14 @@ void BasicContext::mq_unsubscribe_channel(std::string_view channel) {
 void BasicContext::mq_send_message(std::string_view channel, std::string_view msg) {
     _mq.send_message(this, channel, msg);
 
+}
+
+trading_api::VarSet<> BasicContext::get_vars(std::string_view prefix) const {
+    return _storage->get_vars(prefix);
+}
+
+trading_api::VarSet<> BasicContext::get_vars(std::string_view start, std::string_view end) const {
+    return _storage->get_vars(start, end);
 }
 
 }

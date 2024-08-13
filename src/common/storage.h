@@ -45,14 +45,29 @@ public:
     virtual Fills load_fills(Timestamp limit, std::string_view filter = {}) const = 0;
     ///load all open orders (stored binary)
     virtual std::vector<SerializedOrder> load_open_orders() const = 0;
-
+    ///get value of variable
+    /**
+     * @param var_name variable name
+     * @return string content of variable. If variable is not defined, returns empty string
+     */
     virtual std::string get_var(std::string_view var_name) const = 0;
 
-    virtual void enum_vars(std::string_view start, std::string_view end,
-            Function<void(std::string_view,std::string_view)> &fn) const = 0;
+    ///Retrieve set of variables
+    /**
+     * @param prefix name prefix. Function returns all variables starting with given prefix
+     * @return iteratable variable set
+     */
+    virtual VarSet<std::string_view> get_vars(std::string_view prefix) const = 0;
 
-    virtual void enum_vars(std::string_view prefix,
-            Function<void(std::string_view,std::string_view)> &fn) const = 0;
+    ///Retrieve set of variables
+    /**
+     * @param start begin of variables (included)
+     * @param end end of variables (included)
+     * @return iteratable variable set
+     * @note start < end alphanumerical otherwise empty set can be returned
+     *
+     */
+    virtual VarSet<std::string_view> get_vars(std::string_view start, std::string_view end) const = 0;
 
     ///load positions
     /**
@@ -88,12 +103,10 @@ public:
     virtual Fills load_fills(std::size_t, std::string_view) const override{return {};}
     virtual Fills load_fills(Timestamp ,std::string_view) const  override{return {};}
     virtual std::string get_var(std::string_view ) const override {return {};}
-    virtual void enum_vars(std::string_view , std::string_view ,
-             Function<void(std::string_view,std::string_view)> &) const override {}
-    virtual void enum_vars(std::string_view ,
-            Function<void(std::string_view,std::string_view)> &) const override {}
     virtual Positions load_positions(std::string_view ) const override {return {};}
     virtual Trades load_closed(Timestamp , std::string_view ) const override {return {};}
+    virtual VarSet<std::string_view> get_vars(std::string_view ) const {return {};}
+    virtual VarSet<std::string_view> get_vars(std::string_view , std::string_view ) const {return {};}
 };
 
 

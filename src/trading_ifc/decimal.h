@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <cstdint>
+#include <cmath>
 #include <vector>
 #include <limits>
 #include <string_view>
@@ -34,6 +35,9 @@ public:
     template<typename T> requires (std::is_integral_v<T>)
     constexpr Decimal(T v)
         :_num_data(integral2raw(v)) {}
+    template<typename T> requires (std::is_enum_v<T>)
+    constexpr Decimal(T v)
+        :_num_data(integral2raw(static_cast<std::underlying_type_t<T> >(v))) {}
     constexpr Decimal(std::string_view v)
         :_num_data(string2raw(v)) {}
 
@@ -287,6 +291,14 @@ public:
         return Decimal(m, -decimals);
     }
 
+    friend constexpr Decimal abs(const Decimal &n) {
+        if (n._num_data < 0) {
+            return Decimal(-n.get_mantisa(), n.get_exponent());
+        } else {
+            return n;
+        }
+    }
+
 
     constexpr Decimal adjust_exponent(int new_exponent) const {
         auto m = get_mantisa();
@@ -309,7 +321,7 @@ public:
 
     template<typename T>
     constexpr T as() const {
-        if constexpr(std::is_integral_v<T>) {
+        if constexpr(std::is_integral_v<T> || std::is_enum_v<T>) {
             auto n = round(*this).adjust_exponent(0).get_mantisa();
             return static_cast<T>(n);
         } else {
@@ -318,20 +330,27 @@ public:
         }
     }
 
+    template<typename T> requires(std::is_arithmetic_v<T> || std::is_enum_v<T>)
+    explicit operator T() const {
+        return as<T>();
+    }
 
-    friend bool is_nan(const Decimal &n) {
+
+    friend constexpr bool is_nan(const Decimal &n) {
         return n.get_exponent() == -exponent_ofs && n.get_mantisa() == 0;
     }
 
-    friend bool is_finite(const Decimal &n) {
+    friend constexpr bool is_finite(const Decimal &n) {
         return n.get_exponent() <= exponent_ofs;
     }
 
-    friend int sgn(const Decimal &n) {
-        auto m = n.get_mantisa();
-        return m <0?-1:m>0?1:0;
+    friend constexpr int sgn(const Decimal &n) {
+        return n._num_data <0?-1:n._num_data>0?1:0;
     }
 
+    static constexpr Decimal inf() {
+        return Decimal(mantisa_max, exponent_ofs+1);
+    }
 
 protected:
     std::int64_t _num_data;

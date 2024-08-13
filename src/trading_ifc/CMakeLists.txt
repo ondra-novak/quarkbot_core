@@ -25,7 +25,7 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Generating single header"
     VERBATIM
-)
+) 
 
 
 add_custom_command(

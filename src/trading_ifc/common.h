@@ -56,6 +56,7 @@ concept is_tuple_type = requires(const T x) {
 
 
 
+
 namespace _details {
 
     template<typename T> struct DetectFnFirstArg;
@@ -115,7 +116,7 @@ template<typename T>
 constexpr std::string_view type_to_string = _details::ClassName<T>();
 
 template<typename T>
-constexpr bool assert_error = false; 
+constexpr bool assert_error = false;
 
 
 enum class Side: signed char {
@@ -129,45 +130,6 @@ inline Side reverse(Side side) {
         case Side::buy: return Side::sell;
         case Side::sell: return Side::buy;
         default: return side;
-    }
-}
-
-template<typename T>
-concept BinarySerializable = (
-            (std::is_trivially_copy_constructible_v<T> && std::is_standard_layout_v<T>)
-            || (std::is_constructible_v<T, std::string_view> && std::is_convertible_v<T, std::string_view>));
-
-
-template<BinarySerializable T>
-std::string_view serialize_binary(const T &data) {
-    if constexpr(std::is_constructible_v<T, std::string_view> && std::is_convertible_v<T, std::string_view>) {
-        return std::string_view(data);
-    } else {
-        return std::string_view(reinterpret_cast<const char *>(&data), sizeof(data));
-    }
-}
-
-template<BinarySerializable T>
-std::optional<T> deserialize_binary(std::string_view binary) {
-    if constexpr(std::is_constructible_v<T, std::string_view> && std::is_convertible_v<T, std::string_view>) {
-        return T(binary);
-    } else {
-        std::optional<T> ret;
-        if (binary.size() == sizeof(T)) {
-            ret.emplace(*reinterpret_cast<const T *>(binary.data()));
-        }
-        return ret;
-    }
-}
-
-template<BinarySerializable T>
-T deserialize_binary(std::string_view binary, const T &defval) {
-    if constexpr(std::is_constructible_v<T, std::string_view> && std::is_convertible_v<T, std::string_view>) {
-        return T(binary);
-    } else if (sizeof(T) != binary.size()) {
-        return defval;
-    } else {
-        return T(*reinterpret_cast<const T *>(binary.data()));
     }
 }
 

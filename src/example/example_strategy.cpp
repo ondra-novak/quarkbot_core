@@ -19,8 +19,11 @@ EXPORT_STRATEGY(Example);
 
 void Example::on_init(const Context &ctx) {
     _context = ctx;
-    _context.mget<int>("aaa", [](auto a, int b){});
-    _context.mget<int>("aaa","bbb", [](auto a,int b){});
+    auto vs = ctx.get_vars<int>("dummy");
+    for (const auto &[key, value]: vs) {
+        key;
+        value;
+    }
 
 }
 

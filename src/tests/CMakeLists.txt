@@ -7,6 +7,7 @@ set(testFiles
 	loader.cpp
 	config_desc.cpp
 	wandering_bst.cpp
+	decimal.cpp
 )
 
 link_libraries(

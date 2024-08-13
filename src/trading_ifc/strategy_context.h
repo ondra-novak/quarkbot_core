@@ -10,12 +10,12 @@
 #include "log.h"
 #include "market_event.h"
 #include "mq.h"
+#include "serialize.h"
 #include <span>
 #include "service.h"
-
+#include "variables.h"
 
 namespace trading_api {
-
 
 
 
@@ -93,9 +93,10 @@ public:
 
     virtual std::string get_var(std::string_view var_name) const = 0;
 
-    virtual void enum_vars(std::string_view prefix,  Function<void(std::string_view, std::string_view)> &fn) const = 0;
+    virtual VarSet<std::string_view> get_vars(std::string_view prefix) const = 0;
 
-    virtual void enum_vars(std::string_view start, std::string_view end,  Function<void(std::string_view, std::string_view)> &fn) const = 0;
+    virtual VarSet<std::string_view> get_vars(std::string_view start, std::string_view end) const = 0;
+
 
 
     ///Deletes persistently stored variable
@@ -149,8 +150,8 @@ public:
     virtual void subscribe(SubscriptionType , const Instrument &) override {throw_error();}
     virtual void unsubscribe(SubscriptionType , const Instrument &) override {throw_error();}
     virtual std::string get_var(std::string_view ) const override  {throw_error();}
-    virtual void enum_vars(std::string_view ,  Function<void(std::string_view, std::string_view)> &) const override {throw_error();}
-    virtual void enum_vars(std::string_view , std::string_view ,  Function<void(std::string_view, std::string_view)> &) const override  {throw_error();}
+    virtual VarSet<std::string_view> get_vars(std::string_view ) const override  {throw_error();}
+    virtual VarSet<std::string_view> get_vars(std::string_view , std::string_view ) const override  {throw_error();}
     virtual bool get_service(const std::type_info &, std::shared_ptr<void> &) override {return false;}
     virtual Log get_logger() const override {throw_error();}
     virtual void mq_subscribe_channel(std::string_view ) override {}
@@ -209,9 +210,11 @@ public:
      * @note store operation is asynchronous.Calling get() immediately
      * after set() can still return previous value
      */
-    template<BinarySerializable T>
+    template<SerializableType T>
     void set(std::string_view key, const T &value) {
-        _ptr->set_var(key,serialize_binary(value));
+        std::string s;
+        Serializer::to_binary(std::back_inserter(s), value);
+        _ptr->set_var(key,s);
     }
 
     ///retrieve stored value from database
@@ -219,81 +222,75 @@ public:
      * @param varname name of variable
      * @return content. If the variable doesn't exist, returns empty string
      */
-    std::string get(std::string_view varname) const{
+    std::string get_var(std::string_view varname) const{
         return _ptr->get_var(varname);
     }
     ///retrieve stored value
     /**
      * @param key variable name
      * @param default_value default value in case that variable is undefined
-     * @return
+     * @return content of variable or default value if doesn't exists
      */
-    template<BinarySerializable T>
-    T get(std::string_view key, const T &default_value) const{
-        return deserialize_binary(_ptr->get_var(key), default_value);
+    template<SerializableType T>
+    T get_var(std::string_view varname, const T &default_value) const{
+        static_assert(!std::is_same_v<T, std::string_view>, "Can't return reference, use std::string");
+        std::string s = _ptr->get_var(varname);
+        if (s.empty()) return default_value;
+        return Serializer::from_binary<T>(s.begin(), s.end());
     }
+
 
     ///retrieve multiple variables
     /**
-     * @param prefix specifies prefix, function retrieves all variables starting
-     * by this prefix
-     * @param fn a function, which receives pair of key=value
-     */
-    template<std::invocable<std::string_view, std::string_view> Fn>
-    void mget(std::string_view prefix, Fn &&fn) const{
-        Function<void(std::string_view, std::string_view)> ffn(std::forward<Fn>(fn));
-        _ptr->enum_vars(prefix, ffn);
-    }
-
-    ///retrieve multiple variables
-    /**
+     * @tparam T type of values
+     * @param prefix defines common prefix
+     * @return iteratable set of variables
      *
-     * @tparam T type of value
-     * @param prefix specifies prefix, function retrieves all variables starting
-     * by this prefix
-     * @param fn a function, which receives pair of key=value
+     * you can use this function to retrieve various tables. There is no limit, how
+     * big tables can be retrieved as the database is iterated during processing results
      */
-    template<BinarySerializable T, std::invocable<std::string_view, T> Fn>
-    void mget(std::string_view prefix, Fn &&fn) const{
-
-        Function<void(std::string_view, std::string_view)> ffn([&](auto a, auto b){
-            auto opt = deserialize_binary<T>(b);
-            if (opt.has_value()) fn(a,*opt);
-        });
-        _ptr->enum_vars(prefix, ffn);
-    }
-    ///retrieve multiple variables
-    /**
-     * @param from begining name
-     * @param end ending name (inclusive)
-     * @param fn a function, which receives pair of key=value
-     * @note variables are ordered binary
-     */
-    template<std::invocable<std::string_view, std::string_view> Fn>
-    void mget(std::string_view from, std::string_view to, Fn &&fn) const{
-        Function<void(std::string_view, std::string_view)> ffn(std::forward<Fn>(fn));
-        return _ptr->enum_vars(from, to, ffn);
+    template<typename T>
+    VarSet<T> get_vars(std::string_view prefix) const {
+        return _ptr->get_vars(prefix);
     }
 
     ///retrieve multiple variables
     /**
+     * @tparam T type of values
+     * @param from key (inclusive)
+     * @return to_key (inclusive)
      *
-     * @tparam T type of value
-     * @param from begining name
-     * @param end ending name (inclusive)
-     * @param fn a function, which receives pair of key=value
+     * you can use this function to retrieve various tables. There is no limit, how
+     * big tables can be retrieved as the database is iterated during processing results
      */
-    template<BinarySerializable T, std::invocable<std::string_view, T> Fn>
-    void mget(std::string_view from, std::string_view to, Fn &&fn) const{
-
-        Function<void(std::string_view, std::string_view)> ffn([&](auto a, auto b){
-            auto opt = deserialize_binary<T>(b);
-            if (opt.has_value()) fn(a,*opt);
-        });
-
-        return _ptr->enum_vars(from, to, ffn);
+    template<typename T>
+    VarSet<T> get_vars(std::string_view from_key, std::string_view to_key) const {
+        return _ptr->get_vars(from_key, to_key);
     }
 
+    ///unset variable
+    /**
+     * @param varname variale to unset
+     */
+    void unset_var(std::string_view varname) {
+        _ptr->unset_var(varname);
+    }
+
+    ///unset multiple variables
+    /**
+     * @param vars table of variables
+     * @note you can delete whole table
+     */
+    template<typename T>
+    void unset_vars(const VarSet<T> &vars) {
+        auto h = vars.get_handle();
+        bool s = h->init();
+        while (s) {
+            auto f = h->get();
+            _ptr->unset_var(f.first);
+            s = h->next();
+        }
+    }
 
 
     ///request update account

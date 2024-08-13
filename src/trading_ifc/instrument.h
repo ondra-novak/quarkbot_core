@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include "exchange.h"
+#include "decimal.h"
 
 namespace trading_api {
 
@@ -45,7 +46,7 @@ public:
         ///type of contract (to calculate PnL correcly)
         IInstrument::Type type;
         ///PnL multiplier (multiplier * amount * (close - open)
-        double multiplier;
+        Decimal multiplier;
         ///instrument identifier (to aggregate fills of single instrument)
         std::string instrument_id;
         ///price unit (for example USD)
@@ -59,21 +60,21 @@ public:
     struct Config {
         Type type = Type::unknown;
         ///quotation price step
-        double tick_size = 1;
+        Decimal tick_size = 1;
         ///amount step
-        double lot_size = 1;
+        Decimal lot_size = 1;
         ///multipler between contract size and real size (ex: multipler = 1000: amount=2.3 ~ 2300 shares)
-        double lot_multiplier = 1;
+        Decimal lot_multiplier = 1;
         ///minimal allowed lot size
-        double min_size = 0;
+        Decimal min_size = 0;
         ///minimal allowed volume (amount * multipler * price)
-        double min_volume = 0;
+        Decimal min_volume = 0;
         ///fixed quantum factor between calculated pnl a real profit - (ex: 0.0001 USDT -> XBT = +10000 USDT profit = +1 XBT)
-        double quantum_factor = 1;
+        Decimal quantum_factor = 1;
         ///required margin (0.05 = 5% = 20x leverage)
-        double required_margin = 1;
+        Decimal required_margin = 1;
         ///maintenance margin (0.025 = 2.5% = 40x leverage)
-        double maintenance_margin = 1;
+        Decimal maintenance_margin = 1;
         ///instrument is tradable (you can place orders)
         bool tradable = false;
         ///instrument can be shorted
@@ -178,7 +179,7 @@ public:
      * @return real amount
      */
 
-    double lot_to_amount(double lots) const {
+    Decimal lot_to_amount(Decimal lots) const {
         return lot_to_amount(get_config(), lots);
     }
 
@@ -193,7 +194,7 @@ public:
      * @param amount real amount
      * @return lots
      */
-    double amount_to_lot(double amount) const{
+    Decimal amount_to_lot(Decimal amount) const{
         return amount_to_lot(get_config(), amount);
     }
 
@@ -212,7 +213,7 @@ public:
      * @param price quotation price
      * @return real price
      */
-    double quotation_to_price(double price) const {
+    Decimal quotation_to_price(Decimal price) const {
         return quotation_to_price(get_config(), price);
     }
     ///convert real price to quotation price
@@ -230,7 +231,7 @@ public:
      * @param price real price
      * @return quotation price
      */
-    double price_to_quotation(double price) const {
+    Decimal price_to_quotation(Decimal price) const {
         return price_to_quotation(get_config(), price);
     }
 
@@ -239,7 +240,7 @@ public:
      * @param price price
      * @return adjusted price
      */
-    double adjust_price(double price) const {
+    Decimal adjust_price(Decimal price) const {
         return adjust_price(get_config(), price);
     }
     ///adjust amount to nearest lot
@@ -247,10 +248,10 @@ public:
      * @param amount amount in lots
      * @return adjusted amount in lots
      */
-    double adjust_lot(double amount) const {
+    Decimal adjust_lot(Decimal amount) const {
         return adjust_lot(get_config(), amount);
     }
-    double adjust_lot_down(double amount) const {
+    Decimal adjust_lot_down(Decimal amount) const {
         return adjust_lot_down(get_config(), amount);
     }
     ///calculate minimal real amount for given price
@@ -258,73 +259,72 @@ public:
      * @param price quotation price
      * @return minimal real amount (to_real_position)
      */
-    double calc_min_amount(double price) const {
+    Decimal calc_min_amount(Decimal price) const {
         return calc_min_amount(get_config(), price);
     }
 
-    double adjust_amount(double price, double size, bool size_is_volume) const {
+    Decimal adjust_amount(Decimal price, Decimal size, bool size_is_volume) const {
         return adjust_amount(get_config(), price, size, size_is_volume);
     }
-    static double lot_to_amount(const Config &cfg, double lots) {
+    static Decimal lot_to_amount(const Config &cfg, Decimal lots) {
         if (cfg.type == Type::inverted_contract) {
              lots = -lots;
         }
-        lots *= cfg.lot_multiplier;
-        return lots;
+        return lots * cfg.lot_multiplier;
     }
-    static double amount_to_lot(const Config &cfg, double amount) {
-        amount/=cfg.lot_multiplier;
+    static Decimal amount_to_lot(const Config &cfg, Decimal amount) {
+        amount=amount/cfg.lot_multiplier;
         if (cfg.type == Type::inverted_contract) {
              amount = -amount;
         }
         return amount;
     }
-    static double quotation_to_price(const Config &cfg, double price) {
+    static Decimal quotation_to_price(const Config &cfg, Decimal price) {
         switch (cfg.type){
             case Type::inverted_contract: return 1.0/price;
             case Type::quantum_contract: return price * cfg.quantum_factor;
             default: return price;
         }
     }
-    static double price_to_quotation(const Config &cfg, double price) {
+    static Decimal price_to_quotation(const Config &cfg, Decimal price) {
         switch (cfg.type){
             case Type::inverted_contract: return 1.0/price;
             case Type::quantum_contract: return price / cfg.quantum_factor;
             default: return price;
         }
     }
-    static double adjust_price(const Instrument::Config &cfg, double price) {
-        return std::max(std::round(price/cfg.tick_size)*cfg.tick_size, cfg.tick_size);
+    static Decimal adjust_price(const Instrument::Config &cfg, Decimal price) {
+        return std::max(round(price/cfg.tick_size)*cfg.tick_size, cfg.tick_size);
     }
-    static double adjust_lot(const Config &cfg, double amount)  {
-        return std::round(amount/cfg.lot_size)*cfg.lot_size;
+    static Decimal adjust_lot(const Config &cfg, Decimal amount)  {
+        return round(amount/cfg.lot_size)*cfg.lot_size;
     }
-    static double adjust_lot_down(const Config &cfg, double amount)  {
-        return std::floor(amount/cfg.lot_size)*cfg.lot_size;
+    static Decimal adjust_lot_down(const Config &cfg, Decimal amount)  {
+        return floor(amount/cfg.lot_size)*cfg.lot_size;
     }
-    static double adjust_lot_up(const Config &cfg, double amount)  {
-        return std::ceil(amount/cfg.lot_size)*cfg.lot_size;
+    static Decimal adjust_lot_up(const Config &cfg, Decimal amount)  {
+        return ceil(amount/cfg.lot_size)*cfg.lot_size;
     }
-    static double calc_min_amount(const Config &cfg, double price) {
-        double real_min_size = std::abs(lot_to_amount(cfg, cfg.min_size));
-        double real_lot_size = std::abs(lot_to_amount(cfg, cfg.lot_size));
-        double real_min_vol = std::abs(cfg.min_volume/ quotation_to_price(cfg, price));
+    static Decimal calc_min_amount(const Config &cfg, Decimal price) {
+        Decimal real_min_size = abs(lot_to_amount(cfg, cfg.min_size));
+        Decimal real_lot_size = abs(lot_to_amount(cfg, cfg.lot_size));
+        Decimal real_min_vol = abs(cfg.min_volume/ quotation_to_price(cfg, price));
         return std::max(std::max(real_min_size, real_lot_size), real_min_vol);
     }
-    static double calc_margin(const Config &cfg, double price, double amount, double leverage) {
-        double real_amount = lot_to_amount(cfg, amount);
-        double real_price = quotation_to_price(cfg, price);
+    static Decimal calc_margin(const Config &cfg, Decimal price, Decimal amount, Decimal leverage) {
+        Decimal real_amount = lot_to_amount(cfg, amount);
+        Decimal real_price = quotation_to_price(cfg, price);
         return real_amount * real_price / leverage;
     }
 
-    static double adjust_amount(const Instrument::Config &cfg, double price, double size, bool size_is_volume) {
+    static Decimal adjust_amount(const Instrument::Config &cfg, Decimal price, Decimal size, bool size_is_volume) {
         if (size_is_volume) {
-            double ms = calc_min_amount(cfg, price);
-            double lt = adjust_lot_down(cfg,amount_to_lot(cfg, size/quotation_to_price(cfg, price)));
+            Decimal ms = calc_min_amount(cfg, price);
+            Decimal lt = adjust_lot_down(cfg,amount_to_lot(cfg, size/quotation_to_price(cfg, price)));
             if (ms > lot_to_amount(cfg, lt)) return 0;
             return lt;
         } else {
-            double ms = adjust_lot_up(cfg,amount_to_lot(cfg, calc_min_amount(cfg, price)));
+            Decimal ms = adjust_lot_up(cfg,amount_to_lot(cfg, calc_min_amount(cfg, price)));
             return std::max(ms,adjust_lot(cfg, size));
         }
     }
@@ -335,7 +335,7 @@ public:
 
 
 
-inline double price_instrument_to_strategy(const Instrument::Config &cfg, double price) {
+inline Decimal price_instrument_to_strategy(const Instrument::Config &cfg, Decimal price) {
     switch (cfg.type) {
         default: return price;
         case Instrument::Type::inverted_contract: return 1.0/price;

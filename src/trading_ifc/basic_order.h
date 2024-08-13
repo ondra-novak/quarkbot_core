@@ -52,11 +52,11 @@ public:
 
     struct Status {
         std::string id = {};
-        double filled = 0;
-        double last_price = 0;
+        Decimal filled = 0;
+        Decimal last_price = 0;
         Order::Report last_report = {State::sent, Reason::no_reason, {}};
 
-        void add_fill(double price, double amount);
+        void add_fill(Decimal price, Decimal amount);
         void update_report(Order::Report report);
     };
 
@@ -76,13 +76,13 @@ public:
     virtual State get_state() const override {
         return _status.last_report.new_state;
     }
-    virtual double get_last_price() const override {
+    virtual Decimal get_last_price() const override {
         return _status.last_price;
     }
     virtual std::string_view get_message() const override {
         return _status.last_report.message;
     }
-    virtual double get_filled() const override {
+    virtual Decimal get_filled() const override {
         return _status.filled;
     }
     virtual const Setup &get_setup() const override {

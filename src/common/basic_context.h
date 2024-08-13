@@ -87,10 +87,6 @@ public:
     virtual std::string get_var(std::string_view var_name) const override;
     virtual std::span<const Account> get_accounts() const override;
     virtual std::span<const Instrument> get_instruments() const override;
-    virtual void enum_vars(std::string_view start, std::string_view end,
-             Function<void(std::string_view,std::string_view)> &fn) const override;
-    virtual void enum_vars(std::string_view prefix,
-            Function<void(std::string_view,std::string_view)> &fn) const override;
     virtual const Config &get_config() const override;
     virtual void on_message(MQClient::Message message) override;
     virtual void mq_subscribe_channel(std::string_view channel) override;
@@ -98,6 +94,11 @@ public:
     virtual void mq_send_message(std::string_view channel, std::string_view msg) override;
 
     virtual void on_unhandled_exception()  override;
+    virtual trading_api::VarSet<> get_vars(
+            std::string_view prefix) const override;
+    virtual trading_api::VarSet<> get_vars(
+            std::string_view start, std::string_view end) const override;
+
 protected:
 
     GlobalScheduler _scheduler;

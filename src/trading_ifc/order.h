@@ -130,7 +130,7 @@ public:
         ///specifies matching behavior
         Behavior behavior = Behavior::standard;
         ///specifies new position leverage - if applicable - default value: use shared leverage
-        double leverage = 0;
+        Decimal leverage = 0;
         ///specified amount is in volume - so amount of money you want to spend on retrieve on trade (fees are not included)
         /** especially market orders can be executed as series of IOC orders if the
          * exchange doesn't support this feature
@@ -156,7 +156,7 @@ public:
          *
          * This option is not checked when new order is created using place().
          */
-        double replace_filled_constrain = std::numeric_limits<double>::max();
+        Decimal replace_filled_constrain = Decimal::inf();
 
         static constexpr Options Default() {return {};}
     };
@@ -170,15 +170,15 @@ public:
 
     ///Market order
     struct Market: Common {
-        double amount;
-        Market(Side s, double amount, Options opt = Options::Default())
+        Decimal amount;
+        Market(Side s, Decimal amount, Options opt = Options::Default())
             :Common{s, opt},amount(amount) {}
     };
 
     ///Limit order
     struct Limit: Market {
-        double limit_price;
-        Limit(Side s, double amount, double limit_price, Options opt = Options::Default())
+        Decimal limit_price;
+        Limit(Side s, Decimal amount, Decimal limit_price, Options opt = Options::Default())
             :Market(s, amount, opt), limit_price(limit_price) {}
     };
 
@@ -195,28 +195,28 @@ public:
 
     ///Stop order
     struct Stop: Market {
-        double stop_price;
-        Stop(Side s, double amount, double stop_price, Options opt = Options::Default())
+        Decimal stop_price;
+        Stop(Side s, Decimal amount, Decimal stop_price, Options opt = Options::Default())
             :Market(s, amount, opt), stop_price(stop_price) {}
     };
 
     ///StopLimit order
     struct StopLimit: Stop {
-        double limit_price;
-        StopLimit(Side s, double amount, double stop_price, double limit_price, Options opt = Options::Default())
+        Decimal limit_price;
+        StopLimit(Side s, Decimal amount, Decimal stop_price, Decimal limit_price, Options opt = Options::Default())
             :Stop(s, amount, stop_price, opt), limit_price(limit_price) {}
     };
 
     ///Trailing stop order
     struct TrailingStop: Market {
-        double stop_distance;
-        TrailingStop(Side s, double amount, double stop_distance, Options opt = Options::Default())
+        Decimal stop_distance;
+        TrailingStop(Side s, Decimal amount, Decimal stop_distance, Options opt = Options::Default())
             :Market(s, amount, opt), stop_distance(stop_distance) {}
     };
 
     ///Target and StopLoss order (OCO)
     struct TpSl: StopLimit {
-        TpSl(Side s, double amount, double target_price, double stoploss_price, Options opt = Options::Default())
+        TpSl(Side s, Decimal amount, Decimal target_price, Decimal stoploss_price, Options opt = Options::Default())
             :StopLimit(s, amount, stoploss_price, target_price, opt) {}
     };
     ///Close position order (CFD)
@@ -240,8 +240,8 @@ public:
      */
     struct Transfer {
         Account target;
-        double amount;
-        Transfer(const Account &target, double amount)
+        Decimal amount;
+        Transfer(const Account &target, Decimal amount)
             :target(target), amount(amount) {}
     };
 
@@ -271,10 +271,10 @@ public:
     virtual std::string_view get_message() const = 0;
 
     ///get filled amount
-    virtual double get_filled() const = 0;
+    virtual Decimal get_filled() const = 0;
 
     ///get last executed price
-    virtual double get_last_price() const = 0;
+    virtual Decimal get_last_price() const = 0;
 
     ///retrieve associated instrument instance
     virtual Instrument get_instrument() const = 0;
@@ -317,9 +317,9 @@ concept order_has_options= (is_order<T> && requires(T order) {
 class IOrder::Null: public IOrder {
 public:
     virtual State get_state() const override {return State::undefined;}
-    virtual double get_last_price() const override {return 0.0;}
+    virtual Decimal get_last_price() const override {return 0.0;}
     virtual std::string_view get_message() const override {return {};}
-    virtual double get_filled() const override {return 0.0;}
+    virtual Decimal get_filled() const override {return 0.0;}
     virtual Reason get_reason() const override {return Reason::no_reason;}
     virtual Instrument get_instrument() const override {return {};}
     virtual Account get_account() const override {return {};}
@@ -372,11 +372,11 @@ public:
     }
 
     ///get filled amount
-    double get_filled() const {
+    Decimal get_filled() const {
         return _ptr->get_filled();
     }
 
-    static double get_total(const Setup &setup) {
+    static Decimal get_total(const Setup &setup) {
         return std::visit([](const auto &x){
            if constexpr(order_has_amount<decltype(x)>) {
                return x.amount;
@@ -387,12 +387,12 @@ public:
     }
 
     ///get total amount
-    double get_total() const {
+    Decimal get_total() const {
         return get_total(_ptr->get_setup());
     }
 
     ///remain amount to fill
-    double get_remain() const {
+    Decimal get_remain() const {
         return get_total() - get_filled();
     }
 
@@ -402,7 +402,7 @@ public:
     }
 
     ///get last executed price
-    double get_last_price() const {
+    Decimal get_last_price() const {
         return _ptr->get_last_price();
     }
 

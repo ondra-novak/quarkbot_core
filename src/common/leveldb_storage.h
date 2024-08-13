@@ -36,10 +36,8 @@ public:
     virtual Fills load_fills(Timestamp limit, std::string_view filter = {}) const override;
     virtual std::vector<SerializedOrder> load_open_orders() const override;
     virtual std::string get_var(std::string_view var_name) const override;
-    virtual void enum_vars(std::string_view start, std::string_view end,
-            Function<void(std::string_view,std::string_view)> &fn) const override;
-    virtual void enum_vars(std::string_view prefix,
-            Function<void(std::string_view,std::string_view)> &fn) const override;
+    virtual VarSet<std::string_view> get_vars(std::string_view prefix) const override;
+    virtual VarSet<std::string_view> get_vars(std::string_view start, std::string_view end) const override;
     virtual Positions load_positions(std::string_view filter = {}) const override;
     virtual Trades load_closed(Timestamp limit, std::string_view filter = {}) const override;
 

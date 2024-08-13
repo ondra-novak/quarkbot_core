@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include "decimal.h"
 
 namespace trading_api {
 
@@ -30,15 +31,10 @@ struct TimeValue {
     std::strong_ordering operator <=> (const TimeValue &) const = default;
 };
 
-using ValueBase = std::variant<std::monostate,
-                               double,
-                               int,
-                               long,
-                               bool,
-                               DateValue,
+using ValueBase = std::variant<std::monostate,Decimal,DateValue,
                                TimeValue,
                                std::string,
-                               std::span<Value> >;
+                               std::vector<Value> >;
 
 
 class Value : public ValueBase {
@@ -54,7 +50,7 @@ public:
 
     Config(const std::vector<std::pair<std::string, Value> > &values)
         :_values(values.begin(), values.end()) {}
-    
+
 
     struct ValueRef {
         const Value *ref;

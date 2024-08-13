@@ -28,7 +28,7 @@ const std::string &LvlDBStorage::build_key(std::string &buffer, RecordType type,
 
 
 
-const std::string &LvlDBStorage::build_key(RecordType type, const std::string_view &rest) 
+const std::string &LvlDBStorage::build_key(RecordType type, const std::string_view &rest)
 {
     return build_key(_buffer, type, rest);
 }
@@ -67,18 +67,18 @@ void LvlDBStorage::put_order(const Order &ord)
 }
 
 
-using FillRecord = MessageFormat<
+using FillRecord = TupleBin<
     Timestamp, //time
     std::string, //id
     std::string,// label;
     std::string,// pos_id;
     IInstrument::Type, //instrument.type;
-    double,// multiplier;
+    Decimal,// multiplier;
     std::string, // instrument_id;
     std::string, // price_unit;
     Side,// side;
-    double,// price;
-    double,// amount;
+    Decimal,// amount;
+    Decimal,// price;
     double// fees
 >;
 
@@ -87,7 +87,7 @@ void LvlDBStorage::put_fill(const Fill &fill)
     std::string v = FillRecord::compose(fill.time, fill.id, fill.label, fill.pos_id,
                     fill.instrument.type, fill.instrument.multiplier,
                     fill.instrument.instrument_id, fill.instrument.price_unit,
-                    fill.side, fill.price, fill.amount, fill.fees);    
+                    fill.side, fill.amount, fill.price, fill.fees);
     _batch.Put(build_fill_key(fill.time, fill.id), v);
     auto_commit();
 }
@@ -118,10 +118,10 @@ bool LvlDBStorage::is_duplicate_fill(const Fill &fill) const
     return s.ok();
 }
 
-static Fill restore_fill(decltype(FillRecord::parse("")) &&parsed) {  
-        return {
+static Fill restore_fill(decltype(FillRecord::parse("")) &&parsed) {
+        return Fill{
                 std::move(std::get<0>(parsed)),
-                std::move(std::get<1>(parsed)), 
+                std::move(std::get<1>(parsed)),
                 std::move(std::get<2>(parsed)),
                 std::move(std::get<3>(parsed)),
                 {
@@ -131,7 +131,7 @@ static Fill restore_fill(decltype(FillRecord::parse("")) &&parsed) {
                     std::move(std::get<7>(parsed)),
                 },
                 std::move(std::get<8>(parsed)),
-                std::move(std::get<9>(parsed)), 
+                std::move(std::get<9>(parsed)),
                 std::move(std::get<10>(parsed)),
                 std::move(std::get<11>(parsed))
             };
@@ -199,44 +199,143 @@ std::string LvlDBStorage::get_var(std::string_view var_name) const
     return {};
 }
 
-void LvlDBStorage::enum_vars(std::string_view start, std::string_view end, Function<void(std::string_view, std::string_view)> &fn) const
+VarSet<std::string_view> LvlDBStorage::get_vars(std::string_view start, std::string_view end) const
 {
+    class Set: public IVarSet {
+    public:
+
+        Set(std::string start, std::string end, leveldb::DB *db, int prefix_size)
+            :start(std::move(start))
+            ,end(std::move(end))
+            ,iter(db->NewIterator({}))
+            ,prefix_size(prefix_size) {}
+
+        virtual bool init() {
+            iter->Seek(start);
+            return is_valid();
+        }
+        virtual bool next() {
+            iter->Next();
+            return is_valid();
+        }
+        virtual std::pair<std::string_view, std::string_view> get() const {
+            auto key = iter->key();
+            key.remove_prefix(prefix_size);
+            auto value = iter->value();
+            return {{key.data(), key.size()}, {value.data(), value.size()}};
+        }
+
+        bool is_valid() const {
+            return iter->Valid() && iter->key().compare(end) <= 0;
+        }
+
+    protected:
+        std::string start;
+        std::string end;
+        std::unique_ptr<leveldb::Iterator> iter;
+        int prefix_size;
+    };
+
+
     std::string b;
     std::string e;
     build_key(b, RecordType::variable, start);
     build_key(e, RecordType::variable, end);
-    leveldb::Slice bs(b);
-    leveldb::Slice es(e);
-    std::unique_ptr<leveldb::Iterator> iter(_db->NewIterator({}));
-    iter->Seek(bs);
-    while (iter->Valid()) {
-        auto ks = iter->key();
-        if (ks.compare(es) > 0) break;
-        auto vs = iter->value();
-        fn(remove_key_prefix(ks), extract_slice(vs));
-        iter->Next();
-    }
+    return VarSet<>(std::make_unique<Set>(std::move(b), std::move(e), _db.get(), _key_pfx.size()+1));
 }
 
-void LvlDBStorage::enum_vars(std::string_view prefix, Function<void(std::string_view, std::string_view)> &fn) const
+VarSet<std::string_view> LvlDBStorage::get_vars(std::string_view prefix) const
 {
+    class Set: public IVarSet {
+    public:
+
+        Set(std::string pfx, leveldb::DB *db, int prefix_size)
+            :pfx(std::move(pfx))
+            ,iter(db->NewIterator({}))
+            ,prefix_size(prefix_size) {}
+
+        virtual bool init() {
+            iter->Seek(pfx);
+            return is_valid();
+        }
+        virtual bool next() {
+            iter->Next();
+            return is_valid();
+        }
+        virtual std::pair<std::string_view, std::string_view> get() const {
+            auto key = iter->key();
+            key.remove_prefix(prefix_size);
+            auto value = iter->value();
+            return {{key.data(), key.size()}, {value.data(), value.size()}};
+        }
+
+        bool is_valid() const {
+            return iter->Valid() && iter->key().starts_with(pfx);
+        }
+
+    protected:
+        std::string pfx;
+        std::unique_ptr<leveldb::Iterator> iter;
+        int prefix_size;
+    };
+
     std::string pfx;
-    std::unique_ptr<leveldb::Iterator> iter(_db->NewIterator({}));
-    iter->Seek(build_key(pfx, RecordType::variable, prefix));
-    while (iter->Valid() && key_match_prefix(pfx, iter->key())) {
-        auto ks = iter->key();
-        auto vs = iter->value();
-        fn(remove_key_prefix(ks), extract_slice(vs));
-        iter->Next();
-    }
+    build_key(pfx, RecordType::variable, prefix);
+    return VarSet<>(std::make_unique<Set>(std::move(pfx), _db.get(), _key_pfx.size()+1));
 }
 
 struct PositionInfo {
-    Side side;
-    double pos;
-    double sum;
+    Side side = Side::undefined;      //current side
+    Decimal pos = {};    //current position
+    double sum = 0;
     Fill last_fill = {};
     double fees = 0;
+
+    std::optional<Trade> add_fill(const Fill &f) {
+        std::optional<Trade> out;
+        last_fill = f;
+        double fp;
+        if (f.instrument.type == Instrument::Type::inverted_contract) {
+            fp = 1.0/f.price.as<double>();
+        } else {
+            fp =f.price.as<double>();
+        }
+        fees += f.fees;
+        if (f.side == side) {
+            pos += f.amount;
+            sum += f.amount.as<double>() * fp;;
+        } else {
+            if (pos <= f.amount) {
+                out.emplace(Trade {
+                    f.time,f.id, f.label, f.pos_id, f.instrument,side, pos,
+                    get_open_price(), f.price.as<double>(), fees
+                });
+                pos = f.amount - pos;
+                side = f.side;
+                sum = pos.as<double>() * fp;
+                fees = 0;
+            } else {
+                out.emplace(Trade {
+                    f.time,f.id, f.label, f.pos_id, f.instrument,side, f.amount,
+                    get_open_price(), f.price.as<double>(), fees
+                });
+                auto newpos = pos + f.amount;
+                double newavg = sum * newpos.as<double>() / pos.as<double>();
+                pos -= f.amount;
+                sum = newavg;
+            }
+        }
+        return {};
+    }
+
+    double get_open_price() const {
+        double avg  = sum / pos.as<double>();
+        if (last_fill.instrument.type == Instrument::Type::inverted_contract) {
+            return 1.0/avg;
+        } else {
+            return avg;
+        }
+    }
 };
 
 Positions LvlDBStorage::load_positions(std::string_view filter) const
@@ -249,28 +348,7 @@ Positions LvlDBStorage::load_positions(std::string_view filter) const
     while (iter->Valid() && key_match_prefix(k, iter->key())) {
         Fill f = restore_fill(FillRecord::parse(extract_slice(iter->value())));
         auto &nfo = positions[f.pos_id];
-        nfo.last_fill = f;
-        double fp;
-        double fa;
-        if (f.instrument.type == Instrument::Type::inverted_contract) {
-            fp = 1.0/f.price;
-            fa = -static_cast<int>(f.side)*f.amount*f.instrument.multiplier;
-        } else {
-            fp = f.price;
-            fa = static_cast<int>(f.side)*f.amount*f.instrument.multiplier;
-        }
-        if (f.side == nfo.side) {
-            nfo.pos += f.amount;
-            nfo.sum += f.amount*fp;
-        } else {
-            nfo.pos -= f.amount;
-            if (nfo.pos <= 0) {
-                nfo.sum = 0;
-                nfo.pos = -nfo.pos;
-                nfo.side = nfo.side;
-            }
-        }
-        nfo.fees += f.fees;
+        nfo.add_fill(f);
     }
 
     Positions res;
@@ -280,9 +358,6 @@ Positions LvlDBStorage::load_positions(std::string_view filter) const
         }
         std::string_view f= info.last_fill.label;
         if (filter.empty() || f.substr(0,filter.size()) == filter) {
-            double open = info.sum/info.pos;
-            double price = 
-                info.last_fill.instrument.type == Instrument::Type::inverted_contract?1.0/open: open;
             res.push_back({
                 info.last_fill.time,
                 info.last_fill.id,
@@ -290,14 +365,14 @@ Positions LvlDBStorage::load_positions(std::string_view filter) const
                 id,
                 info.last_fill.instrument,
                 info.side,
-                price,
                 info.pos,
-                info.fees,     
+                info.get_open_price(),
+                info.fees,
             });
         }
     }
 
-    return res; 
+    return res;
 }
 
 Trades LvlDBStorage::load_closed(Timestamp limit, std::string_view filter) const
@@ -311,8 +386,17 @@ Trades LvlDBStorage::load_closed(Timestamp limit, std::string_view filter) const
     while (iter->Valid() && key_match_prefix(k, iter->key())) {
         Fill f = restore_fill(FillRecord::parse(extract_slice(iter->value())));
         auto &nfo = positions[f.pos_id];
-        nfo.last_fill = f;
+        auto trd = nfo.add_fill(f);
+        if (trd.has_value()) {
+            std::string_view label= trd->label;
+            if (filter.empty() || label.substr(0,filter.size()) == filter) {
+                if (trd->last_update_time >= limit) {
+                    res.push_back(std::move(*trd));
+                }
+            }
+        }
     }
+    return res;
 }
 
 bool LvlDBStorage::key_match_prefix(const std::string_view & pfx, const leveldb::Slice & slice)

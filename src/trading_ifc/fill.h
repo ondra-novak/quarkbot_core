@@ -3,7 +3,7 @@
 #include "common.h"
 #include "timer.h"
 #include "instrument.h"
-#include "fixed.h"
+#include "decimal.h"
 #include <vector>
 #include <string>
 
@@ -43,20 +43,20 @@ struct Fill {
     ///execution side
     Side side;
 
-    ///Price of this fill
-    double price;
-    ///Amount exchanged
-    /**
-     * @note if fees are subtracted from the amount, this field is filled by
-     * amount after substraction
-     *
-     */
-    double amount;
+    Decimal amount;
     ///Commision (fees)
     /**
      * Absolute amount of fees in instrument's currency. If
      * fees are subsctracted from amount, this value contains fees recalculated
      * to the currency (amount_fees * price)
+     *
+     */
+    ///Price of this fill
+    Decimal price;
+    ///Amount exchanged
+    /**
+     * @note if fees are subtracted from the amount, this field is filled by
+     * amount after substraction
      *
      */
     double fees;
@@ -92,8 +92,6 @@ struct Position {
     /// for position it contains overall side
     Side side;
 
-    ///average open price (ACB)
-    double open_price;
     ///Amount exchanged
     /**
      * @note if fees are subtracted from the amount, this field is filled by
@@ -101,7 +99,10 @@ struct Position {
      *
      * for position it contains position amount
      */
-    double amount;
+    Decimal amount;
+
+    ///average open price (ACB)
+    double open_price;
     ///Commision (fees)
     /**
      * Absolute amount of fees in instrument's currency. If
@@ -133,6 +134,9 @@ struct Trade {
     ///User defined label  - retrieves from last trade
     std::string label;
 
+    ///associated position id (close end reduce)
+    std::string pos_id;
+
     ///Information about instrument
     IInstrument::InstrumentFillInfo instrument;
 
@@ -140,11 +144,6 @@ struct Trade {
     /// for position it contains overall side
     Side side;
 
-    ///average open price (ACB)
-    double open_price;
-
-    ///closing price
-    double close_price;
     ///Amount exchanged
     /**
      * @note if fees are subtracted from the amount, this field is filled by
@@ -152,7 +151,13 @@ struct Trade {
      *
      * for position it contains position amount
      */
-    double amount;
+    Decimal amount;
+
+    ///average open price (ACB)
+    double open_price;
+
+    ///closing price
+    double close_price;
     ///Commision (fees)
     /**
      * Absolute amount of fees in instrument's currency. If
@@ -165,9 +170,9 @@ struct Trade {
 
     double calc_pnl() const {
         if (instrument.type == IInstrument::Type::inverted_contract) {
-            return instrument.multiplier * amount * (1.0/open_price - 1.0/close_price);
+            return (instrument.multiplier * amount * (1.0_dec/open_price - 1.0_dec/close_price)).as<double>();
         } else {
-            return instrument.multiplier * amount * (close_price - open_price);
+            return (instrument.multiplier * amount * (close_price - open_price)).as<double>();
         }
     }
 
