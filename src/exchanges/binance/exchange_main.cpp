@@ -129,7 +129,7 @@ void BinanceExchange::update_account(const std::shared_ptr<BinanceAccount> &acc,
                     +asset_info["unrealizedProfit"].as<double>()
                     +asset_info["positionInitialMargin"].as<double>()
                     +asset_info["openOrderInitialMargin"].as<double>();
-    nfo.blocked = asset_info["initialMargin"].as<double>();
+    nfo.initial_margin = asset_info["initialMargin"].as<double>();
     nfo.currency = acc->get_ident();
     nfo.equity = nfo.balance;
     nfo.leverage = 0;
@@ -151,8 +151,8 @@ void BinanceExchange::update_account(const std::shared_ptr<BinanceAccount> &acc,
                     qpos.side = side;
                     qpos.id = pos["positionSide"].as<std::string>();
                     qpos.open_price =pos["entryPrice"].get();
-                    qpos.leverage = pos["leverage"].get();
-                    nfo.leverage = std::max(nfo.leverage, qpos.leverage);
+/*                    qpos.leverage = pos["leverage"].get();
+                    nfo.leverage = std::max(nfo.leverage, qpos.leverage);*/
                     poslist[Instrument(instr)].push_back(std::move(qpos));
                 }
             }

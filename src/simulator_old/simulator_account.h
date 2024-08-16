@@ -1,9 +1,10 @@
 #pragma once
 
+#include <../simulator_old/simulator_instrument.h>
+
 #include <mutex>
 #include "../trading_ifc/strategy_context.h"
 
-#include "simulator_instrument.h"
 
 namespace trading_api {
 

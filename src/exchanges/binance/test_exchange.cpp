@@ -72,7 +72,7 @@ int main() {
             std::cout<<"Exchange:" << acc.get_exchange().get_label() << std::endl;
             auto info = acc.get_info();
             std::cout<<"Balance:" << info.balance << std::endl;
-            std::cout<<"Blocked:" << info.blocked<< std::endl;
+            std::cout<<"Blocked:" << info.initial_margin<< std::endl;
             std::cout<<"Currency:" << info.currency<< std::endl;
             std::cout << "-----" << std::endl;
         }

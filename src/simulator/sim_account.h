@@ -1,0 +1,50 @@
+#pragma once
+
+#include <trading_api/exchange.h>
+namespace trading_api {
+
+class SimAccount: public IAccount {
+public:
+    SimAccount(Exchange exch, std::string label, std::string currency, double balance, double fees);
+    virtual std::string get_label() const override;
+    virtual Exchange get_exchange() const override;
+    virtual Info get_info() const override;
+    virtual std::string get_id() const override;
+    virtual Positions get_positions(const Instrument &i) const override;
+
+    Fills create_fills(const Instrument &i, Side side, Decimal amount, Decimal price, Timestamp tm);
+    std::optional<Fill> close_position(const Instrument &i, std::string id, Decimal price, Timestamp tm, Decimal remain = 0_dec);
+    Fill open_position(const Instrument &i, Side side, Decimal price, Decimal size, Timestamp tm);
+
+protected:
+
+    Exchange _exch;
+    std::string _label;
+    std::string _currency;
+    double _initial_balance;
+    double _fees;
+
+
+    mutable std::shared_mutex _mx;
+    std::unordered_map<Instrument, Positions, Instrument::Hasher> _instrument_map;
+    double _rpnl;
+
+    static std::string generate_pos_id();
+
+    struct PositionStats {
+        //initial margin from all positions
+        double initial = 0;
+        //maintenance margin from all positions
+        double maintenance = 0;
+        //total held value
+        double val = 0;
+        //unrealized PNL (TODO)
+        double upnl = 0;
+    };
+
+    PositionStats calc_position_stats() const;
+
+
+};
+
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include "common.h"
 #include "exchange.h"
 #include "decimal.h"
 
@@ -54,6 +55,33 @@ public:
 
         bool operator==(const InstrumentFillInfo &info) const = default;
 
+        ///calculates PNL for given arguments
+        /**
+         * @param amount amount of traded
+         * @param open open price
+         * @param close close price
+         * @return returned pnl
+         */
+        Decimal calc_pnl(Side side, Decimal amount, Decimal open, Decimal close) const {
+            if (type == Type::inverted_contract) {
+                return -amount*multiplier*Decimal(side)*(1_dec/open - 1_dec/close);
+            } else {
+                return amount*multiplier*Decimal(side)*(close - open);
+            }
+        }
+        ///Calculate position value - base value to calculate initial margin
+        /**
+         * @param size position size
+         * @param open_price opening price
+         * @return value of position in account's currency
+         */
+        Decimal calc_value(Decimal size, Decimal open_price) const {
+            if (type == Type::inverted_contract) {
+                return size * multiplier * (1_dec/open_price);
+            } else
+                return size * multiplier * open_price;
+        }
+
     };
 
 
@@ -72,9 +100,11 @@ public:
         ///fixed quantum factor between calculated pnl a real profit - (ex: 0.0001 USDT -> XBT = +10000 USDT profit = +1 XBT)
         Decimal quantum_factor = 1;
         ///required margin (0.05 = 5% = 20x leverage)
-        Decimal required_margin = 1;
+        /** this value is always 1 for spot markets */
+        Decimal initial_margin = 1;
         ///maintenance margin (0.025 = 2.5% = 40x leverage)
-        Decimal maintenance_margin = 1;
+        /** this value is always 0 for spot markets (as there is no liquidation event) */
+        Decimal maintenance_margin = 0;
         ///instrument is tradable (you can place orders)
         bool tradable = false;
         ///instrument can be shorted
@@ -132,6 +162,7 @@ class Instrument: public Wrapper<IInstrument> {
 public:
     using Config = IInstrument::Config;
     using Type = IInstrument::Type;
+    using InstrumentFillInfo = IInstrument::InstrumentFillInfo;
 
 
     using Wrapper<IInstrument>::Wrapper;
@@ -327,6 +358,10 @@ public:
             Decimal ms = adjust_lot_up(cfg,amount_to_lot(cfg, calc_min_amount(cfg, price)));
             return std::max(ms,adjust_lot(cfg, size));
         }
+    }
+
+    InstrumentFillInfo get_fill_info() const {
+        return _ptr->get_fill_info();
     }
 
 

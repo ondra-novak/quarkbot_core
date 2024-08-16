@@ -1,5 +1,6 @@
-#include "simulator_instrument.h"
-#include "simulator_account.h"
+#include "../simulator_old/simulator_instrument.h"
+
+#include <../simulator_old/simulator_account.h>
 
 namespace trading_api {
 

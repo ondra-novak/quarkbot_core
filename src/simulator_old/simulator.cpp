@@ -1,6 +1,7 @@
-#include "simulator.h"
-
 #include "simulator_instrument.h"
+#include "../simulator_old/simulator.h"
+
+#include <../simulator_old/simulator_instrument.h>
 namespace trading_api{
 
 std::string SimulatorBackend::SimOrder::gen_id() {
