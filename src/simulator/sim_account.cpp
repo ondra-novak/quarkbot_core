@@ -6,6 +6,7 @@
  */
 
 #include "sim_account.h"
+#include "sim_instrument.h"
 
 namespace trading_api {
 
@@ -185,10 +186,14 @@ SimAccount::PositionStats SimAccount::calc_position_stats() const {
     PositionStats mi = {};
     for (const auto &[i, pslst]: _instrument_map) {
         const auto &cfg = i.get_config();
+        Decimal price = SimInstrument::get_price(i);
         for (const auto &pos: pslst) {
             mi.initial += pos.initial_margin.as<double>();
             mi.maintenance += pos.maintenance_margin.as<double>();
             mi.val += (pos.initial_margin/cfg.initial_margin).as<double>();
+            mi.upnl += Instrument::calc_pnl<Decimal>(cfg.type,
+                    cfg.lot_multiplier*cfg.quanto_factor, pos.side, pos.amount, pos.open_price,
+                    price).as<double>();
         }
     }
     return mi;

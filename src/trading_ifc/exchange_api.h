@@ -5,6 +5,7 @@
 #include "module_decl.h"
 #include "weak_object_map.h"
 #include "network.h"
+#include "shared_lockable_ptr.h"
 
 #endif
 

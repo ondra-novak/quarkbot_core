@@ -128,9 +128,10 @@ public:
     virtual std::string get_label() const override {return {};}
     virtual std::string get_category() const override {return {};}
     virtual Exchange get_exchange() const override {return {};}
-
-
 };
+
+
+
 
 class Instrument: public Wrapper<IInstrument> {
 public:
@@ -270,6 +271,42 @@ public:
     Decimal adjust_amount(Decimal price, Decimal size, bool size_is_volume) const {
         return adjust_amount(get_config(), price, size, size_is_volume);
     }
+
+    ///calculates PNL for given arguments
+    /**
+     * @param type instrument type
+     * @param m instrument size multiplier (lot_multiplier * quanto)
+     * @param amount amount of traded
+     * @param open open price
+     * @param close close price
+     * @return returned pnl
+     */
+    template<typename _Float>
+    static _Float calc_pnl(Type type, _Float m, Side side, _Float amount, _Float open, _Float close) {
+        _Float sd = static_cast<_Float>(side);
+        if (type == Type::inverted_contract) {
+            return -amount*m*sd*(_Float(1)/open - _Float(1)/close);
+        } else {
+            return amount*m*sd*(close - open);
+        }
+    }
+    ///Calculate position value - base value to calculate initial margin
+    /**
+     * @param type instrument type
+     * @param m instrument size multiplier (lot_multiplier * quanto)
+     * @param size position size
+     * @param open_price opening price
+     * @return value of position in account's currency
+     */
+    template<typename _Float>
+    static _Float calc_value(Type type, _Float m, _Float size, _Float open_price) {
+        if (type == Type::inverted_contract) {
+            return size * m * (1_dec/open_price);
+        } else
+            return size * m * open_price;
+    }
+
+
     static Decimal lot_to_amount(const Config &cfg, Decimal lots) {
         if (cfg.type == Type::inverted_contract) {
              lots = -lots;

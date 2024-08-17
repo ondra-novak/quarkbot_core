@@ -4,7 +4,9 @@ cmake_minimum_required(VERSION 3.5)
 
 add_executable (simulator
     main.cpp
-    sim_account.cpp     
+    sim_account.cpp
+    sim_instrument.cpp     
+    matching.cpp
 )
 
 add_dependencies(trading_api_common libjson20_single_header)

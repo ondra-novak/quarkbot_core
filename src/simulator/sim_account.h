@@ -27,7 +27,7 @@ protected:
 
     mutable std::shared_mutex _mx;
     std::unordered_map<Instrument, Positions, Instrument::Hasher> _instrument_map;
-    double _rpnl;
+    double _rpnl = 0;
 
     static std::string generate_pos_id();
 
@@ -38,7 +38,7 @@ protected:
         double maintenance = 0;
         //total held value
         double val = 0;
-        //unrealized PNL (TODO)
+        //unrealized PNL
         double upnl = 0;
     };
 

@@ -43,13 +43,7 @@ struct InstrumentFillInfo {
      */
     template<typename _Float>
     _Float calc_pnl(Side side, _Float amount, _Float open, _Float close) const {
-        _Float m = static_cast<_Float>(multiplier);
-        _Float sd = static_cast<_Float>(side);
-        if (type == IInstrument::Type::inverted_contract) {
-            return -amount*m*sd*(_Float(1)/open - _Float(1)/close);
-        } else {
-            return amount*m*sd*(close - open);
-        }
+        return Instrument::calc_pnl<_Float>(type, static_cast<_Float>(multiplier), side, amount, open,close);
     }
     ///Calculate position value - base value to calculate initial margin
     /**
@@ -59,11 +53,7 @@ struct InstrumentFillInfo {
      */
     template<typename _Float>
     _Float calc_value(_Float size, _Float open_price) const {
-        _Float m = static_cast<_Float>(multiplier);
-        if (type == IInstrument::Type::inverted_contract) {
-            return size * m * (1_dec/open_price);
-        } else
-            return size * m * open_price;
+        return Instrument::calc_value<_Float>(type, static_cast<_Float>(multiplier), size, open_price);
     }
 
 };
