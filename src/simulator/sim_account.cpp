@@ -7,6 +7,7 @@
 
 #include "sim_account.h"
 #include "sim_instrument.h"
+#include <mutex>
 
 namespace trading_api {
 

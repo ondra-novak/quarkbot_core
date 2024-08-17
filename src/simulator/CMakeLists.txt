@@ -7,6 +7,7 @@ add_executable (simulator
     sim_account.cpp
     sim_instrument.cpp     
     matching.cpp
+    replay.cpp
 )
 
 add_dependencies(trading_api_common libjson20_single_header)

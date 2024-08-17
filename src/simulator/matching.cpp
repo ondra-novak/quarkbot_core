@@ -1,4 +1,4 @@
-#include "matching.h"
+    #include "matching.h"
 #include "sim_instrument.h"
 
 namespace trading_api {
@@ -8,9 +8,28 @@ namespace trading_api {
 namespace simulator {
 
 
-void Matching::set_spread(Decimal bid, Decimal ask) {
-    _bid = bid;
-    _ask = ask;
+void Matching::set_spread(const Spread &spread) {
+    _spread = spread;
+    update_spread();
+}
+
+Matching::Spread Matching::get_spread() const {
+    return _spread;
+}
+
+void Matching::update_spread() {
+    for (const auto &w: _orders) {
+        std::visit([&](const auto &x){
+            using T = std::decay_t<decltype(x)>;
+            if constexpr (std::is_same_v<T, Limit> || std::is_same_v<T, TpSl>) {
+                switch (x.side) {
+                    default: break;
+                    case Side::buy: _spread.bid = std::max(_spread.bid, x.limit_price);break;
+                    case Side::sell: _spread.ask = std::max(_spread.ask, x.limit_price);break;
+                }
+            }
+        },w);
+    }
 }
 
 void Matching::set_trade(Decimal last, Decimal last_size) {
@@ -18,27 +37,20 @@ void Matching::set_trade(Decimal last, Decimal last_size) {
     _last_size =last_size;
 }
 
-Decimal Matching::get_bid() const {
-    return _bid;
-}
-
-Decimal Matching::get_ask() const {
-    return _ask;
-}
 
 Matching::Execution Matching::place_market_order(Order ord, Side side, Decimal amount) {
     Execution x = {std::move(ord), side};
     switch(side) {
         default: break;
         case Side::buy:
-            if (!is_nan(_ask)) {
-                x.price = _ask;
+            if (!is_nan(_spread.ask)) {
+                x.price = _spread.ask;
                 x.size = amount;
             }
             break;
         case Side::sell:
-            if (!is_nan(_bid)) {
-                x.price = _bid;
+            if (!is_nan(_spread.bid)) {
+                x.price = _spread.bid;
                 x.size = amount;
             }
             break;
@@ -75,32 +87,32 @@ std::vector<Matching::Execution> Matching::get_executions() {
                     _last_size -= to_exec;
                     return true;
                 }
-                if ((item.side == Side::buy && _ask <= item.limit_price)
-                        || (item.side == Side::sell && _bid >= item.limit_price)){
+                if ((item.side == Side::buy && _spread.ask <= item.limit_price)
+                        || (item.side == Side::sell && _spread.bid >= item.limit_price)){
                     exx.push_back({std::move(item.order),item.side,item.limit_price,item.amount});
                     return true;
                 }
             }
             if constexpr(std::is_same_v<T, Stop> || std::is_same_v<T, TpSl>) {
-                if (item.side == Side::buy && _ask > item.stop_price) {
-                    exx.push_back({std::move(item.order),item.side,_ask,item.amount});
-                } else if (item.side == Side::sell && _bid < item.stop_price) {
-                    exx.push_back({std::move(item.order),item.side,_bid,item.amount});
+                if (item.side == Side::buy && _spread.ask > item.stop_price) {
+                    exx.push_back({std::move(item.order),item.side,_spread.ask,item.amount});
+                } else if (item.side == Side::sell && _spread.bid < item.stop_price) {
+                    exx.push_back({std::move(item.order),item.side,_spread.bid,item.amount});
                 }
                 return true;
 
             }
             if constexpr(std::is_same_v<T, StopLimit>) {
-                if (item.side == Side::buy && _ask > item.stop_price) {
-                    if (item.limit_price >= _ask) {
-                        exx.push_back({std::move(item.order),item.side,_ask,item.amount});
+                if (item.side == Side::buy && _spread.ask > item.stop_price) {
+                    if (item.limit_price >= _spread.ask) {
+                        exx.push_back({std::move(item.order),item.side,_spread.ask,item.amount});
                     } else {
                         _updates.push_back(Limit{std::move(item.order), item.side, item.amount, item.limit_price});
                     }
                     return true;
-                } else if (item.side == Side::sell && _bid < item.stop_price) {
-                    if (item.limit_price <= _bid) {
-                        exx.push_back({std::move(item.order),item.side,_bid,item.amount});
+                } else if (item.side == Side::sell && _spread.bid < item.stop_price) {
+                    if (item.limit_price <= _spread.bid) {
+                        exx.push_back({std::move(item.order),item.side,_spread.bid,item.amount});
                         return true;
                     } else {
                         _updates.push_back(Limit{std::move(item.order), item.side, item.amount, item.limit_price});
@@ -112,23 +124,23 @@ std::vector<Matching::Execution> Matching::get_executions() {
             }
             if constexpr(std::is_same_v<T, TrailingStop>) {
                 if (item.side == Side::buy) {
-                    if (is_nan(item.stop_price) || item.stop_price - _ask > item.distance) {
+                    if (is_nan(item.stop_price) || item.stop_price - _spread.ask > item.distance) {
                         _updates.push_back(TrailingStop{
-                            std::move(item.order),item.side,item.amount,item.distance,_ask + item.distance,
+                            std::move(item.order),item.side,item.amount,item.distance,_spread.ask + item.distance,
                         });
                         return true;
-                    } else if (_ask > item.stop_price) {
-                        exx.push_back({std::move(item.order), item.side,_ask, item.amount});
+                    } else if (_spread.ask > item.stop_price) {
+                        exx.push_back({std::move(item.order), item.side,_spread.ask, item.amount});
                     }
                 }
                 else if (item.side == Side::sell) {
-                    if (is_nan(item.stop_price) || _bid - item.stop_price  > item.distance) {
+                    if (is_nan(item.stop_price) || _spread.bid - item.stop_price  > item.distance) {
                         _updates.push_back(TrailingStop{
-                            std::move(item.order),item.side,item.amount,item.distance,_bid - item.distance
+                            std::move(item.order),item.side,item.amount,item.distance,_spread.bid - item.distance
                         });
                         return true;
-                    } else if (_bid < item.stop_price) {
-                        exx.push_back({std::move(item.order), item.side,_bid, item.amount});
+                    } else if (_spread.bid < item.stop_price) {
+                        exx.push_back({std::move(item.order), item.side,_spread.bid, item.amount});
                         return true;
                     }else {
                         return true;
@@ -142,12 +154,13 @@ std::vector<Matching::Execution> Matching::get_executions() {
     _orders.erase(iter, _orders.end());
     for (auto &x: _updates) _orders.push_back(std::move(x));
     _updates.clear();
+    update_spread();
     return exx;
 }
 
 Decimal Matching::get_effective_price() const {
-    if (is_nan(_bid) || is_nan(_ask)) return _last;
-    else return (_bid + _ask)/2_dec;
+    if (is_nan(_spread.bid) || is_nan(_spread.ask)) return _last;
+    else return (_spread.bid + _spread.ask)/2_dec;
 }
 
 }

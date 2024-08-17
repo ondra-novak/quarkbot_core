@@ -13,8 +13,8 @@ public:
 
     struct Update {
         Side side;
-        double level;
-        double amount;
+        Decimal level;
+        Decimal amount;
     };
 
 
@@ -23,11 +23,11 @@ public:
     const auto &bid() const {return _bid_side;}
     const auto &ask() const {return _ask_side;}
 
-    void update_bid(double price, double amount) {
+    void update_bid(Decimal price, Decimal amount) {
         if (amount <= 0) _bid_side.erase(price);
         else _bid_side.replace(price, amount);
     }
-    void update_ask(double price, double amount) {
+    void update_ask(Decimal price, Decimal amount) {
         if (amount <= 0) _ask_side.erase(price);
         else _ask_side.replace(price, amount);
     }
@@ -40,13 +40,13 @@ public:
         }
     }
 
-    void remove_ask_to(double price) {
+    void remove_ask_to(Decimal price) {
         while (_ask_side.begin()->first < price) {
             _ask_side.erase(_ask_side.begin()->first);
         }
     }
 
-    void trim(double lowest_price, double highest_price) {
+    void trim(Decimal lowest_price, Decimal highest_price) {
         {
             auto iter = _bid_side.upper_bound(lowest_price);
             while (iter != _bid_side.end()) {
@@ -63,7 +63,7 @@ public:
         }
     }
 
-    void remove_bid_to(double price) {
+    void remove_bid_to(Decimal price) {
         while (_bid_side.begin()->first > price) {
             _bid_side.erase(_bid_side.begin()->first);
         }
@@ -112,7 +112,7 @@ public:
     friend std::ostream &operator<<(std::ostream &s, const OrderBook &ob) {
         auto iter_bid = ob._bid_side.begin();
         auto iter_ask = ob._ask_side.begin();
-        double bid_lev[8], bid_amn[8];
+        Decimal bid_lev[8], bid_amn[8];
         int bid_cnt = 0;
         while (iter_bid != ob._bid_side.end() && bid_cnt < 8) {
             bid_lev[bid_cnt] = iter_bid->first;
@@ -152,15 +152,15 @@ protected:
 
 
     struct CmpBid {
-        bool operator()(double a, double b) const {return a > b;}
+        bool operator()(Decimal a, Decimal b) const {return a > b;}
     };
     struct CmpAsk {
-        bool operator()(double a, double b) const {return a < b;}
+        bool operator()(Decimal a, Decimal b) const {return a < b;}
     };
 
     Timestamp _tp = {}; //<snapshot time
-    WanderingTree<double, double, CmpBid> _bid_side = {};    //<bid side
-    WanderingTree<double, double, CmpAsk> _ask_side = {};    //<ask side
+    WanderingTree<Decimal, Decimal, CmpBid> _bid_side = {};    //<bid side
+    WanderingTree<Decimal, Decimal, CmpAsk> _ask_side = {};    //<ask side
 };
 
 

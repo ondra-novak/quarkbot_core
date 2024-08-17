@@ -1,6 +1,7 @@
 #pragma once
 
 #include <trading_api/exchange.h>
+#include <shared_mutex>
 namespace trading_api {
 
 class SimAccount: public IAccount {

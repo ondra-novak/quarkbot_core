@@ -1,7 +1,5 @@
 #pragma once
 
-#include "strategy.h"
-
 #include <atomic>
 #include <map>
 

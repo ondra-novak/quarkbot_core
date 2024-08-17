@@ -25,14 +25,19 @@ public:
         Decimal size = {};
     };
 
+    struct Spread {
+        Decimal bid = Decimal::nan();
+        Decimal bid_size = Decimal::inf();
+        Decimal ask = Decimal::nan();
+        Decimal ask_size= Decimal::inf();
+    };
+
     ///sets new spread
     /**
-     * @param bid new bid
-     * @param ask new ask
      *
      * @note no execution is made, you need to call get_executions()
      */
-    void set_spread(Decimal bid, Decimal ask);
+    void set_spread(const Spread &spread);
     ///sets new trade
     /**
      * Sets trade happened in simulated market (data can be read from a replay file)
@@ -45,10 +50,12 @@ public:
      */
     void set_trade(Decimal price, Decimal size);
 
-    ///Retrieve current bid
-    Decimal get_bid() const;
-    ///Retrieve current ask
-    Decimal get_ask() const;
+
+    ///Retrieve current spread
+    /**
+     * the retrieved spread also includes active limit orders
+     */
+    Spread get_spread() const;
 
     ///Limit order
     /**
@@ -166,11 +173,10 @@ public:
 protected:
     std::vector<WaitingOrder> _orders;
     std::vector<WaitingOrder> _updates;
-    Decimal _bid = Decimal::nan();
-    Decimal _ask = Decimal::nan();
+    Spread _spread = {};
     Decimal _last = 0_dec;
     Decimal _last_size = 0_dec;
-
+    void update_spread();
 
 };
 
@@ -179,3 +185,4 @@ protected:
 
 
 }
+

@@ -3,5 +3,7 @@
 /.cproject
 /.project
 /.settings
+/html
+/latex
 /my_build_profile.conf
 /secret

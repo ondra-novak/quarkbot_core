@@ -1,4 +1,5 @@
 #include <memory>
+#include <shared_mutex>
 
 class shared_lockable_ptr_common {
 public:

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <trading_api/exchange.h>
+#include <trading_api/shared_lockable_ptr.h>
 #include "matching.h"
 namespace trading_api {
 
