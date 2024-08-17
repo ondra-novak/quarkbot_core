@@ -38,11 +38,3 @@ const trading_api::IInstrument::Config& BinanceInstrument::get_config() const {
     return _config;
 }
 
-BinanceInstrument::InstrumentFillInfo BinanceInstrument::get_fill_info() const {
-    return {
-        _config.type,
-        _config.lot_multiplier*_config.quantum_factor,
-        "BN_"+_config.id,
-        _config.quote_asset
-    };
-}

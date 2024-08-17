@@ -232,7 +232,6 @@ public:
     virtual void order_apply_fill(const Order &order, const Fill &fill) = 0;
 
 
-
 };
 
 ///Export the strategy, so the strategy can be loaded by the loader

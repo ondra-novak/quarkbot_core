@@ -8,7 +8,7 @@ public:
     SimAccount(Exchange exch, std::string label, std::string currency, double balance, double fees);
     virtual std::string get_label() const override;
     virtual Exchange get_exchange() const override;
-    virtual Info get_info() const override;
+    virtual Status get_status() const override;
     virtual std::string get_id() const override;
     virtual Positions get_positions(const Instrument &i) const override;
 

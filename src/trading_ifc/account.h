@@ -7,6 +7,7 @@
 #include <chrono>
 #include <string_view>
 #include "instrument.h"
+#include "fill.h"
 
 
 namespace trading_api {
@@ -17,7 +18,7 @@ class Instrument;
 
 class IAccount {
 public:
-    struct Info {
+    struct Status {
         ///Total equity : current balance + unrealized pnl
         double equity = 0;  //balance + upnl
         ///Current total balance
@@ -51,7 +52,7 @@ public:
         ///Contains currency string, for example USD
         std::string currency = {};
         ///Contains ratio to master currency, if set to 0, then ratio is unknown or there is no master currency
-        double ratio = 0;
+        double ratio = 1;
     };
 
 
@@ -108,7 +109,7 @@ public:
          */
         template<Side skip = Side::undefined>
         AggregatedPosition aggregated(const Instrument &i)const {
-            auto finfo = i.get_fill_info();
+            auto finfo = InstrumentFillInfo::from_instrument(i);
             AggregatedPosition out;
             for (const Position &pos: *this) {
                 if (pos.side == skip) continue;
@@ -140,16 +141,17 @@ public:
     virtual ~IAccount() = default;
 
 
-    virtual Info get_info() const = 0;
+    virtual Status get_status() const = 0;
+
+    virtual double get_ratio(const Instrument &i) const = 0;
+
     virtual std::string get_label() const = 0;
 
     virtual Exchange get_exchange() const = 0;
 
-    ///Retrieve internal instrument ID
     virtual std::string get_id() const = 0;
 
     virtual Positions get_positions(const Instrument &i) const = 0;
-
 
     class Null;
 };
@@ -157,7 +159,8 @@ public:
 
 class IAccount::Null: public IAccount{
 public:
-    virtual Info get_info() const override {return {};}
+    virtual Status get_status() const override {return {};}
+    virtual double get_ratio(const Instrument &) const override {return 0;}
     virtual std::string get_label() const override {return {};}
     virtual Exchange get_exchange() const override {return {};}
     virtual std::string get_id() const override {return {};}
@@ -178,7 +181,7 @@ public:
 
     using Wrapper<IAccount>::Wrapper;
 
-    using Info = IAccount::Info;
+    using Status = IAccount::Status;
     using Position = IAccount::Position;
     using Positions = IAccount::Positions;
     using AggregatedPosition = IAccount::AggregatedPosition;
@@ -188,14 +191,72 @@ public:
     /** Account's label can be defined in config */
     std::string get_label() const {return _ptr->get_label();}
 
+    ///Retrieve global account status
+    Status get_status() const {return _ptr->get_status();}
 
-    Info get_info() const {return _ptr->get_info();}
+    ///Retrieve status recalculated to instrument's quote currency
+    /**
+     * this function is intended to see account status in base currency of given instrument
+     * in case, that shared account is used. This is often used in CFD accounts
+     * or multiassets accounts, where final PNL is converted to main currency by
+     * current currency ratio.
+     *
+     *
+     * @param i instrument
+     *
+     * @note if applied for non-CFD and non-multiasset account, if used
+     * with incompatible instrument, it returns the
+     * same information as get_status(). The function should store conversion ratio
+     * into ratio field
+     */
+    Status get_status(const Instrument &i) const {
+        auto s = _ptr->get_status();
+        auto r = _ptr->get_ratio(i);
+        return Status {
+            s.equity * r,
+            s.balance * r,
+            s.initial_margin * r,
+            s.maintenance_margin * r,
+            s.leverage,
+            {},
+            s.ratio/r
+        };
+    }
+
+    ///Retrieve currency conversion ratio for given instrument
+    /** CFD and multiassets accounts typically exposes balance in one specified currency,
+     * however the instrument can use different base currency. This function returns
+     * current conversion ratio between instrument's base currency and account currency
+     *
+     * For example, account's main currency is USD, but instrument is BTC/EUR, so base
+     * currency for the instrument is EUR and this function return conversion ratio
+     * from USD to EUR. Other example where instrument is inverted contract BTC/USD.
+     * Because base currency for inverted contract is BTC, you retrieve conversion
+     * ratio from USD to BTC
+     *
+     * @param i instrument
+     * @retval >0 conversion ratio
+     * @retval 1 no conversion need to be applied
+     * @retval 0 conversion is not possible (unknown instrument, unknown rate)
+     *
+     * @note returned informaion don't need to be accurate, as the conversion ration
+     * may not be updated often. The function is synchronous, so service provider can probably
+     * return a cached value instead asking the exchange directly at this point
+     */
+    double get_ratio(const Instrument &i) const {return _ptr->get_ratio(i);}
 
     ///Retrieve exchange instance, where this account is managed
     Exchange get_exchange() const {return _ptr->get_exchange();}
 
     std::string get_id() const {return _ptr->get_id();}
 
+    ///Retrieve all positions for given instrument
+    /**
+     * @param i instrument
+     * @return list of positions. All prices in position are in quote currency (for
+     * inverted contracts, they are in other currency: inverted BTC/USD -> BTC is main
+     * currency)
+     */
     Positions get_positions(const Instrument &i) const {return _ptr->get_positions(i);}
 
 };

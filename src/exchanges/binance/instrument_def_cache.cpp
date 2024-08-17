@@ -69,7 +69,7 @@ void InstrumentDefCache::process(const RestClient::Result &result, bool coinm) {
             }
             cfg.min_volume = 0;
             cfg.lot_multiplier = 1;
-            cfg.quantum_factor = 1;
+            cfg.quanto_factor = 1;
             cfg.quantity_precision = sd["quotePrecision"].get();
             cfg.base_asset_precision = sd["baseAssetPrecision"].get();
             cfg.quote_precision = sd["quotePrecision"].get();

@@ -35,53 +35,10 @@ public:
         contract,
         ///inverted COIN-M contract, strategy must invert price to calculate PNL
         inverted_contract,
-        ///quantum contract, there is fixed ratio between PNL and profit in target currency
-        quantum_contract,
+        ///quanto contract, there is fixed ratio between PNL and profit in target currency
+        quanto_contract,
         ///cfd market / however hedge is disabled by default
         cfd
-    };
-
-    ///Structure defines information of this instrument for fills
-    /** This structure contains sufficient informations to aggregate position, trades and calculate PnL */
-    struct InstrumentFillInfo {
-        ///type of contract (to calculate PnL correcly)
-        IInstrument::Type type;
-        ///PnL multiplier (multiplier * amount * (close - open)
-        Decimal multiplier;
-        ///instrument identifier (to aggregate fills of single instrument)
-        std::string instrument_id;
-        ///price unit (for example USD)
-        std::string price_unit;
-
-        bool operator==(const InstrumentFillInfo &info) const = default;
-
-        ///calculates PNL for given arguments
-        /**
-         * @param amount amount of traded
-         * @param open open price
-         * @param close close price
-         * @return returned pnl
-         */
-        Decimal calc_pnl(Side side, Decimal amount, Decimal open, Decimal close) const {
-            if (type == Type::inverted_contract) {
-                return -amount*multiplier*Decimal(side)*(1_dec/open - 1_dec/close);
-            } else {
-                return amount*multiplier*Decimal(side)*(close - open);
-            }
-        }
-        ///Calculate position value - base value to calculate initial margin
-        /**
-         * @param size position size
-         * @param open_price opening price
-         * @return value of position in account's currency
-         */
-        Decimal calc_value(Decimal size, Decimal open_price) const {
-            if (type == Type::inverted_contract) {
-                return size * multiplier * (1_dec/open_price);
-            } else
-                return size * multiplier * open_price;
-        }
-
     };
 
 
@@ -97,18 +54,40 @@ public:
         Decimal min_size = 0;
         ///minimal allowed volume (amount * multipler * price)
         Decimal min_volume = 0;
-        ///fixed quantum factor between calculated pnl a real profit - (ex: 0.0001 USDT -> XBT = +10000 USDT profit = +1 XBT)
-        Decimal quantum_factor = 1;
+        ///fixed quanto factor between calculated pnl a real profit - (ex: 0.0001 USDT -> XBT = +10000 USDT profit = +1 XBT)
+        Decimal quanto_factor = 1;
         ///required margin (0.05 = 5% = 20x leverage)
         /** this value is always 1 for spot markets */
         Decimal initial_margin = 1;
         ///maintenance margin (0.025 = 2.5% = 40x leverage)
         /** this value is always 0 for spot markets (as there is no liquidation event) */
         Decimal maintenance_margin = 0;
+        ///instrument's currency name for profit (PNL)
+        /**
+         * Typically contains quote currency, but for inverted contracts, there should
+         * be asset currency. For quanto contracts, there can be final currency
+         * after quanto is applied (bitmex ETH/USD quanto -> BTC)
+         */
+        std::string currency;
         ///instrument is tradable (you can place orders)
         bool tradable = false;
         ///instrument can be shorted
         bool can_short = false;
+
+        ///calculate minimal allowed lot size for the instrument at given price
+        /**
+         * @param price a price where trade is planned to happen
+         * @return minimal lot size for this price. This uses lot_size, min_size,
+         * min_volume and lot_multiplier fields. It also handles contract type
+         */
+        Decimal min_lot_size(Decimal price) const {
+            Decimal fm = std::max(lot_size, min_size);
+            if (type == Type::inverted_contract) {
+                return ceil(std::max(fm, min_volume * price / lot_multiplier)/lot_size)*lot_size;
+            } else {
+                return ceil(std::max(fm, min_volume / (price * lot_multiplier))/lot_size)*lot_size;
+            }
+        }
     };
 
 
@@ -133,10 +112,6 @@ public:
 
     virtual Exchange get_exchange() const = 0;
 
-    ///Retrieve instrument's fill information structure
-    /** This helps to identify which fills belongs to which instruments */
-    virtual InstrumentFillInfo get_fill_info() const = 0;
-
     class Null;
 };
 
@@ -153,7 +128,6 @@ public:
     virtual std::string get_label() const override {return {};}
     virtual std::string get_category() const override {return {};}
     virtual Exchange get_exchange() const override {return {};}
-    virtual InstrumentFillInfo get_fill_info() const override {return {};}
 
 
 };
@@ -162,7 +136,6 @@ class Instrument: public Wrapper<IInstrument> {
 public:
     using Config = IInstrument::Config;
     using Type = IInstrument::Type;
-    using InstrumentFillInfo = IInstrument::InstrumentFillInfo;
 
 
     using Wrapper<IInstrument>::Wrapper;
@@ -313,14 +286,14 @@ public:
     static Decimal quotation_to_price(const Config &cfg, Decimal price) {
         switch (cfg.type){
             case Type::inverted_contract: return 1.0/price;
-            case Type::quantum_contract: return price * cfg.quantum_factor;
+            case Type::quanto_contract: return price * cfg.quanto_factor;
             default: return price;
         }
     }
     static Decimal price_to_quotation(const Config &cfg, Decimal price) {
         switch (cfg.type){
             case Type::inverted_contract: return 1.0/price;
-            case Type::quantum_contract: return price / cfg.quantum_factor;
+            case Type::quanto_contract: return price / cfg.quanto_factor;
             default: return price;
         }
     }
@@ -358,10 +331,6 @@ public:
             Decimal ms = adjust_lot_up(cfg,amount_to_lot(cfg, calc_min_amount(cfg, price)));
             return std::max(ms,adjust_lot(cfg, size));
         }
-    }
-
-    InstrumentFillInfo get_fill_info() const {
-        return _ptr->get_fill_info();
     }
 
 

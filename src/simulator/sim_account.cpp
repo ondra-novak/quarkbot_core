@@ -26,7 +26,7 @@ Exchange SimAccount::get_exchange() const {
     return _exch;
 }
 
-SimAccount::Info SimAccount::get_info() const {
+SimAccount::Status SimAccount::get_status() const {
     std::shared_lock _(_mx);
     double eq = _initial_balance+_rpnl;
     auto mg = calc_position_stats();
@@ -57,7 +57,7 @@ SimAccount::Positions SimAccount::get_positions(const Instrument &i) const {
 Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, Decimal price, Timestamp tm) {
     std::unique_lock _(_mx);
     Fills fills;
-    auto fnfo = i.get_fill_info();
+    auto fnfo = InstrumentFillInfo::from_instrument(i);
     auto &pslst = _instrument_map[i];
     Decimal remain_pos = amount;
     auto close_side = reverse(side);
@@ -129,7 +129,7 @@ std::optional<Fill> SimAccount::close_position(const Instrument &i, std::string 
         Decimal price, Timestamp tm, Decimal remain) {
     std::unique_lock _(_mx);
     std::optional<Fill> out;
-    auto fnfo = i.get_fill_info();
+    auto fnfo = InstrumentFillInfo::from_instrument(i);
     auto &pslst = _instrument_map[i];
     auto iter = std::find_if(pslst.begin(), pslst.end(), [&](const Position &pos){
         return pos.id == id;
@@ -161,7 +161,7 @@ std::string SimAccount::generate_pos_id() {
 
 Fill SimAccount::open_position(const Instrument &i,
         Side side, Decimal price, Decimal size, Timestamp tm) {
-    auto fnfo = i.get_fill_info();
+    auto fnfo = InstrumentFillInfo::from_instrument(i);
     Fill out {
         tm,
         generate_pos_id(),

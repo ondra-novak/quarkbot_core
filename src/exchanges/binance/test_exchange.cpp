@@ -70,7 +70,7 @@ int main() {
             std::cout<<"Account:" << acc.get_id() << std::endl;
             std::cout<<"Label:" << acc.get_label() << std::endl;
             std::cout<<"Exchange:" << acc.get_exchange().get_label() << std::endl;
-            auto info = acc.get_info();
+            auto info = acc.get_status();
             std::cout<<"Balance:" << info.balance << std::endl;
             std::cout<<"Blocked:" << info.initial_margin<< std::endl;
             std::cout<<"Currency:" << info.currency<< std::endl;

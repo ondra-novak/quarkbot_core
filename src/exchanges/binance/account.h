@@ -17,10 +17,11 @@ public:
 
     BinanceAccount(std::string ident, std::string asset,  Exchange ex, std::string label);
 
-    virtual Info get_info() const override;
+    virtual Status get_status() const override;
     virtual std::string get_label() const override;
     virtual Exchange get_exchange() const override;
     virtual Positions get_positions(const Instrument &i) const override;
+    virtual double get_ratio(const Instrument &i) const {return 1;}
 
     virtual std::string get_id() const override {return _asset;}
 
@@ -28,7 +29,7 @@ public:
 
 
 
-    void update(Info info, PositionMap positions);
+    void update(Status info, PositionMap positions);
 
     const std::string &get_asset() const {return _asset;}
 
@@ -38,6 +39,6 @@ protected:
     std::string _asset;
     Exchange _ex;
     std::string _label;
-    Info _info;
+    Status _info;
     PositionMap _positions;
 };

@@ -10,6 +10,66 @@
 namespace trading_api {
 
 
+///Structure defines information of this instrument for fills
+/** This structure contains sufficient informations to aggregate position, trades and calculate PnL */
+struct InstrumentFillInfo {
+    ///type of contract (to calculate PnL correcly)
+    IInstrument::Type type;
+    ///PnL multiplier (multiplier * amount * (close - open)
+    Decimal multiplier;
+    ///instrument identifier (to aggregate fills of single instrument)
+    std::string instrument_id;
+    ///price unit (for example USD)
+    std::string price_unit;
+
+    static InstrumentFillInfo from_instrument(const IInstrument::Config &cfg, std::string id) {
+        return {
+            cfg.type,cfg.lot_multiplier*cfg.quanto_factor, std::move(id), cfg.currency
+        };
+    }
+    static InstrumentFillInfo from_instrument(const Instrument &i) {
+        return from_instrument(i.get_config(), i.get_id());
+    }
+
+
+    bool operator==(const InstrumentFillInfo &info) const = default;
+
+    ///calculates PNL for given arguments
+    /**
+     * @param amount amount of traded
+     * @param open open price
+     * @param close close price
+     * @return returned pnl
+     */
+    template<typename _Float>
+    _Float calc_pnl(Side side, _Float amount, _Float open, _Float close) const {
+        _Float m = static_cast<_Float>(multiplier);
+        _Float sd = static_cast<_Float>(side);
+        if (type == IInstrument::Type::inverted_contract) {
+            return -amount*m*sd*(_Float(1)/open - _Float(1)/close);
+        } else {
+            return amount*m*sd*(close - open);
+        }
+    }
+    ///Calculate position value - base value to calculate initial margin
+    /**
+     * @param size position size
+     * @param open_price opening price
+     * @return value of position in account's currency
+     */
+    template<typename _Float>
+    _Float calc_value(_Float size, _Float open_price) const {
+        _Float m = static_cast<_Float>(multiplier);
+        if (type == IInstrument::Type::inverted_contract) {
+            return size * m * (1_dec/open_price);
+        } else
+            return size * m * open_price;
+    }
+
+};
+
+
+
 ///single fill
 struct Fill {
 
@@ -38,7 +98,7 @@ struct Fill {
      */
     std::string pos_id;
 
-    IInstrument::InstrumentFillInfo instrument;
+    InstrumentFillInfo instrument;
 
     ///execution side
     Side side;
@@ -86,7 +146,7 @@ struct Position {
     std::string pos_id;
 
     ///Information about instrument
-    IInstrument::InstrumentFillInfo instrument;
+    InstrumentFillInfo instrument;
 
     ///execution side
     /// for position it contains overall side
@@ -138,7 +198,7 @@ struct Trade {
     std::string pos_id;
 
     ///Information about instrument
-    IInstrument::InstrumentFillInfo instrument;
+    InstrumentFillInfo instrument;
 
     ///execution side
     /// for position it contains overall side
@@ -169,11 +229,7 @@ struct Trade {
     double fees;
 
     double calc_pnl() const {
-        if (instrument.type == IInstrument::Type::inverted_contract) {
-            return (instrument.multiplier * amount * (1.0_dec/open_price - 1.0_dec/close_price)).as<double>();
-        } else {
-            return (instrument.multiplier * amount * (close_price - open_price)).as<double>();
-        }
+        return instrument.calc_pnl<double>(side, amount.as<double>(), open_price, close_price);
     }
 
 };
@@ -184,7 +240,7 @@ using Trades = std::vector<Trade>;
 struct ProfitLoss {
 
     ///information about instrument
-    IInstrument::InstrumentFillInfo instrument;
+    InstrumentFillInfo instrument;
 
     ///total pnl
     double pnl;

@@ -124,7 +124,7 @@ void BinanceExchange::query_accounts(std::string_view identity, std::string_view
 
 void BinanceExchange::update_account(const std::shared_ptr<BinanceAccount> &acc,
         const json::value &asset_info, const json::value &positions) {
-    Account::Info nfo;
+    Account::Status nfo;
     nfo.balance = asset_info["availableBalance"].as<double>()
                     +asset_info["unrealizedProfit"].as<double>()
                     +asset_info["positionInitialMargin"].as<double>()
@@ -141,7 +141,7 @@ void BinanceExchange::update_account(const std::shared_ptr<BinanceAccount> &acc,
         auto symbol = pos["symbol"].as<std::string_view>();
         auto instr = _instruments.find(symbol);
         if (instr) {
-            auto snfo = instr->get_fill_info();
+            auto snfo = InstrumentFillInfo::from_instrument(trading_api::Instrument(instr));
             if (snfo.price_unit == nfo.currency) {
                 double amn = pos["positionAmt"].get();
                 Side side = amn<0?Side::sell:amn>0?Side::buy:Side::undefined;

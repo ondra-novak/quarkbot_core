@@ -321,7 +321,9 @@ public:
 
     template<typename T>
     constexpr T as() const {
-        if constexpr(std::is_integral_v<T> || std::is_enum_v<T>) {
+        if constexpr(std::is_same_v<T, Decimal>) {
+            return *this;
+        } else if constexpr(std::is_integral_v<T> || std::is_enum_v<T>) {
             auto n = round(*this).adjust_exponent(0).get_mantisa();
             return static_cast<T>(n);
         } else {

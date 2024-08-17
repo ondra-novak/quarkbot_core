@@ -11,7 +11,7 @@ BinanceAccount::BinanceAccount(std::string ident, std::string asset, Exchange ex
 {
 }
 
-BinanceAccount::Info BinanceAccount::get_info() const {
+BinanceAccount::Status BinanceAccount::get_status() const {
     std::lock_guard _(_mx);
     return _info;
 }
@@ -32,7 +32,7 @@ BinanceAccount::Exchange BinanceAccount::get_exchange() const {
     return _ex;
 }
 
-void BinanceAccount::update(Info info, PositionMap positions) {
+void BinanceAccount::update(Status info, PositionMap positions) {
     std::lock_guard _(_mx);
     _positions = std::move(positions);
     _info = std::move(info);
