@@ -71,32 +71,4 @@ protected:
     mutable std::string _whatmsg;
 };
 
-class IErrorHandler {
-public:
-    virtual void on_unhandled_exception()  = 0;
-    virtual ~IErrorHandler() = default;
-};
-
-class ErrorGuard {
-public:
-    static bool handle_exception() {
-        if (handler) {
-            handler->on_unhandled_exception();
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    ErrorGuard(IErrorHandler *h):_save(handler) {handler = h;}
-    ~ErrorGuard() {handler = _save;}
-
-protected:
-    IErrorHandler *_save = nullptr;
-    static thread_local IErrorHandler *handler;
-};
-
-inline thread_local IErrorHandler *ErrorGuard::handler = nullptr;
-
-
 }

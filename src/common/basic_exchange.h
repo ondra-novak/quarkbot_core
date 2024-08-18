@@ -144,24 +144,6 @@ public:
      */
     void update_instrument(IEventTarget *target, const Instrument &instrument);
 
-    ///Retrieve last ticker synchronously
-    /**
-     * @param instrument instrument object
-     * @param tk variable which receives ticker
-     * @retval true received
-     * @retval false there is no last ticker stored
-     */
-
-    virtual bool get_last_ticker(const Instrument &instrument, TickData &tk) const override;
-
-    ///Retrieve last orderbook state synchronously
-    /**
-     * @param instrument instrument object
-     * @param ordb variable which receives orderbook
-     * @retval true received
-     * @retval false cannot be retrieved synchronously
-     */
-    virtual bool get_last_orderbook(const Instrument &instrument, OrderBook &ordb) const override;
 
     ///Retrieve exchange icon
     std::optional<IExchange::Icon> get_icon() const override;
@@ -238,6 +220,9 @@ public:
     virtual Exchange get_exchange() const override;
     virtual Log get_log() const override;
     virtual Network get_network() const override;
+
+    virtual bool get_last_market_event(const Instrument &instrument,
+            SubscriptionType type, Function<void(const MarketEvent&)> fn) const override;
 
 protected:
 

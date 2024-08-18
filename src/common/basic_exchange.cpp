@@ -93,6 +93,26 @@ void BasicExchangeContext::query_accounts(std::string_view identity,
     _ptr->query_accounts(identity, query, label, std::move(cb));
 }
 
+bool BasicExchangeContext::get_last_market_event(const Instrument &instrument,
+        SubscriptionType type, Function<void(const MarketEvent&)> fn) const {
+    std::lock_guard _(_mx);
+    switch (type) {
+        case SubscriptionType::tickdata: {
+            auto iter = _tickers.find(instrument);
+            if (iter == _tickers.end()) return false;
+            fn(MarketEvent(type, iter->second));
+            } break;
+        case SubscriptionType::orderbook: {
+            auto iter = _orderbooks.find(instrument);
+            if (iter == _orderbooks.end()) return false;
+            fn(MarketEvent(type, iter->second));
+            } break;
+        default:
+            return false;
+    }
+    return true;
+}
+
 void BasicExchangeContext::send_subscription_notify(const Instrument &i, SubscriptionType type) {
     Subscription s{type, i, nullptr};
     auto iter = _subscriptions.lower_bound(s);
@@ -107,22 +127,6 @@ void BasicExchangeContext::send_subscription_notify(const Instrument &i, Subscri
     if (remain == 0) _ptr->unsubscribe(type, i);
 }
 
-bool BasicExchangeContext::get_last_ticker(const Instrument &instrument, TickData &tk) const {
-    std::lock_guard _(_mx);
-    auto iter = _tickers.find(instrument);
-    if (iter == _tickers.end()) return false;
-    tk = iter->second;
-    return true;
-}
-
-bool BasicExchangeContext::get_last_orderbook(const Instrument &instrument, OrderBook &ordb) const {
-    std::lock_guard _(_mx);
-    auto iter = _orderbooks.find(instrument);
-    if (iter == _orderbooks.end()) return false;
-    ordb = iter->second;
-    return true;
-
-}
 
 void BasicExchangeContext::update_ticker(IEventTarget *target, const Instrument &instrument) {
     std::lock_guard _(_mx);
@@ -251,5 +255,6 @@ void BasicExchangeContext::set_api_key(std::string_view name, const Config &api_
 void BasicExchangeContext::unset_api_key(std::string_view name) {
     _ptr->unset_api_key(name);
 }
+
 
 }

@@ -42,22 +42,11 @@ void BasicContext::init(std::unique_ptr<IStrategy> strategy,
 
 void BasicContext::on_event(const Instrument &i, SubscriptionType subscription_type) {
     std::lock_guard _(_queue_mx);
-    auto iter = std::find_if(_queue.begin(), _queue.end(), [&](QueueItem &q){
-        return std::holds_alternative<EvMarketData>(q)
-                && std::get<EvMarketData>(q).i == i;
-    });
-    EvMarketData *md;
-    if (iter == _queue.end()) {
-        _queue.push_back(EvMarketData{this,i});
-        md = &std::get<EvMarketData>(_queue.back());
-    } else {
-        md = &std::get<EvMarketData>(*iter);
+    MarketEventItem itm{i, subscription_type};
+    auto iter = std::find(_mequeue.begin(), _mequeue.end(), itm);
+    if (iter == _mequeue.end()) {
+        _mequeue.push_back(itm);
         notify_queue();
-    }
-    switch (subscription_type) {
-        case SubscriptionType::tickdata: md->ticker =true; break;
-        case SubscriptionType::orderbook: md->orderbook =true; break;
-        default: break;
     }
 }
 
@@ -65,7 +54,7 @@ void BasicContext::on_event(const Instrument &i, SubscriptionType subscription_t
 
 void BasicContext::on_event(const Order &order, const Fill &fill) {
     std::lock_guard _(_queue_mx);
-    _queue.push_back(EvOrderFill{this, order, fill});
+    _queue.push(EvOrderFill{this, order, fill});
     notify_queue();
 }
 
@@ -73,7 +62,7 @@ void BasicContext::on_event(const Order &order, const Fill &fill) {
 
 void BasicContext::on_event(const Order &order, const Order::Report &report) {
     std::lock_guard _(_queue_mx);
-    _queue.push_back(EvOrderStatus{this, order, report});
+    _queue.push(EvOrderStatus{this, order, report});
     notify_queue();
 }
 
@@ -82,7 +71,7 @@ void BasicContext::on_event(const Order &order, const Order::Report &report) {
 
 void BasicContext::on_event(const Instrument &i, AsyncStatus st) {
     std::lock_guard _(_queue_mx);
-    _queue.push_back(EvUpdateInstrument{this, i, std::move(st)});
+    _queue.push(EvUpdateInstrument{this, i, std::move(st)});
     notify_queue();
 
 }
@@ -91,7 +80,7 @@ void BasicContext::on_event(const Instrument &i, AsyncStatus st) {
 
 void BasicContext::on_event(const Account &a, AsyncStatus st ) {
     std::lock_guard _(_queue_mx);
-    _queue.push_back(EvUpdateAccount{this, a, std::move(st)});
+    _queue.push(EvUpdateAccount{this, a, std::move(st)});
     notify_queue();
 }
 
@@ -272,21 +261,6 @@ void BasicContext::EvUpdateAccount::operator ()() {
 }
 
 
-void BasicContext::EvMarketData::operator ()() {
-    if (ticker) {
-        TickData tk;
-        if (i.get_exchange().get_last_ticker(i, tk)) {
-            me->_strategy->on_market_event(i, {SubscriptionType::tickdata,tk});
-        }
-    }
-    if (orderbook) {
-        OrderBook ordb;
-        if (i.get_exchange().get_last_orderbook(i, ordb)) {
-            me->_strategy->on_market_event(i, {SubscriptionType::orderbook,ordb});
-        }
-    }
-}
-
 void BasicContext::EvOrderStatus::operator ()() {
     auto &e = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
     e.order_apply_report(order, report);
@@ -321,17 +295,13 @@ const Config &BasicContext::get_config() const {
 }
 
 
-void BasicContext::on_unhandled_exception()  {
-    std::lock_guard _(_queue_mx);
-    _queue.push_back(EvException{std::current_exception()});
-}
-
-
 template<std::invocable<> Fn>
 void BasicContext::call_strategy(Fn &&strategy_fn) {
     begin_transaction();
     try {
         strategy_fn();
+        //any exception thrown by coroutine is rethrown here
+        coroutine::rethrow_stored_exception();
     } catch (...) {
         try {
             _strategy->on_unhandled_exception();
@@ -346,45 +316,72 @@ void BasicContext::call_strategy(Fn &&strategy_fn) {
 
 }
 
+void BasicContext::reschedule(Timestamp tp) {
+    _scheduled_time = tp;
+    _scheduler(tp, [this](auto tp){on_scheduler(tp);}, this);
+}
+
 
 void BasicContext::on_scheduler(Timestamp tp) noexcept {
     _event_time = tp;
-    ErrorGuard egr(this);
+    auto next_ev = tp;
     std::unique_lock lk(_queue_mx);
+    //scheduler processes one action at time, then it is rescheduled
+    //in case that action has been processed, it reschedules to immediately execution
+    //otherwise, it reschedules to next scheduled time
+    //or to infinite time
 
-    while (!_queue.empty()) {
+    //queue is processed first (high priority)
+    if (!_queue.empty()) {
+        auto f = std::move(_queue.front());
+        _queue.pop();
         lk.unlock();
-        std::visit([&](auto &item) {
-            call_strategy(item);
-        },_queue.front());
-        lk.lock();
-        _queue.pop_front();
-    }
-    while (!_timed_queue.empty() && _timed_queue.front().tp <= tp) {
-            Function<void()> fn (std::move(_timed_queue.front().r));
-            _timed_queue.pop();
-            lk.unlock();
-            call_strategy(fn);
-            lk.lock();
-    }
-    if (!_timed_queue.empty()) {
-        _scheduled_time = _timed_queue.front().tp;
-        _scheduler(_scheduled_time, [this](auto tp){on_scheduler(tp);}, this);
+        std::visit([&](auto &item){call_strategy(item);}, f);
+
+    //timed events have middle priority
+    } else if (!_timed_queue.empty() && _timed_queue.front().tp <= tp) {
+        auto fn = std::move(_timed_queue.front().r);
+        _timed_queue.pop();
+        lk.unlock();
+        call_strategy(fn);
+
+     //market event queue has low priority
+    } else if (!_mequeue.empty()) {
+        auto item = std::move(_mequeue.front());
+        _mequeue.pop_front();
+        lk.unlock();
+        call_strategy([&]{
+           auto ex = item.i.get_exchange();
+           ex.get_last_market_event(item.i, item.type, [&](const MarketEvent &ev){
+               this->_strategy->on_market_event(item.i, ev);
+           });
+        });
+     //idle events have very low priority
     } else {
-        _scheduled_time = Timestamp::max();
+        bool r = true;
+        lk.unlock();
+        call_strategy([this, &r]{
+            r = _strategy->on_context_idle();
+        });
+        if (r) {
+            if (_timed_queue.empty()) {
+                next_ev = Timestamp::max();
+            } else {
+                next_ev = _timed_queue.front().tp;
+            }
+        }
     }
+    lk.lock();
+    reschedule(next_ev);
 }
 
-void BasicContext::EvException::operator ()() {
-    std::rethrow_exception(eptr);
-}
 
 void BasicContext::EvMQ::operator()() {
     me->_strategy->on_mq_message(std::move(msg));
 }
 void BasicContext::on_message(MQClient::Message message) {
     std::lock_guard _(_queue_mx);
-    _queue.push_back(EvMQ{this, std::move(message)});
+    _queue.push(EvMQ{this, std::move(message)});
 }
 
 bool BasicContext::get_service(const std::type_info &tinfo, std::shared_ptr<void> &ptr) {
@@ -402,14 +399,17 @@ void BasicContext::mq_send_message(std::string_view channel, std::string_view ms
 
 }
 
-trading_api::VarSet<> BasicContext::get_vars(std::string_view prefix) const {
+VarSet<> BasicContext::get_vars(std::string_view prefix) const {
     return _storage->get_vars(prefix);
 }
 
-trading_api::VarSet<> BasicContext::get_vars(std::string_view start, std::string_view end) const {
+VarSet<> BasicContext::get_vars(std::string_view start, std::string_view end) const {
     return _storage->get_vars(start, end);
 }
 
+void BasicContext::EvStart::operator ()() {
+    me->_strategy->on_start();
 }
 
+}
 

@@ -1,7 +1,8 @@
 #pragma once
+#include "subscription_type.h"
 #include "instrument.h"
 #include "function.h"
-
+#include "market_event.h"
 #include "wrapper.h"
 #include <memory>
 #include <optional>
@@ -31,8 +32,8 @@ public:
     virtual std::string get_label() const = 0;
     virtual std::string get_name() const = 0;
     virtual std::optional<Icon> get_icon() const = 0;
-    virtual bool get_last_ticker(const Instrument &instrument, TickData &tk) const = 0;
-    virtual bool get_last_orderbook(const Instrument &instrument, OrderBook &ordb) const = 0;
+    virtual bool get_last_market_event(const Instrument &instrument,
+                    SubscriptionType type, Function<void(const MarketEvent &)> fn) const = 0;
     class Null;
 };
 
@@ -43,8 +44,8 @@ public:
     virtual std::string get_name() const override  {return {};}
     virtual std::string get_id() const override  {return {};}
     virtual std::optional<Icon> get_icon() const override {return {};}
-    virtual bool get_last_ticker(const Instrument &, TickData &) const override {return false;}
-    virtual bool get_last_orderbook(const Instrument &, OrderBook &) const override {return false;}
+    virtual bool get_last_market_event(const Instrument &,
+                    SubscriptionType , Function<void(const MarketEvent &)> ) const override {return false;}
 };
 
 
@@ -75,34 +76,22 @@ public:
     ///Retrieves icon. This feature is optional.
     std::optional<Icon> get_icon() const {return _ptr->get_icon();}
 
-    ///Retrieve last ticker synchronously
-    /**
-     * @param instrument instrument object
-     * @param tk variable which receives ticker
-     * @retval true received
-     * @retval false there is no last ticker stored
-     *
-     * @note this function is intended for internal use. You need to use
-     * context to subscribe instrument's data stream
-     *
-     */
 
-    bool get_last_ticker(const Instrument &instrument, TickData &tk) const {
-        return _ptr->get_last_ticker(instrument, tk);
+    ///Retrieve last market event
+    /**
+     * @param instrument instrument
+     * @param type type
+     * @param cb callback which called with market event
+     * @retval true processed
+     * @retval false error
+     */
+    template<std::invocable<MarketEvent> CB>
+    bool get_last_market_event(const Instrument &instrument,
+                    SubscriptionType type, CB &&cb) const {
+        return _ptr->get_last_market_event(instrument, type, std::forward<CB>(cb));
+
     }
 
-    ///Retrieve last orderbook state synchronously
-    /**
-     * @param instrument instrument object
-     * @param ordb variable which receives orderbook
-     * @retval true received
-     * @retval false cannot be retrieved synchronously
-     * @note this function is intended for internal use. You need to use
-     * context to subscribe instrument's data stream
-     */
-    bool get_last_orderbook(const Instrument &instrument, OrderBook &ordb) const {
-        return _ptr->get_last_orderbook(instrument, ordb);
-    }
 };
 
 

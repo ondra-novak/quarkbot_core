@@ -20,11 +20,19 @@ public:
         static constexpr void return_void() {}
         coroutine get_return_object() {return {};}
         void unhandled_exception() {
-            ErrorGuard::handle_exception();
+            stored_exception = std::current_exception();
         }
     };
 
+    static thread_local std::exception_ptr stored_exception;
+    static void rethrow_stored_exception() {
+        auto e = std::move(stored_exception);
+        if (e) std::rethrow_exception(e);
+    }
+
 };
+
+inline thread_local std::exception_ptr coroutine::stored_exception = {};
 
 
 

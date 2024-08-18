@@ -11,9 +11,13 @@ public:
     virtual void on_event(const trading_api::Account &a, trading_api::AsyncStatus) {}
     virtual void on_event(const trading_api::Instrument &i, trading_api::SubscriptionType subscription_type) {
         std::cout << i.get_id() << " ";
-        trading_api::TickData tk;
-        i.get_exchange().get_last_ticker(i, tk);
-        std::cout << tk << std::endl;
+        i.get_exchange().get_last_market_event(i, subscription_type, [&](const trading_api::MarketEvent &e){
+            if (e.is<trading_api::TickData>()) {
+                const auto &tk = e.get<trading_api::TickData>();
+                std::cout << tk << std::endl;
+            }
+        });
+
     }
     virtual void on_event(const trading_api::Order &order,const trading_api::Order::Report &report) {}
     virtual void on_event(const trading_api::Order &order, const trading_api::Fill &fill) {}

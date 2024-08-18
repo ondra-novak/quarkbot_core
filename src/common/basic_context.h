@@ -32,7 +32,6 @@ concept SchedulerType = (std::is_invocable_v<Scheduler, Timestamp, Function<void
 
 class BasicContext: public IContext,
                     public IEventTarget,
-                    public IErrorHandler,
                     public IMQBroker::IListener{
 public:
 
@@ -93,7 +92,6 @@ public:
     virtual void mq_unsubscribe_channel(std::string_view channel) override;
     virtual void mq_send_message(std::string_view channel, std::string_view msg) override;
 
-    virtual void on_unhandled_exception()  override;
     virtual trading_api::VarSet<> get_vars(
             std::string_view prefix) const override;
     virtual trading_api::VarSet<> get_vars(
@@ -112,6 +110,18 @@ protected:
     Timestamp _event_time = Timestamp::min();
     Timestamp _scheduled_time = Timestamp::max();
 
+    struct MarketEventItem {
+        Instrument i;
+        SubscriptionType type;
+        bool operator==(const MarketEventItem &) const = default;
+    };
+
+
+    struct EvStart {
+        BasicContext *me;
+        void operator()();
+    };
+
 
     struct EvUpdateInstrument {
         BasicContext *me;
@@ -124,14 +134,6 @@ protected:
         BasicContext *me;
         Account a;
         AsyncStatus st;
-        void operator()();
-    };
-
-    struct EvMarketData {
-        BasicContext *me;
-        Instrument i;
-        bool ticker = false;
-        bool orderbook = false;
         void operator()();
     };
 
@@ -149,11 +151,6 @@ protected:
         void operator()();
     };
 
-    struct EvException {
-        std::exception_ptr eptr;
-        void operator()();
-    };
-
     struct EvMQ {
         BasicContext *me;
         MQBroker::Message msg;
@@ -161,12 +158,11 @@ protected:
     };
 
     using QueueItem = std::variant<
+            EvStart,
             EvUpdateAccount,
             EvUpdateInstrument,
             EvOrderStatus,
             EvOrderFill,
-            EvMarketData,
-            EvException,
             EvMQ
             >;
 
@@ -186,8 +182,10 @@ protected:
         std::vector<Order> _batch_cancel;
     };
 
+
     std::mutex _queue_mx;
-    std::deque<QueueItem> _queue;
+    std::queue<QueueItem> _queue;
+    std::deque<MarketEventItem> _mequeue;
     PriorityQueue<TimerItem, typename TimerItem::ordering> _timed_queue;
 
     std::map<Exchange, Batches> _exchanges;
@@ -200,6 +198,8 @@ protected:
     void on_scheduler(Timestamp tp) noexcept;
     template<std::invocable<> Fn>
     void call_strategy(Fn &&strategy_fn);
+    void reschedule(Timestamp tp);
+    void reschedule_now();
 };
 
 
