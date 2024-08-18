@@ -103,7 +103,15 @@ protected:
 
 class MarketEvent: public AnyRef {
 public:
-    using AnyRef::AnyRef;
+    template<typename T>
+    MarketEvent(SubscriptionType type, const T &val)
+        :AnyRef(val), _type(type) {}
+
+    ///Retrieve subscription type
+    SubscriptionType get_type() const {return _type;}
+
+protected:
+    SubscriptionType _type;
 };
 
 }

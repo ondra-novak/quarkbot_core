@@ -75,7 +75,7 @@ void BinanceExchange::on_ticker(std::string_view symbol,
     if (instr) {
         _ctx.income_data(Instrument(instr), ticker);
     } else {
-        _public_fstream->unsubscribe(SubscriptionType::ticker, symbol);
+        _public_fstream->unsubscribe(SubscriptionType::tickdata, symbol);
     }
 }
 

@@ -55,7 +55,7 @@ void BasicContext::on_event(const Instrument &i, SubscriptionType subscription_t
         notify_queue();
     }
     switch (subscription_type) {
-        case SubscriptionType::ticker: md->ticker =true; break;
+        case SubscriptionType::tickdata: md->ticker =true; break;
         case SubscriptionType::orderbook: md->orderbook =true; break;
         default: break;
     }
@@ -163,10 +163,6 @@ void BasicContext::cancel(const Order &order) {
 void BasicContext::set_timer(Timestamp at, TimerEventCB fnptr, TimerID id) {
 
     std::lock_guard _(_queue_mx);
-
-    if (!fnptr) fnptr = [this, id]{
-        _strategy->on_timer(id);
-    };
     _timed_queue.push(TimerItem{at, id, std::move(fnptr)});
     notify_queue();
 }
@@ -188,17 +184,10 @@ Order BasicContext::bind_order(const Instrument &instrument, const Account &acco
 }
 
 
-void BasicContext::update_account(const Account &a, CompletionCB complete_ptr) {
+void BasicContext::update_account(const Account &a) {
     bool do_call = false;
     BasicExchangeContext &e = BasicExchangeContext::from_exchange(a.get_exchange());
-    {
-        std::lock_guard _(_queue_mx);
-        do_call = _cb_update_account.find(a) == _cb_update_account.end();
-        _cb_update_account.insert({a, std::move(complete_ptr)});
-    }
-    if (do_call) {
-        e.update_account(this, a);
-    }
+    e.update_account(this, a);
 }
 
 
@@ -221,17 +210,10 @@ bool BasicContext::clear_timer(TimerID id) {
 
 
 
-void BasicContext::update_instrument(const Instrument &i, CompletionCB complete_ptr) {
+void BasicContext::update_instrument(const Instrument &i) {
     bool do_call = false;
     BasicExchangeContext &e = BasicExchangeContext::from_exchange(i.get_exchange());
-    {
-        std::lock_guard _(_queue_mx);
-        do_call = _cb_update_instrument.find(i) == _cb_update_instrument.end();
-        _cb_update_instrument.insert({i, std::move(complete_ptr)});
-    }
-    if (do_call) {
-        e.update_instrument(this, i);
-    }
+    e.update_instrument(this, i);
 
 }
 
@@ -282,19 +264,11 @@ void BasicContext::set_var(std::string_view var_name, std::string_view value) {
 
 
 void BasicContext::EvUpdateInstrument::operator ()() {
-        auto rg = me->_cb_update_instrument.equal_range(i);
-        while (rg.first != rg.second) {
-            rg.first->second(st);
-            rg.first = me->_cb_update_instrument.erase(rg.first);
-        }
+    me->_strategy->on_update_complete(i, st);
 }
 
 void BasicContext::EvUpdateAccount::operator ()() {
-    auto rg = me->_cb_update_account.equal_range(a);
-    while (rg.first != rg.second) {
-        rg.first->second(st);
-        rg.first = me->_cb_update_account.erase(rg.first);
-    }
+    me->_strategy->on_update_complete(a, st);
 }
 
 
@@ -302,13 +276,13 @@ void BasicContext::EvMarketData::operator ()() {
     if (ticker) {
         TickData tk;
         if (i.get_exchange().get_last_ticker(i, tk)) {
-            me->_strategy->on_market_event(i, tk);
+            me->_strategy->on_market_event(i, {SubscriptionType::tickdata,tk});
         }
     }
     if (orderbook) {
         OrderBook ordb;
         if (i.get_exchange().get_last_orderbook(i, ordb)) {
-            me->_strategy->on_market_event(i, ordb);
+            me->_strategy->on_market_event(i, {SubscriptionType::orderbook,ordb});
         }
     }
 }

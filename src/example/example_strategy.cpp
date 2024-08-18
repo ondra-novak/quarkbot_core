@@ -4,12 +4,10 @@
 
 using namespace trading_api;
 
-class Example: public AbstractStrategy {
+class Example: public Strategy {
 public:
-    virtual void on_init(const Context &ctx) override;
     virtual ConfigSchema get_config_schema() const override;
-protected:
-    Context _context;
+    virtual void on_start() override;
 };
 
 
@@ -17,9 +15,8 @@ EXPORT_STRATEGY(Example);
 
 
 
-void Example::on_init(const Context &ctx) {
-    _context = ctx;
-    auto vs = ctx.get_vars<int>("dummy");
+void Example::on_start() {
+    auto vs = get_vars<int>("dummy");
     for (const auto &[key, value]: vs) {
         key;
         value;

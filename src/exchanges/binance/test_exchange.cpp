@@ -23,7 +23,7 @@ public:
 int main() {
 
     trading_api::TickData dt;
-    trading_api::MarketEvent ev(dt);
+    trading_api::MarketEvent ev(trading_api::SubscriptionType::tickdata, dt);
     std::cout << ev << std::endl;
 
     trading_api::Log log(std::make_shared<trading_api::BasicLog>(std::cout, trading_api::Log::Serverity::trace));

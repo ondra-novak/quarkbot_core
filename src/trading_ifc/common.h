@@ -7,6 +7,7 @@
 #include <source_location>
 #include <optional>
 #include <variant>
+#include <memory>
 #include <tuple>
 
 namespace trading_api {
@@ -133,5 +134,7 @@ inline Side reverse(Side side) {
     }
 }
 
+template<typename T>
+using optional_ref = std::unique_ptr<T, decltype([](T *){})>;
 
 }

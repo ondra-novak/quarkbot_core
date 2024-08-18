@@ -76,10 +76,10 @@ public:
     virtual void unsubscribe(SubscriptionType type, const Instrument &i) override;
     virtual Timestamp get_event_time() const override;
     virtual Order bind_order(const Instrument &instrument, const Account &account) override;
-    virtual void update_account(const Account &a, CompletionCB complete_ptr) override;
+    virtual void update_account(const Account &a) override;
     virtual void allocate(const Account &a, double equity) override;
     virtual bool clear_timer(TimerID id) override;
-    virtual void update_instrument(const Instrument &i, CompletionCB complete_ptr) override;
+    virtual void update_instrument(const Instrument &i) override;
     virtual void unset_var(std::string_view var_name) override;
     virtual void set_var(std::string_view var_name, std::string_view value) override;
     virtual bool get_service(const std::type_info &tinfo, std::shared_ptr<void> &ptr) override;
@@ -190,8 +190,6 @@ protected:
     std::deque<QueueItem> _queue;
     PriorityQueue<TimerItem, typename TimerItem::ordering> _timed_queue;
 
-    std::multimap<Account, CompletionCB> _cb_update_account;
-    std::multimap<Instrument, CompletionCB> _cb_update_instrument;
     std::map<Exchange, Batches> _exchanges;
 
     void begin_transaction();

@@ -33,7 +33,7 @@ void BasicExchangeContext::unsubscribe(IEventTarget *target, SubscriptionType sb
 void BasicExchangeContext::income_data(const Instrument &i, const TickData &t) {
     std::lock_guard _(_mx);
     _tickers[i] = t;
-    send_subscription_notify(i, SubscriptionType::ticker);
+    send_subscription_notify(i, SubscriptionType::tickdata);
 }
 
 void BasicExchangeContext::income_data(const Instrument &i, const OrderBook &t) {
@@ -126,14 +126,14 @@ bool BasicExchangeContext::get_last_orderbook(const Instrument &instrument, Orde
 
 void BasicExchangeContext::update_ticker(IEventTarget *target, const Instrument &instrument) {
     std::lock_guard _(_mx);
-    Subscription s{SubscriptionType::ticker, instrument, nullptr};
+    Subscription s{SubscriptionType::tickdata, instrument, nullptr};
     auto iter = _subscriptions.lower_bound(s);
-    if (iter == _subscriptions.end() || iter->first.type != SubscriptionType::ticker || iter->first.i != instrument) {
-        _ptr->subscribe(SubscriptionType::ticker, instrument);
+    if (iter == _subscriptions.end() || iter->first.type != SubscriptionType::tickdata || iter->first.i != instrument) {
+        _ptr->subscribe(SubscriptionType::tickdata, instrument);
         s.target = target;
         _subscriptions.emplace(s, SubscriptionLimit::onceshot);
     } else {
-        target->on_event(instrument, SubscriptionType::ticker);
+        target->on_event(instrument, SubscriptionType::tickdata);
     }
 }
 

@@ -29,7 +29,7 @@ void WSStreams::manage_subscription(Fn &&fn, SubscriptionType type, std::string_
         case SubscriptionType::orderbook:
             fn(std::move(lk), create_topic(symbol, "depth"));
             break;
-        case SubscriptionType::ticker:
+        case SubscriptionType::tickdata:
             fn(std::move(lk), create_topic(symbol, "bookTicker"));
             fn(std::move(lk), create_topic(symbol, "aggTrade"));
             break;
