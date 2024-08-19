@@ -137,4 +137,11 @@ inline Side reverse(Side side) {
 template<typename T>
 using optional_ref = std::unique_ptr<T, decltype([](T *){})>;
 
+class NoLock {
+public:
+    static constexpr void lock() {}
+    static constexpr void unlock() {}
+    static constexpr bool try_lock() {return true;}
+};
+
 }

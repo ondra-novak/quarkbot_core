@@ -32,6 +32,13 @@ public:
     trading_api::Exchange _x;
     mutable uMutex _mx;
 
+    using TickerEvent = trading_api::MarketEvent_TickData<std::mutex>;
+    using OrderbookEvent = trading_api::MarketEvent_OrderBook<std::mutex>;
+
+    std::shared_ptr<TickerEvent> _last_ticker;
+    std::shared_ptr<OrderbookEvent> _last_orderbook;
+
+
     virtual std::string get_category() const override;
     virtual std::string get_label() const override;
     virtual trading_api::Exchange get_exchange() const override;

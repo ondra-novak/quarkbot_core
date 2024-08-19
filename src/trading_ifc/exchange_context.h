@@ -18,18 +18,7 @@ public:
 
     virtual ~IExchangeContext() = default;
 
-    ///call this function when ticker for given instrument arrived
-    /**
-     * @param i instrument
-     * @param t ticker
-     */
-    virtual void income_data(const Instrument &i, const TickData &t) = 0;
-    ///call this function when orderbook for given instrument arrived
-    /**
-     * @param i instrument
-     * @param o orderbook
-     */
-    virtual void income_data(const Instrument &i, const OrderBook &o) = 0;
+    virtual void income_data(const Instrument &i, const MarketEvent &t) = 0;
     ///call this function when account is updated
     virtual void object_updated(const Account &i, AsyncStatus st) = 0;
     ///call this function when instrument is updated
@@ -78,10 +67,9 @@ public:
     virtual void order_state_changed(const Order &, const Order::Report & ) override {throw_error();}
     virtual void order_restore(void *, const Order &) override{throw_error();}
     virtual void order_fill(const Order &, const Fill &) override{throw_error();}
-    virtual void income_data(const Instrument &, const OrderBook &) override{throw_error();}
+    virtual void income_data(const Instrument &, const MarketEvent &) override{throw_error();}
     virtual void object_updated(const Account &, AsyncStatus) override{throw_error();}
     virtual void object_updated(const Instrument &, AsyncStatus) override{throw_error();}
-    virtual void income_data(const Instrument &, const TickData &) override{throw_error();}
     virtual Network get_network() const override {throw_error();};
     virtual Log get_log() const override {throw_error();}
     virtual Exchange get_exchange() const override {throw_error();}
@@ -99,21 +87,9 @@ public:
     explicit operator bool() const {return defined();}
     bool operator!() const {return !defined();}
 
-    ///call this function when ticker for given instrument arrived
-    /**
-     * @param i instrument
-     * @param t ticker
-     */
-    void income_data(const Instrument &i, const TickData &t) {
+    ///call this function when market event for given instrument arrived
+    void income_data(const Instrument &i, const MarketEvent &t) {
         _ptr->income_data(i, t);
-    }
-    ///call this function when orderbook for given instrument arrived
-    /**
-     * @param i instrument
-     * @param o orderbook
-     */
-    void income_data(const Instrument &i, const OrderBook &o) {
-        _ptr->income_data(i, o);
     }
     ///call this function when account is updated
     void object_updated(const Account &a, AsyncStatus st) {

@@ -1,4 +1,5 @@
 #include "instrument.h"
+#include "../../trading_ifc/orderbook.h"
 
 BinanceInstrument::BinanceInstrument(std::string_view label,
         const Config &cfg,
@@ -6,6 +7,8 @@ BinanceInstrument::BinanceInstrument(std::string_view label,
 :_label(std::move(label))
 ,_config(cfg)
 ,_x(std::move(x))
+,_last_ticker(std::make_shared<TickerEvent>())
+,_last_orderbook(std::make_shared<OrderbookEvent>())
 {
 
 }

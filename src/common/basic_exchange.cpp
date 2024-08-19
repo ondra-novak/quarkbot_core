@@ -12,36 +12,36 @@ void BasicExchangeContext::init(std::unique_ptr<IExchangeService> svc, Config co
     _ptr->init(this, configuration);
 }
 
-void BasicExchangeContext::subscribe(IEventTarget *target, SubscriptionType sbstype, const Instrument &instrument) {
+void BasicExchangeContext::subscribe(IEventTarget *target, MarketEventType sbstype, const Instrument &instrument) {
     std::lock_guard _(_mx);
-    Subscription s{sbstype, instrument, nullptr};
-    auto iter = _subscriptions.lower_bound(s);
-    if (iter == _subscriptions.end() || iter->first.type != sbstype || iter->first.i != instrument) {
-        _ptr->subscribe(sbstype, instrument);
+    Subscription s{sbstype, instrument};
+    auto v = _subscriptions[s];
+    if (v.empty()) {
+        _ptr->subscribe(s.type, s.i);
     }
-    s.target = target;
-    auto r =_subscriptions.emplace(s, SubscriptionLimit::unlimited);
-    if (!r.second) r.first->second = SubscriptionLimit::unlimited;
+    v.push_back(target);
 }
 
-void BasicExchangeContext::unsubscribe(IEventTarget *target, SubscriptionType sbstype, const Instrument &instrument) {
+void BasicExchangeContext::unsubscribe(IEventTarget *target, MarketEventType sbstype, const Instrument &instrument) {
     std::lock_guard _(_mx);
-    Subscription s{sbstype, instrument, target};
-    _subscriptions.erase(s);
+    Subscription s{sbstype, instrument};
+    auto v = _subscriptions[s];
+    v.erase(std::remove(v.begin(), v.end(), target), v.end());
+    if (v.empty()) {
+        _ptr->unsubscribe(s.type, s.i);
+        _subscriptions.erase(s);
+    }
 }
 
-void BasicExchangeContext::income_data(const Instrument &i, const TickData &t) {
+void BasicExchangeContext::income_data(const Instrument &i, const MarketEvent &ev) {
     std::lock_guard _(_mx);
-    _tickers[i] = t;
-    send_subscription_notify(i, SubscriptionType::tickdata);
+    auto iter = _subscriptions.find({ev.get_type(),i});
+    if (iter != _subscriptions.end()) {
+        for (auto t: iter->second) {
+            t->on_event(i, ev);
+        }
+    }
 }
-
-void BasicExchangeContext::income_data(const Instrument &i, const OrderBook &t) {
-    std::lock_guard _(_mx);
-    _orderbooks[i] = t;
-    send_subscription_notify(i, SubscriptionType::orderbook);
-}
-
 
 Order BasicExchangeContext::create_order(const Instrument &instrument,
         const Account &account, const Order::Setup &setup) {
@@ -93,52 +93,11 @@ void BasicExchangeContext::query_accounts(std::string_view identity,
     _ptr->query_accounts(identity, query, label, std::move(cb));
 }
 
-bool BasicExchangeContext::get_last_market_event(const Instrument &instrument,
-        SubscriptionType type, Function<void(const MarketEvent&)> fn) const {
-    std::lock_guard _(_mx);
-    switch (type.value()) {
-        case SubscriptionType::tickdata: {
-            auto iter = _tickers.find(instrument);
-            if (iter == _tickers.end()) return false;
-            fn(MarketEvent(type, iter->second));
-            } break;
-        case SubscriptionType::orderbook: {
-            auto iter = _orderbooks.find(instrument);
-            if (iter == _orderbooks.end()) return false;
-            fn(MarketEvent(type, iter->second));
-            } break;
-        default:
-            return false;
-    }
-    return true;
-}
-
-void BasicExchangeContext::send_subscription_notify(const Instrument &i, SubscriptionType type) {
-    Subscription s{type, i, nullptr};
-    auto iter = _subscriptions.lower_bound(s);
-    unsigned int remain = 0;
-    while (iter != _subscriptions.end() && iter->first.i == i && iter->first.type == type) {
-        s.target = iter->first.target;
-        if (iter->second == SubscriptionLimit::onceshot) iter = _subscriptions.erase(iter);
-        else {++remain; ++iter;};
-        s.target->on_event(s.i, s.type);
-
-    }
-    if (remain == 0) _ptr->unsubscribe(type, i);
-}
 
 
 void BasicExchangeContext::update_ticker(IEventTarget *target, const Instrument &instrument) {
     std::lock_guard _(_mx);
-    Subscription s{SubscriptionType::tickdata, instrument, nullptr};
-    auto iter = _subscriptions.lower_bound(s);
-    if (iter == _subscriptions.end() || iter->first.type != SubscriptionType::tickdata || iter->first.i != instrument) {
-        _ptr->subscribe(SubscriptionType::tickdata, instrument);
-        s.target = target;
-        _subscriptions.emplace(s, SubscriptionLimit::onceshot);
-    } else {
-        target->on_event(instrument, SubscriptionType::tickdata);
-    }
+    //todo
 }
 
 void BasicExchangeContext::update_account(IEventTarget *target, const Account &account) {
@@ -180,8 +139,8 @@ void BasicExchangeContext::object_updated(const Instrument &instrument, AsyncSta
 void BasicExchangeContext::disconnect(const IEventTarget *target) {
     std::lock_guard _(_mx);
     for (auto iter = _subscriptions.begin(); iter != _subscriptions.end();) {
-        if (iter->first.target == target) iter = _subscriptions.erase(iter);
-        else ++iter;
+        auto &lst = iter->second;
+        lst.erase(std::remove(lst.begin(), lst.end(), target), lst.end());
     }
     for (auto &[k,lst]: _account_update_waiting) {
         lst.erase(std::remove(lst.begin(), lst.end(), target), lst.end());

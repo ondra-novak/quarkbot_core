@@ -9,6 +9,7 @@
 #include "../trading_ifc/fill.h"
 #include "../trading_ifc/function.h"
 #include "../trading_ifc/async.h"
+#include "../trading_ifc/market_event.h"
 
 
 namespace trading_api {
@@ -56,7 +57,7 @@ public:
      * @note actual market data are not part of event. When event is processed
      * the strategy must read last market data from the exchange object
      */
-    virtual void on_event(const Instrument &i, SubscriptionType subscription_type) = 0;
+    virtual void on_event(const Instrument &i, const MarketEvent &subscription_type) = 0;
 
     ///called when order state changed
     virtual void on_event(const Order &order,const Order::Report &report) = 0;

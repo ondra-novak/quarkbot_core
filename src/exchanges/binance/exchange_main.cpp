@@ -54,14 +54,14 @@ void BinanceExchange::init(ExchangeContext context, const Config &config) {
     });
 }
 
-void BinanceExchange::subscribe(SubscriptionType type, const Instrument &i) {
+void BinanceExchange::subscribe(MarketEventType type, const Instrument &i) {
     auto id = i.get_id();
     _log.trace("Request to subscribe: {}", id);
     _public_fstream->subscribe(type, id);
 }
 
 
-void BinanceExchange::unsubscribe(SubscriptionType type, const Instrument &i) {
+void BinanceExchange::unsubscribe(MarketEventType type, const Instrument &i) {
     auto id = i.get_id();
     _log.trace("Request to unsubscribe: {}", id);
     _public_fstream->unsubscribe(type, id);
@@ -73,9 +73,10 @@ void BinanceExchange::on_ticker(std::string_view symbol,
 
     auto instr = _instruments.find(symbol);
     if (instr) {
-        _ctx.income_data(Instrument(instr), ticker);
+        instr->_last_ticker->set(ticker);
+        _ctx.income_data(Instrument(instr), trading_api::MarketEvent(instr->_last_ticker));
     } else {
-        _public_fstream->unsubscribe(SubscriptionType::tickdata, symbol);
+        _public_fstream->unsubscribe(MarketEventType::tickdata, symbol);
     }
 }
 
@@ -83,9 +84,10 @@ void BinanceExchange::on_ticker(std::string_view symbol,
 void BinanceExchange::on_orderbook(std::string_view symbol, const OrderBook &update) {
     auto instr = _instruments.find(symbol);
     if (instr) {
-        _ctx.income_data(Instrument(instr), update);
+        instr->_last_orderbook->set(update);
+        _ctx.income_data(Instrument(instr), trading_api::MarketEvent(instr->_last_orderbook));
     } else {
-        _public_fstream->unsubscribe(SubscriptionType::orderbook, symbol);
+        _public_fstream->unsubscribe(MarketEventType::orderbook, symbol);
     }
 }
 

@@ -8,19 +8,19 @@ set(OUTPUT "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/strategy.h"
            "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/exchange.h"
 )
 
-set(FILES_TO_COPY 
+set(FILES_TO_COPY
         module.h
         csv.h
         weak_object_map.h
         shared_lockable_ptr.h
 )
-    
+
 set(DESTINATION_DIR "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api")
 
 set(FULL_PATH_FILES_TO_COPY)
 foreach(FILE ${FILES_TO_COPY})
     list(APPEND FULL_PATH_FILES_TO_COPY ${CMAKE_CURRENT_SOURCE_DIR}/${FILE})
-endforeach()    
+endforeach()
 
 add_custom_command(
     OUTPUT "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/strategy.h"
@@ -38,7 +38,7 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Generating exchange API"
     VERBATIM
-) 
+)
 
 add_custom_target(trading_api_single_header ALL DEPENDS ${OUTPUT})
 add_dependencies(trading_api_single_header to_single_header)

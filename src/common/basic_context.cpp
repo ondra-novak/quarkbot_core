@@ -37,20 +37,22 @@ void BasicContext::init(std::unique_ptr<IStrategy> strategy,
     }
 }
 
-
-
-
-void BasicContext::on_event(const Instrument &i, SubscriptionType subscription_type) {
+void BasicContext::on_event(const Instrument &i, const MarketEvent &event) {
     std::lock_guard _(_queue_mx);
-    MarketEventItem itm{i, subscription_type};
-    auto iter = std::find(_mequeue.begin(), _mequeue.end(), itm);
-    if (iter == _mequeue.end()) {
-        _mequeue.push_back(itm);
+    if (can_collapse(event.get_type())) {
+        MarketEventItem itm{i, event};
+        auto iter = std::find(_mequeue.begin(), _mequeue.end(), itm);
+        if (iter == _mequeue.end()) {
+            _mequeue.push_back(itm);
+            notify_queue();
+        } else {
+            iter->event = std::move(itm.event);
+        }
+    } else {
+        _queue.push(EvMarketEventItem{this,i,event});
         notify_queue();
     }
 }
-
-
 
 void BasicContext::on_event(const Order &order, const Fill &fill) {
     std::lock_guard _(_queue_mx);
@@ -103,11 +105,9 @@ void BasicContext::notify_queue() {
 }
 
 
-void BasicContext::subscribe(SubscriptionType type, const Instrument &i) {
+void BasicContext::subscribe(MarketEventType type, const Instrument &i) {
     BasicExchangeContext::from_exchange(i.get_exchange()).subscribe(this, type, i);
 }
-
-
 
 
 Fills BasicContext::get_fills(std::size_t limit, std::string_view filter) const {
@@ -157,7 +157,7 @@ void BasicContext::set_timer(Timestamp at, TimerEventCB fnptr, TimerID id) {
 }
 
 
-void BasicContext::unsubscribe(SubscriptionType type, const Instrument &i) {
+void BasicContext::unsubscribe(MarketEventType type, const Instrument &i) {
     BasicExchangeContext::from_exchange(i.get_exchange()).unsubscribe(this, type, i);
 }
 
@@ -238,9 +238,6 @@ void BasicContext::rollback() {
     }
 }
 
-
-
-
 void BasicContext::unset_var(std::string_view var_name) {
     _storage->erase_var(var_name);
 }
@@ -260,6 +257,9 @@ void BasicContext::EvUpdateAccount::operator ()() {
     me->_strategy->on_update_complete(a, st);
 }
 
+void BasicContext::EvMarketEventItem::operator ()() {
+    me->_strategy->on_market_event(i, event);
+}
 
 void BasicContext::EvOrderStatus::operator ()() {
     auto &e = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
@@ -351,10 +351,7 @@ void BasicContext::on_scheduler(Timestamp tp) noexcept {
         _mequeue.pop_front();
         lk.unlock();
         call_strategy([&]{
-           auto ex = item.i.get_exchange();
-           ex.get_last_market_event(item.i, item.type, [&](const MarketEvent &ev){
-               this->_strategy->on_market_event(item.i, ev);
-           });
+               this->_strategy->on_market_event(item.i, item.event);
         });
      //idle events have very low priority
     } else {

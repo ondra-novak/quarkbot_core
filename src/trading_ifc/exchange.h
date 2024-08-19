@@ -32,8 +32,6 @@ public:
     virtual std::string get_label() const = 0;
     virtual std::string get_name() const = 0;
     virtual std::optional<Icon> get_icon() const = 0;
-    virtual bool get_last_market_event(const Instrument &instrument,
-                    SubscriptionType type, Function<void(const MarketEvent &)> fn) const = 0;
     class Null;
 };
 
@@ -44,8 +42,6 @@ public:
     virtual std::string get_name() const override  {return {};}
     virtual std::string get_id() const override  {return {};}
     virtual std::optional<Icon> get_icon() const override {return {};}
-    virtual bool get_last_market_event(const Instrument &,
-                    SubscriptionType , Function<void(const MarketEvent &)> ) const override {return false;}
 };
 
 
@@ -77,20 +73,6 @@ public:
     std::optional<Icon> get_icon() const {return _ptr->get_icon();}
 
 
-    ///Retrieve last market event
-    /**
-     * @param instrument instrument
-     * @param type type
-     * @param cb callback which called with market event
-     * @retval true processed
-     * @retval false error
-     */
-    template<std::invocable<MarketEvent> CB>
-    bool get_last_market_event(const Instrument &instrument,
-                    SubscriptionType type, CB &&cb) const {
-        return _ptr->get_last_market_event(instrument, type, std::forward<CB>(cb));
-
-    }
 
 };
 

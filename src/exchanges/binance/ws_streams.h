@@ -10,7 +10,7 @@
 class WSStreams: public RPCClient {
 public:
 
-    using SubscriptionType = trading_api::SubscriptionType;
+    using MarketEventType = trading_api::MarketEventType;
 
     class IEvents {
     public:
@@ -25,8 +25,8 @@ public:
     WSStreams(IEvents &events, WebSocketContext &ctx, std::string url);
 
 
-    void subscribe(SubscriptionType type, std::string_view symbol);
-    void unsubscribe(SubscriptionType type, std::string_view symbol);
+    void subscribe(MarketEventType type, std::string_view symbol);
+    void unsubscribe(MarketEventType type, std::string_view symbol);
 
 
     void reconnect();
@@ -57,6 +57,6 @@ protected:
     void subscribe(std::unique_lock<std::mutex> &&lk,std::string topic);
     void unsubscribe(std::unique_lock<std::mutex> &&lk,std::string topic);
     template<typename Fn>
-    void manage_subscription(Fn &&fn, SubscriptionType type, std::string_view symbol);
+    void manage_subscription(Fn &&fn, MarketEventType type, std::string_view symbol);
 
 };

@@ -115,10 +115,10 @@ public:
     virtual void allocate(const Account &a, double equity) = 0;
 
     ///subscribe market events
-    virtual void subscribe(SubscriptionType type, const Instrument &i) = 0;
+    virtual void subscribe(MarketEventType type, const Instrument &i) = 0;
 
     ///unsubscribe instrument
-    virtual void unsubscribe(SubscriptionType type, const Instrument &i) = 0;
+    virtual void unsubscribe(MarketEventType type, const Instrument &i) = 0;
 
     virtual void mq_subscribe_channel(std::string_view channel) = 0;
     virtual void mq_unsubscribe_channel(std::string_view channel) = 0;

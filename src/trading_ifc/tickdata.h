@@ -9,8 +9,8 @@
 
 namespace trading_api {
 
-struct TickData {
-
+class TickData {
+public:
     //note - if bid and ask are not supported, then bid = ask = last
 
     Timestamp tp = {};  //snapshot time

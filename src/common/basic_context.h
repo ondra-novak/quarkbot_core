@@ -62,17 +62,17 @@ public:
 
     virtual void on_event(const Instrument &i, AsyncStatus st) override;
     virtual void on_event(const Account &a, AsyncStatus st) override;
-    virtual void on_event(const Instrument &i, SubscriptionType subscription_type) override;
+    virtual void on_event(const Instrument &i, const MarketEvent &subscription_type) override;
     virtual void on_event(const Order &order, const Order::Report &report) override;
     virtual void on_event(const Order &order, const Fill &fill) override;
-    virtual void subscribe(SubscriptionType type, const Instrument &i)override;
+    virtual void subscribe(MarketEventType type, const Instrument &i)override;
+    virtual void unsubscribe(MarketEventType type, const Instrument &i) override;
     virtual Order replace(const Order &order, const Order::Setup &setup, bool amend) override;
     virtual Fills get_fills(std::size_t limit, std::string_view filter = {}) const override;
     virtual Fills get_fills(Timestamp tp, std::string_view filter = {}) const override;
     virtual Order place(const Instrument &instrument, const Account &account,  const Order::Setup &setup) override;
     virtual void cancel(const Order &order) override;
     virtual void set_timer(Timestamp at, TimerEventCB fnptr, TimerID id) override;
-    virtual void unsubscribe(SubscriptionType type, const Instrument &i) override;
     virtual Timestamp get_event_time() const override;
     virtual Order bind_order(const Instrument &instrument, const Account &account) override;
     virtual void update_account(const Account &a) override;
@@ -112,7 +112,7 @@ protected:
 
     struct MarketEventItem {
         Instrument i;
-        SubscriptionType type;
+        MarketEvent event;
         bool operator==(const MarketEventItem &) const = default;
     };
 
@@ -122,6 +122,12 @@ protected:
         void operator()();
     };
 
+    struct EvMarketEventItem{
+        BasicContext *me;
+        Instrument i;
+        MarketEvent event;
+        void operator()();
+    };
 
     struct EvUpdateInstrument {
         BasicContext *me;
@@ -160,6 +166,7 @@ protected:
     using QueueItem = std::variant<
             EvStart,
             EvUpdateAccount,
+            EvMarketEventItem,
             EvUpdateInstrument,
             EvOrderStatus,
             EvOrderFill,

@@ -12,7 +12,7 @@ public:
             const Instrument &,
             const Account &,
             const Order::Setup &) override {return {};}
-    virtual void unsubscribe(SubscriptionType ,
+    virtual void unsubscribe(MarketEventType ,
             const Instrument &) override {}
     virtual void init(ExchangeContext , const Config &) override {}
     virtual void order_apply_fill(const Order &,
@@ -26,7 +26,7 @@ public:
     virtual void update_instrument(const Instrument &) override {}
     virtual void order_apply_report(const Order &, const Order::Report &) override {}
     virtual std::string get_name() const override {return {};}
-    virtual void subscribe(SubscriptionType ,const Instrument &) override {};
+    virtual void subscribe(MarketEventType,const Instrument &) override {};
     virtual void batch_place(std::span<Order> ) override {};
     virtual void batch_cancel(std::span<Order> ) override {};
     virtual void restore_orders(void *, std::span<SerializedOrder> ) override {}

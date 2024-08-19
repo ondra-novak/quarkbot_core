@@ -123,14 +123,14 @@ protected:
     template<typename Strategy>
     class Subscription { // @suppress("Miss copy constructor or assignment operator")
     public:
-        Subscription(Strategy *s, SubscriptionType type, const Instrument &i):_s(s),_t(type),_i(i) {}
+        Subscription(Strategy *s, MarketEventType type, const Instrument &i):_s(s),_t(type),_i(i) {}
         template<std::invocable<const Instrument &, const MarketEvent &> CB>
         void operator >>(CB &&cb) {
             _s->add_subscription(_t, _i, std::forward<CB>(cb));
         }
     protected:
         Strategy *_s;
-        SubscriptionType _t;
+        MarketEventType _t;
         const Instrument &_i;
     };
 

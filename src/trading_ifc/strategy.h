@@ -456,7 +456,7 @@ public:  //context API
      * };
      * @endcode
      */
-    Subscription<Strategy> subscribe(SubscriptionType type, const Instrument &i) {
+    Subscription<Strategy> subscribe(MarketEventType type, const Instrument &i) {
         _ctx->subscribe(type, i);
         return {this, type, i};
     }
@@ -471,7 +471,7 @@ public:  //context API
      * @note your strategy doesn't need to call unsubscribe in the destructor.
      *
      */
-    void unsubscribe(SubscriptionType type, const Instrument &i) {
+    void unsubscribe(MarketEventType type, const Instrument &i) {
         _ctx->unsubscribe(type, i);
         remove_subscription(type, i);
     }
@@ -639,7 +639,7 @@ protected: //optional overrides
 private:
     IContext *_ctx = nullptr;
 
-    using InstSubPair = std::pair<Instrument, SubscriptionType>;
+    using InstSubPair = std::pair<Instrument, MarketEventType>;
     struct InstSubPairHasher {
         std::size_t operator()(const InstSubPair &p) const {
             return Instrument::Hasher()(p.first);
@@ -670,10 +670,10 @@ private:
         return false;
     }
     template<typename Fn>
-    void add_subscription(SubscriptionType type, const Instrument &i, Fn &&fn) {
+    void add_subscription(MarketEventType type, const Instrument &i, Fn &&fn) {
         _subscriptions_callbacks[InstSubPair(i, type)] = std::forward<Fn>(fn);
     }
-    void remove_subscription(SubscriptionType type, const Instrument &i) {
+    void remove_subscription(MarketEventType type, const Instrument &i) {
         _subscriptions_callbacks.erase(InstSubPair(i, type));
     }
 

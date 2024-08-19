@@ -50,9 +50,9 @@ public:
             override;
     virtual void init(trading_api::ExchangeContext context, const Config &config) override;
 
-    virtual void subscribe(trading_api::SubscriptionType type,
+    virtual void subscribe(trading_api::MarketEventType type,
             const Instrument &i) override;
-    virtual void unsubscribe(trading_api::SubscriptionType type,
+    virtual void unsubscribe(trading_api::MarketEventType type,
             const Instrument &i) override;
 
     virtual Order create_order(

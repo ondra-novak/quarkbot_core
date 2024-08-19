@@ -67,7 +67,7 @@ public:
      * @note multiple subscriptions should be ignored
      * @note called under lock
      */
-    virtual void subscribe(SubscriptionType type, const Instrument &i) = 0;
+    virtual void subscribe(MarketEventType type, const Instrument &i) = 0;
     ///Unsubscribe instrument
     /** Unsubscribe this object from market data for given instrument
      *
@@ -77,7 +77,7 @@ public:
      * @note multiple unsubscptions should be ignored
      * @note called under lock
      */
-    virtual void unsubscribe(SubscriptionType type, const Instrument &i) = 0;
+    virtual void unsubscribe(MarketEventType type, const Instrument &i) = 0;
     ///Request update account object
     /**
      * @param a account to update

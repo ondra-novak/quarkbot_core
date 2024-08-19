@@ -16,20 +16,20 @@ static std::string create_topic(std::string_view symbol, std::string_view type) 
 }
 
 
-void WSStreams::subscribe(SubscriptionType type, std::string_view symbol) {
+void WSStreams::subscribe(MarketEventType type, std::string_view symbol) {
     manage_subscription([this](auto &&a, auto &&b){
         subscribe(std::move(a), std::move(b));
     },type, symbol);
 }
 
 template<typename Fn>
-void WSStreams::manage_subscription(Fn &&fn, SubscriptionType type, std::string_view symbol) {
+void WSStreams::manage_subscription(Fn &&fn, MarketEventType type, std::string_view symbol) {
     std::unique_lock lk(_mx);
-    switch (type.value()) {
-        case SubscriptionType::orderbook:
+    switch (type) {
+        case MarketEventType::orderbook:
             fn(std::move(lk), create_topic(symbol, "depth"));
             break;
-        case SubscriptionType::tickdata:
+        case MarketEventType::tickdata:
             fn(std::move(lk), create_topic(symbol, "bookTicker"));
             fn(std::move(lk), create_topic(symbol, "aggTrade"));
             break;
@@ -51,7 +51,7 @@ void WSStreams::subscribe(std::unique_lock<std::mutex> &&lk,std::string topic) {
         });
     }
 }
-void WSStreams::unsubscribe(SubscriptionType type, std::string_view symbol) {
+void WSStreams::unsubscribe(MarketEventType type, std::string_view symbol) {
     manage_subscription([this](auto &&a, auto &&b){
         unsubscribe(std::move(a), std::move(b));
     },type, symbol);

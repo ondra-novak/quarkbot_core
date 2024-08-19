@@ -59,14 +59,14 @@ public:
      * @param sbstype type of subscription
      * @param instrument instrument which is subscribed
      */
-    void subscribe(IEventTarget *target, SubscriptionType sbstype, const Instrument &instrument);
+    void subscribe(IEventTarget *target, MarketEventType sbstype, const Instrument &instrument);
     ///Unsubscribe stream
     /**
      * @param target object which consumes updates
      * @param sbstype type of subscription
      * @param instrument instrument
      */
-    void unsubscribe(IEventTarget *target, SubscriptionType sbstype, const Instrument &instrument);
+    void unsubscribe(IEventTarget *target, MarketEventType sbstype, const Instrument &instrument);
 
     ///Create order instance - don't place order yet
     /**
@@ -221,8 +221,6 @@ public:
     virtual Log get_log() const override;
     virtual Network get_network() const override;
 
-    virtual bool get_last_market_event(const Instrument &instrument,
-            SubscriptionType type, Function<void(const MarketEvent&)> fn) const override;
 
 protected:
 
@@ -235,12 +233,19 @@ protected:
 
 
     struct Subscription {
-        SubscriptionType type;
+        MarketEventType type;
         Instrument i;
-        IEventTarget *target;
 
         bool operator==(const Subscription &) const = default;
         std::strong_ordering operator<=>(const Subscription &) const = default;
+    };
+
+    struct SubscriptionHasher {
+        std::size_t operator()(const Subscription &x) const {
+            Instrument::Hasher hasher;
+            std::size_t h = hasher(x.i);
+            return h + static_cast<int>(x.type);
+        }
     };
 
     enum class SubscriptionLimit {
@@ -248,27 +253,15 @@ protected:
         unlimited
     };
 
-    std::unordered_map<Instrument, TickData, Instrument::Hasher> _tickers;
-    std::unordered_map<Instrument, OrderBook, Instrument::Hasher> _orderbooks;
+
     std::unordered_map<Order, IEventTarget *, Order::Hasher> _orders;
 
-    std::map<Subscription, SubscriptionLimit> _subscriptions;
-    std::map<Instrument, std::vector<IEventTarget *> > _instrument_update_waiting;
-    std::map<Account, std::vector<IEventTarget *> > _account_update_waiting;
+    std::unordered_map<Subscription, std::vector<IEventTarget *> , SubscriptionHasher> _subscriptions;
+    std::unordered_map<Instrument, std::vector<IEventTarget *> , Instrument::Hasher> _instrument_update_waiting;
+    std::unordered_map<Account, std::vector<IEventTarget *> , Account::Hasher> _account_update_waiting;
 
 
-    ///call this function when ticker for given instrument arrived
-    /**
-     * @param i instrument
-     * @param t ticker
-     */
-    virtual void income_data(const Instrument &i, const TickData &t) override;
-    ///call this function when orderbook for given instrument arrived
-    /**
-     * @param i instrument
-     * @param o orderbook
-     */
-    virtual void income_data(const Instrument &i, const OrderBook &o) override;
+    virtual void income_data(const Instrument &i, const MarketEvent &t) override;
     ///call this function when account is updated
     virtual void object_updated(const Account &i, AsyncStatus st) override;
     ///call this function when instrument is updated

@@ -9,14 +9,10 @@ class EventTarget: public trading_api::IEventTarget {
 public:
     virtual void on_event(const trading_api::Instrument &i,trading_api::AsyncStatus) {}
     virtual void on_event(const trading_api::Account &a, trading_api::AsyncStatus) {}
-    virtual void on_event(const trading_api::Instrument &i, trading_api::SubscriptionType subscription_type) {
+    virtual void on_event(const trading_api::Instrument &i, const trading_api::MarketEvent &event) {
         std::cout << i.get_id() << " ";
-        i.get_exchange().get_last_market_event(i, subscription_type, [&](const trading_api::MarketEvent &e){
-            if (e.is<trading_api::TickData>()) {
-                const auto &tk = e.get<trading_api::TickData>();
-                std::cout << tk << std::endl;
-            }
-        });
+        std::optional<trading_api::TickData> v = event;
+        if (v) std::cout << *v << std::endl;
 
     }
     virtual void on_event(const trading_api::Order &order,const trading_api::Order::Report &report) {}
@@ -27,7 +23,8 @@ public:
 int main() {
 
     trading_api::TickData dt;
-    trading_api::MarketEvent ev(trading_api::SubscriptionType::tickdata, dt);
+    trading_api::MarketEvent ev(trading_api::MarketEventHolder<
+                trading_api::MarketEventType::tickdata, trading_api::TickData>::create(dt));
     std::cout << ev << std::endl;
 
     trading_api::Log log(std::make_shared<trading_api::BasicLog>(std::cout, trading_api::Log::Serverity::trace));

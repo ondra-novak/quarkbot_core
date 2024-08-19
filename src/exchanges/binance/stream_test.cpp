@@ -25,7 +25,7 @@ int main() {
     WSEventListener lsn;
 
     WSStreams stream(pev,ctx,"wss://fstream.binance.com/ws");
-    stream.subscribe(trading_api::SubscriptionType::orderbook,"BTCUSDT");
+    stream.subscribe(trading_api::MarketEventType::orderbook,"BTCUSDT");
     stream.run_thread_auto_reconnect(stream, 10, nullptr);
     std::cout << std::cin.get();
     stream.close();
