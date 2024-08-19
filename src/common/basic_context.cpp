@@ -407,6 +407,11 @@ void BasicContext::mq_send_message(std::string_view channel, std::string_view ms
 
 }
 
+void BasicContext::update_market(const Instrument &i, MarketEventType type)
+{
+    BasicExchangeContext::from_exchange(i.get_exchange()).update_market(this, i, type);
+}
+
 VarSet<> BasicContext::get_vars(std::string_view prefix) const {
     return _storage->get_vars(prefix);
 }

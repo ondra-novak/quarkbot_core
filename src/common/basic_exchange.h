@@ -221,6 +221,8 @@ public:
     virtual Log get_log() const override;
     virtual Network get_network() const override;
 
+    void update_market(IEventTarget *, const Instrument &i, MarketEventType type);
+
 
 protected:
 
@@ -248,15 +250,12 @@ protected:
         }
     };
 
-    enum class SubscriptionLimit {
-        onceshot,
-        unlimited
-    };
 
 
     std::unordered_map<Order, IEventTarget *, Order::Hasher> _orders;
 
     std::unordered_map<Subscription, std::vector<IEventTarget *> , SubscriptionHasher> _subscriptions;
+    std::unordered_map<Subscription, std::vector<IEventTarget *> , SubscriptionHasher> _market_updates;
     std::unordered_map<Instrument, std::vector<IEventTarget *> , Instrument::Hasher> _instrument_update_waiting;
     std::unordered_map<Account, std::vector<IEventTarget *> , Account::Hasher> _account_update_waiting;
 
@@ -266,6 +265,8 @@ protected:
     virtual void object_updated(const Account &i, AsyncStatus st) override;
     ///call this function when instrument is updated
     virtual void object_updated(const Instrument &i, AsyncStatus st) override;
+
+    virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) override;
     ///call this function when order's state changed
     /**
      * As the orders are const, you cannot change state of the order directly. The
@@ -293,7 +294,6 @@ protected:
 
     virtual std::string get_label() const override;
 
-    virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) override;
 
 private:
 

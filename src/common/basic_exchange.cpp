@@ -207,6 +207,15 @@ Network BasicExchangeContext::get_network() const {
     return _ntw;
 }
 
+void BasicExchangeContext::update_market(IEventTarget *target, const Instrument &i, MarketEventType type)
+{
+    std::lock_guard _(_mx);
+    auto &lst = _market_updates[Subscription{type,i}];
+    if (lst.empty()) _ptr->update_market(i, type);
+    lst.push_back(target);
+}
+
+
 void BasicExchangeContext::set_api_key(std::string_view name, const Config &api_key_config) {
     _ptr->set_api_key(name, api_key_config);
 }
@@ -216,7 +225,14 @@ void BasicExchangeContext::unset_api_key(std::string_view name) {
 }
 
 void BasicExchangeContext::object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) {
-
+    std::lock_guard _(_mx);
+    Subscription sub{ev.get_type(),i};
+    auto iter = _market_updates.find(sub);
+    if (iter != _market_updates.end()) {
+        auto lst = std::move(iter->second);
+        _market_updates.erase(iter);
+        for (auto x: lst) x->on_event(i, st, ev);
+    }
 }
 
 }
