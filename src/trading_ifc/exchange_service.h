@@ -92,6 +92,16 @@ public:
      * @note called under lock
      */
     virtual void update_instrument(const Instrument &i) = 0;
+
+    ///Request one-shot market update
+    /**
+     * @param i instrument
+     * @param type type
+     *
+     * for example, request for tickdata can perform REST request for current ticker
+     * @note control object doesn't call this function for subscribed instruments
+     */
+    virtual void update_market(const Instrument &i, MarketEventType type) = 0;
     ///Place orders on exchange
     /**
      * @param orders list of orders

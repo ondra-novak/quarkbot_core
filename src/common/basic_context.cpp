@@ -82,9 +82,16 @@ void BasicContext::on_event(const Instrument &i, AsyncStatus st) {
 
 void BasicContext::on_event(const Account &a, AsyncStatus st ) {
     std::lock_guard _(_queue_mx);
-    _queue.push(EvUpdateAccount{this, a, std::move(st)});
+    _queue.push(EvUpdateAccount{this, a, st});
     notify_queue();
 }
+
+void BasicContext::on_event(const Instrument &i, AsyncStatus st, MarketEvent event) {
+    std::lock_guard _(_queue_mx);
+    _queue.push(EvUpdateMarket{this, i, std::move(st), std::move(event)});
+     notify_queue();
+}
+
 
 
 void BasicContext::notify_queue() {
@@ -255,6 +262,10 @@ void BasicContext::EvUpdateInstrument::operator ()() {
 
 void BasicContext::EvUpdateAccount::operator ()() {
     me->_strategy->on_update_complete(a, st);
+}
+
+void BasicContext::EvUpdateMarket::operator ()() {
+    me->_strategy->on_update_complete(i, st, ev);
 }
 
 void BasicContext::EvMarketEventItem::operator ()() {

@@ -41,6 +41,8 @@ public:
     virtual void unset_api_key(std::string_view ) override {}
     virtual void set_api_key(std::string_view ,
             const trading_api::Config &) override {}
+    virtual void update_market(const Instrument &i, MarketEventType type) override{}
+
 };
 
 

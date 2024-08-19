@@ -36,15 +36,19 @@ inline thread_local std::exception_ptr coroutine::stored_exception = {};
 
 
 
+
 ///awaitable object
+template<typename _AsyncStatus = AsyncStatus>
 class [[nodiscard]] completion_awaiter {
 public:
 
+    using CompletionCB = Function<void(const _AsyncStatus &)>;
 
     template<std::invocable<CompletionCB> Fn>
     completion_awaiter(Fn &&fn) {
         fn(create_callback());
     }
+
 
     completion_awaiter(const completion_awaiter &) = delete;
     completion_awaiter &operator=(const completion_awaiter &) = delete;
@@ -53,13 +57,14 @@ public:
     void await_suspend(std::coroutine_handle<> h) {
         _h = h;
     }
-    void await_resume() {
+    auto await_resume() {
         if (!_status.has_value()) {
             throw AsyncCallException(AsyncStatus::canceled);;
         }
         if (_status->get_status() != AsyncStatus::ok) {
             throw AsyncCallException(*_status);
         }
+        return _status->get_result();
     }
 
 protected:
@@ -71,16 +76,17 @@ protected:
     };
 
     CompletionCB create_callback() {
-        return [me = std::unique_ptr<completion_awaiter, Resumer>(this)](AsyncStatus status){
+        return [me = std::unique_ptr<completion_awaiter, Resumer>(this)](_AsyncStatus status){
             me->_status.emplace(std::move(status));
         };
     }
 
-    std::optional<AsyncStatus> _status;
+    std::optional<_AsyncStatus> _status;
 
 
     std::coroutine_handle<> _h = {};
 };
+
 
 
 }

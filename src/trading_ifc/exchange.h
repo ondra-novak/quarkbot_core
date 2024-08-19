@@ -1,5 +1,4 @@
 #pragma once
-#include "subscription_type.h"
 #include "instrument.h"
 #include "function.h"
 #include "market_event.h"

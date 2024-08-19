@@ -125,6 +125,9 @@ public:
     virtual void mq_send_message(std::string_view channel, std::string_view msg) = 0;
 
 
+    ///retrieve one shot market event
+    virtual void update_market(const Instrument &i, MarketEventType type) = 0;
+
 
     virtual Log get_logger() const = 0;
 

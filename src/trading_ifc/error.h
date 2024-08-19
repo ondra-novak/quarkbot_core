@@ -28,6 +28,7 @@ public:
     }
     operator std::string_view() const {return get_message();}
     operator Type() const {return type;}
+    explicit operator bool() const {return type == Type::ok;}
 
     friend std::string_view to_string(AsyncStatus st) {
         switch (st.type) {
@@ -39,6 +40,13 @@ public:
             default: return "AsyncStatus=unknown";
         }
     }
+
+    bool is_ok() const {return type == Type::ok;}
+    ///returns result
+    /** This function doesn't return anything, as the status has no result,
+     * however you can inherit class and define own implementation
+     */
+    static constexpr void get_result();
 
 
 protected:

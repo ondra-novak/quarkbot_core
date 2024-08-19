@@ -59,6 +59,14 @@ public:
      */
     virtual void on_event(const Instrument &i, const MarketEvent &subscription_type) = 0;
 
+    ///called when update_market is complete
+    /**
+     * @param i instrument
+     * @param st operation status
+     * @param subscription_type
+     */
+    virtual void on_event(const Instrument &i, AsyncStatus st, MarketEvent ev) = 0;
+
     ///called when order state changed
     virtual void on_event(const Order &order,const Order::Report &report) = 0;
 

@@ -62,6 +62,7 @@ public:
 
     virtual void on_event(const Instrument &i, AsyncStatus st) override;
     virtual void on_event(const Account &a, AsyncStatus st) override;
+    virtual void on_event(const Instrument &i, AsyncStatus st, MarketEvent event) override;
     virtual void on_event(const Instrument &i, const MarketEvent &subscription_type) override;
     virtual void on_event(const Order &order, const Order::Report &report) override;
     virtual void on_event(const Order &order, const Fill &fill) override;
@@ -91,6 +92,7 @@ public:
     virtual void mq_subscribe_channel(std::string_view channel) override;
     virtual void mq_unsubscribe_channel(std::string_view channel) override;
     virtual void mq_send_message(std::string_view channel, std::string_view msg) override;
+    virtual void update_market(const Instrument &i, MarketEventType type) override;
 
     virtual trading_api::VarSet<> get_vars(
             std::string_view prefix) const override;
@@ -143,6 +145,14 @@ protected:
         void operator()();
     };
 
+    struct EvUpdateMarket {
+        BasicContext *me;
+        Instrument i;
+        AsyncStatus st;
+        MarketEvent ev;
+        void operator()();
+    };
+
     struct EvOrderStatus {
         BasicContext *me;
         Order order;
@@ -170,7 +180,8 @@ protected:
             EvUpdateInstrument,
             EvOrderStatus,
             EvOrderFill,
-            EvMQ
+            EvMQ,
+            EvUpdateMarket
             >;
 
     struct TimerItem {

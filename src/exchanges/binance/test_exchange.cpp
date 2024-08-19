@@ -17,6 +17,7 @@ public:
     }
     virtual void on_event(const trading_api::Order &order,const trading_api::Order::Report &report) {}
     virtual void on_event(const trading_api::Order &order, const trading_api::Fill &fill) {}
+    virtual void on_event(const trading_api::Instrument &i, trading_api::AsyncStatus st, trading_api::MarketEvent ev) {}
 
 };
 

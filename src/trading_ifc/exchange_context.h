@@ -23,6 +23,7 @@ public:
     virtual void object_updated(const Account &i, AsyncStatus st) = 0;
     ///call this function when instrument is updated
     virtual void object_updated(const Instrument &i, AsyncStatus st) = 0;
+    virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) = 0;
     ///call this function when order's state changed
     /**
      * As the orders are const, you cannot change state of the order directly. The
@@ -73,6 +74,7 @@ public:
     virtual Network get_network() const override {throw_error();};
     virtual Log get_log() const override {throw_error();}
     virtual Exchange get_exchange() const override {throw_error();}
+    virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) override{throw_error();}
 };
 
 class ExchangeContext {
@@ -98,6 +100,9 @@ public:
     ///call this function when instrument is updated
     void object_updated(const Instrument &i, AsyncStatus st) {
         _ptr->object_updated(i, std::move(st));
+    }
+    void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) {
+        _ptr->object_updated(i, std::move(st), std::move(ev));
     }
     ///call this function when order's state changed
     /**

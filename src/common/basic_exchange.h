@@ -293,10 +293,9 @@ protected:
 
     virtual std::string get_label() const override;
 
-
+    virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) override;
 
 private:
-    void send_subscription_notify(const Instrument &i, SubscriptionType type);
 
     std::unique_ptr<IExchangeService> _ptr;
 

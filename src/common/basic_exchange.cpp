@@ -215,5 +215,8 @@ void BasicExchangeContext::unset_api_key(std::string_view name) {
     _ptr->unset_api_key(name);
 }
 
+void BasicExchangeContext::object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) {
+
+}
 
 }

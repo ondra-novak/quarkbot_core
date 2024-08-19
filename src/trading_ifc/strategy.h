@@ -476,6 +476,51 @@ public:  //context API
         remove_subscription(type, i);
     }
 
+    ///Request one-shot market update
+    /**
+     * Request to market update for given instrument and type. It is useful, when strategy
+     * needs update in periodic interval, which is longer than few seconds. For example, if
+     * the strategy runs on 5m chart, it probably needs to price data only once per 5 minutes
+     *
+     * You should avoid to use this function too often. if you need short period of update,
+     * use subscribe()
+     *
+     * @param type type of market data
+     * @param i instrument
+     * @return function returns an awaiter, because operation is asynchronous. You can
+     * attach a callback, which accepts const AsyncStatus& and const MarketEvent &. If
+     * the awaiter is used in coroutine, the co_await expression returns MarketEvent
+     *
+     * @code
+     * update_market(MarketEventType::tickdata, bitcoin) >> [this](
+     *          const AsyncStatus &st, const MarketEvent &event) {
+     *          if (st) {
+     *              std::optional<TickData> ticker = event;
+     *              if (ticker) {
+     *                //process ticker
+     *              } else {
+     *                  //error
+     *                }
+     *          } else {
+     *              //async error
+     *          }
+     * };
+     * @endcode
+     *
+     * @code
+     * std::optional<TickData> me = co_await update_market(MarketEventType::tickdata, bitcoin);
+     * if (me) {
+     *      //process ticker
+     * } else {
+     *      //error
+     * }
+     * @endcode
+     */
+    MarketEventAwaiter<Strategy> update_market(MarketEventType type, const Instrument &i) {
+        _ctx->update_market(i, type);
+        return {this, i, type};
+    }
+
     ///Retrieve logger object (for logging and output)
     Log get_logger() {return _ctx->get_logger();}
 
@@ -622,7 +667,7 @@ protected: //optional overrides
      * @note you need to call the original implementation in order to call all registered callbacks
      *
      */
-    virtual void on_update_complete(const Account &a, AsyncStatus status) override {
+    virtual void on_update_complete(const Account &a, const AsyncStatus &status) override {
         complete_update(_update_account_cbs, a, status);
     }
     /**
@@ -632,9 +677,19 @@ protected: //optional overrides
      * @note you need to call the original implementation in order to call all registered callbacks
      *
      */
-    virtual void on_update_complete(const Instrument &i, AsyncStatus status) override {
+    virtual void on_update_complete(const Instrument &i, const AsyncStatus &status) override {
         complete_update(_update_instrument_cbs, i, status);
     }
+
+    virtual void on_update_complete(const Instrument &i, const AsyncStatus &status, const MarketEvent &event) override {
+        InstSubPair key(i, event.get_type());
+        if (status.get_status() == AsyncStatus::ok) {
+            complete_update(_update_market_event_cbs, key, MarketEventStatus(event));
+        } else {
+            complete_update(_update_market_event_cbs, key, MarketEventStatus(status));
+        }
+    }
+
 
 private:
     IContext *_ctx = nullptr;
@@ -654,6 +709,7 @@ private:
     std::queue<Function<void()> > _on_idle_queue;
     std::vector<std::pair<Account, CompletionCB> > _update_account_cbs;
     std::vector<std::pair<Instrument, CompletionCB> > _update_instrument_cbs;
+    std::vector<std::pair<InstSubPair, Function<void(const MarketEventStatus &)> > > _update_market_event_cbs;
 
     template<typename Fn>
     void add_callback(const Order &ord, Fn &&fn) {
@@ -702,8 +758,8 @@ private:
     void register_idle(Fn &&fn) {
         _on_idle_queue.push(std::forward<Fn>(fn));
     }
-    template<typename A, typename B>
-    void complete_update(A &cbs, B &subj, const AsyncStatus &st) {
+    template<typename A, typename B, typename Status>
+    void complete_update(A &cbs, B &subj, const Status &st) {
         std::exception_ptr e = {};
         auto z = std::move(cbs);
         auto iter = std::remove_if(z.begin(), z.end(), [&](const auto &x){
@@ -730,6 +786,10 @@ private:
     template<std::invocable<AsyncStatus> CB>
     void register_update(const Instrument &i, CB &&cb) {
         _update_instrument_cbs.emplace_back(i, std::forward<CB>(cb));
+    }
+    template<std::invocable<AsyncStatus> CB>
+    void register_update(const Instrument &i, MarketEventType type, CB &&cb) {
+        _update_market_event_cbs.emplace_back(InstSubPair(i, type), std::forward<CB>(cb));
     }
 };
 

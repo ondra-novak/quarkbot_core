@@ -97,9 +97,11 @@ public:
     virtual bool on_context_idle() = 0;
 
     ///update account is complete
-    virtual void on_update_complete(const Account &a, AsyncStatus status) = 0;
+    virtual void on_update_complete(const Account &a, const AsyncStatus &status) = 0;
     ///update instrument is complete
-    virtual void on_update_complete(const Instrument &i, AsyncStatus status) = 0;
+    virtual void on_update_complete(const Instrument &i, const AsyncStatus &status) = 0;
+    ///update instrument market state (ticker, orderbook etc)
+    virtual void on_update_complete(const Instrument &i, const AsyncStatus &status, const MarketEvent &event) = 0;
 
 protected:
 
@@ -155,7 +157,7 @@ protected:
         void operator >>(CB &&cb) {
             _s->register_idle(std::forward<CB>(cb));
         }
-        completion_awaiter operator co_await() {
+        completion_awaiter<> operator co_await() {
             return [this](auto &&cb) {
                 (*this) >> [cb = std::move(cb)]{
                     cb(AsyncStatus::ok);
@@ -173,7 +175,7 @@ protected:
         void operator>>(CB &&cb) {
             _ctx->set_timer(_at, std::forward<CB>(cb), _id);
         }
-        completion_awaiter operator co_await() {
+        completion_awaiter<> operator co_await() {
             return [&](auto fn) {
                 _ctx->set_timer(_at, [fn = std::move(fn)]{
                     AsyncStatus st;
@@ -194,12 +196,12 @@ protected:
     class UpdateAwaiter { // @suppress("Miss copy constructor or assignment operator")
     public:
         UpdateAwaiter(Strategy *s,const Object &o):_s(s),_o(o) {}
-        template<std::invocable<AsyncStatus> CB>
+        template<std::invocable<const AsyncStatus &> CB>
         void operator>>(CB &&cb) {
             _s->register_update(_o, std::forward<CB>(cb));
 
         }
-        completion_awaiter operator co_await() {
+        completion_awaiter<> operator co_await() {
             return [&](auto cb) {
                 _s->register_update(_o, std::move(cb));
             };
@@ -210,6 +212,38 @@ protected:
         Strategy *_s;
         const Object &_o;
 
+    };
+
+    class MarketEventStatus: public AsyncStatus {
+    public:
+        using AsyncStatus::AsyncStatus;
+        MarketEventStatus(MarketEvent ev):_ev(std::move(ev)) {}
+        MarketEvent get_result() {return std::move(_ev);}
+    protected:
+        MarketEvent _ev;
+    };
+
+    template<typename Strategy>
+    class MarketEventAwaiter {
+    public:
+        MarketEventAwaiter(Strategy *s, const Instrument &i, MarketEventType type)
+            :_s(s),_i(i),_type(type) {}
+
+        template<std::invocable<const AsyncStatus &, const MarketEvent &> CB>
+        void operator>>(CB &&cb) {
+            _s->register_update(_i, _type, [cb = std::move(cb)](MarketEventStatus st){
+                cb(static_cast<const AsyncStatus &>(st), st.get_result());
+            });
+        }
+        completion_awaiter<MarketEventStatus> operator co_await() {
+            return [&](auto cb) {
+                   _s->register_update(_i,_type, std::move(cb));
+            };
+        }
+   protected:
+        Strategy *_s;
+        const Instrument &_i;
+        MarketEventType _type;
     };
 
 
