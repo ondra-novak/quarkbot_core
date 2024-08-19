@@ -25,7 +25,7 @@ void WSStreams::subscribe(SubscriptionType type, std::string_view symbol) {
 template<typename Fn>
 void WSStreams::manage_subscription(Fn &&fn, SubscriptionType type, std::string_view symbol) {
     std::unique_lock lk(_mx);
-    switch (type) {
+    switch (type.value()) {
         case SubscriptionType::orderbook:
             fn(std::move(lk), create_topic(symbol, "depth"));
             break;

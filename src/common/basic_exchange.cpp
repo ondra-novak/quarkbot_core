@@ -96,7 +96,7 @@ void BasicExchangeContext::query_accounts(std::string_view identity,
 bool BasicExchangeContext::get_last_market_event(const Instrument &instrument,
         SubscriptionType type, Function<void(const MarketEvent&)> fn) const {
     std::lock_guard _(_mx);
-    switch (type) {
+    switch (type.value()) {
         case SubscriptionType::tickdata: {
             auto iter = _tickers.find(instrument);
             if (iter == _tickers.end()) return false;

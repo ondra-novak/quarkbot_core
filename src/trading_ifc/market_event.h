@@ -114,4 +114,71 @@ protected:
     SubscriptionType _type;
 };
 
+template<typename T>
+class MarketData {
+public:
+    
+    using value_type = T;
+
+    template<std::invocable<void *, std::size_t> Fn>
+    MarketData(Fn &&fn) {
+        available = fn(&data, sizeof(T));
+    }
+    MarketData(const MarketData &other):available(other.available) {
+        if (available) std::construct_at(&data, other.data);
+    }
+    MarketData(MarketData &&other):available(other.available) {
+        if (available) std::construct_at(&data, std::move(other.data));
+    }
+    ~MarketData() {
+        if (available) std::destroy_at(&data);
+    }
+
+    MarketData &operator=(const MarketData &other) {
+        if (this != &other) {
+            if (available) std::destroy_at(&data);
+            available = other.available;
+            if (available) std::construct_at(&data, other.data);
+        }
+    }
+    MarketData &operator=(MarketData &&other) {
+        if (this != &other) {
+            if (available) std::destroy_at(&data);
+            available = other.available;
+            if (available) std::construct_at(&data,std::move(other.data));
+        }
+    }
+
+
+
+    explicit operator bool() const {return available;}
+    bool has_value() const {return available;}
+    T *operator->() {return &data;}
+    const T *operator->() const {return &data;}
+    T &operator *() {return data;}
+    const T &operator *() const {return data;}
+
+
+protected:
+    bool available = false;
+    union {
+        T data;
+    };
+};
+
+class IMarketEvent {
+public:
+    virtual ~IMarketEvent() = default;
+    virtual bool retrieve(const std::type_info &type, void *ptr, std::size_t sz) const = 0;
+    virtual bool contains(const std::type_info &type) const = 0;
+
+    class Null;
+};
+
+class IMarketEvent::Null: public IMarketEvent {
+public:
+    virtual bool retrieve(const std::type_info &type, void *ptr, std::size_t sz) const {return false;};
+    virtual bool contains(const std::type_info &type) const {return false;}
+};
+
 }
