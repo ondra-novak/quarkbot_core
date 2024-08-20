@@ -53,7 +53,7 @@ std::unique_ptr<IStrategy> ModuleRepository::create_strategy(std::string_view na
     return create_something(name, [&](auto ptr){return ptr->get_strategies();});
 }
 
-std::unique_ptr<IExchangeService> ModuleRepository::create_exchange(std::string_view name) {
+std::unique_ptr<IExchange> ModuleRepository::create_exchange(std::string_view name) {
     return create_something(name, [&](auto ptr){return ptr->get_exchanges();});
 
 }

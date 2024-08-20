@@ -7,9 +7,10 @@ BasicExchangeContext::BasicExchangeContext(std::string label, Network ntw, Log l
             ,_ntw(std::move(ntw))
             ,_log(std::move(log),"ex/{}",_label) {}
 
-void BasicExchangeContext::init(std::unique_ptr<IExchangeService> svc, Config configuration) {
+void BasicExchangeContext::init(std::unique_ptr<IExchange> svc, Config configuration) {
     this->_ptr = std::move(svc);
-    _ptr->init(this, configuration);
+    this->_cfg = std::move(configuration);
+    _ptr->init(this);
 }
 
 void BasicExchangeContext::subscribe(IEventTarget *target, MarketEventType sbstype, const Instrument &instrument) {
@@ -175,7 +176,7 @@ BasicExchangeContext &BasicExchangeContext::from_exchange(ExchangeInfo ex) {
     return const_cast<BasicExchangeContext &>(*be);
 }
 
-ExchangeInfo BasicExchangeContext::get_exchange() const {
+ExchangeInfo BasicExchangeContext::get_exchange_info() const {
     return ExchangeInfo(shared_from_this());
 }
 
@@ -229,5 +230,8 @@ void BasicExchangeContext::query_instruments(const Query &query,
     _ptr->query_instruments(query, label,std::move(result));
 }
 
+const Config &BasicExchangeContext::get_config() const {
+    return _cfg;
+}
 
 }

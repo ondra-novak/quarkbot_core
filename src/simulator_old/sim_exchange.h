@@ -8,7 +8,7 @@
 #include <vector>
 namespace trading_api {
 
-class SimExchange: public IExchangeService {
+class SimExchange: public IExchange {
 public:
 
     struct SimConfig {

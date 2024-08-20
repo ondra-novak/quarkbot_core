@@ -49,115 +49,18 @@ public:
      */
     virtual void order_restore(void *context, const Order &order) = 0;
 
+    virtual const Config &get_config() const = 0;
 
     ///Convert this object to exchange
-    virtual ExchangeInfo get_exchange() const = 0;
+    virtual ExchangeInfo get_exchange_info() const = 0;
 
     virtual Log get_log() const = 0;
 
     ///Create Network object
     virtual Network get_network() const = 0;
 
-    class Null;
 
 };
-
-class IExchangeContext::Null : public IExchangeContext{
-public:
-    [[noreturn]] void throw_error() const {throw std::runtime_error("Used uninitialized context");}
-    virtual void order_state_changed(const Order &, const Order::Report & ) override {throw_error();}
-    virtual void order_restore(void *, const Order &) override{throw_error();}
-    virtual void order_fill(const Order &, const Fill &) override{throw_error();}
-    virtual void income_data(const Instrument &, const MarketEvent &) override{throw_error();}
-    virtual void object_updated(const Account &, AsyncStatus) override{throw_error();}
-    virtual void object_updated(const Instrument &, AsyncStatus) override{throw_error();}
-    virtual Network get_network() const override {throw_error();};
-    virtual Log get_log() const override {throw_error();}
-    virtual ExchangeInfo get_exchange() const override {throw_error();}
-    virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) override{throw_error();}
-};
-
-class ExchangeContext {
-public:
-
-    static constexpr IExchangeContext::Null null_context = {};
-
-    ExchangeContext():_ptr(const_cast<IExchangeContext::Null *>(&null_context)) {}
-    ExchangeContext(IExchangeContext *ctx):_ptr(ctx) {}
-
-    bool defined() const {return _ptr != &null_context;}
-    explicit operator bool() const {return defined();}
-    bool operator!() const {return !defined();}
-
-    ///call this function when market event for given instrument arrived
-    void income_data(const Instrument &i, const MarketEvent &t) {
-        _ptr->income_data(i, t);
-    }
-    ///call this function when account is updated
-    void object_updated(const Account &a, AsyncStatus st) {
-        _ptr->object_updated(a, std::move(st));
-    }
-    ///call this function when instrument is updated
-    void object_updated(const Instrument &i, AsyncStatus st) {
-        _ptr->object_updated(i, std::move(st));
-    }
-    void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) {
-        _ptr->object_updated(i, std::move(st), std::move(ev));
-    }
-    ///call this function when order's state changed
-    /**
-     * As the orders are const, you cannot change state of the order directly. The
-     * state is changed during processing the event because orders are in possesion
-     * of the strategy
-     *
-     * @param order order instance
-     * @param report report
-     *
-     * As result of this function, the strategy context will eventually call
-     * order_apply_report (asynchronously in different thread)
-     */
-    void order_state_changed(const Order &order, const Order::Report &report) {
-        _ptr->order_state_changed(order, report);
-    }
-    ///call this function for every fill on the order
-    /**
-     * @param order order instance
-     * @param fill fill information
-     *
-     * As result of this function, the strategy context will eventually call
-     * order_apply_fill(asynchronously in different thread)
-     *
-     */
-    void order_fill(const Order &order, const Fill &fill) {
-        return _ptr->order_fill(order, fill);
-    }
-    ///call this function for every restored order from set passed to restore_orders()
-    /**
-     * @param context pointer which has been passed to restore_orders.
-     * @param order restored order instance
-     */
-    void order_restore(void *context, const Order &order) {
-        return _ptr->order_restore(context, order);
-    }
-
-    ///convert to exchange
-    ExchangeInfo get_exchange() const {
-        return _ptr->get_exchange();
-    }
-
-    Log get_log() const {
-        return _ptr->get_log();
-    }
-
-    Network get_network() const {
-        return _ptr->get_network();
-    }
-
-
-protected:
-    IExchangeContext *_ptr;
-};
-
 
 }
 

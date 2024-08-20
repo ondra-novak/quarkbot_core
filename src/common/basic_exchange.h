@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../trading_ifc/strategy_context.h"
-#include "../trading_ifc/exchange_service.h"
+#include "../trading_ifc/iexchange.h"
 
 #include "event_target.h"
 #include "small_set.h"
@@ -13,13 +13,13 @@ namespace trading_api {
 class BasicExchangeContext: public IExchangeContext, public IExchangeInfo, public std::enable_shared_from_this<BasicExchangeContext> {
 public:
 
-    using Query = IExchangeService::Query;
+    using Query = IExchange::Query;
 
 
     BasicExchangeContext(std::string label, Network ntw, Log log);
 
 
-    void init(std::unique_ptr<IExchangeService> svc, Config configuration);
+    void init(std::unique_ptr<IExchange> svc, Config configuration);
 
     void set_api_key(std::string_view name, const Config &api_key_config);
 
@@ -192,12 +192,13 @@ public:
     void query_instruments(const Query &query,std::string_view label,Function<void(std::span<Instrument>)> result);
 
 
-    virtual ExchangeInfo get_exchange() const override;
+    virtual ExchangeInfo get_exchange_info() const override;
     virtual Log get_log() const override;
     virtual Network get_network() const override;
 
     void update_market(IEventTarget *, const Instrument &i, MarketEventType type);
 
+    virtual const Config &get_config() const;
 
 protected:
 
@@ -207,6 +208,7 @@ protected:
     std::string _label;
     Network _ntw;
     Log _log;
+    Config _cfg;
 
 
     struct Subscription {
@@ -272,7 +274,7 @@ protected:
 
 private:
 
-    std::unique_ptr<IExchangeService> _ptr;
+    std::unique_ptr<IExchange> _ptr;
 
 };
 

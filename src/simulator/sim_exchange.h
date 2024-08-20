@@ -3,11 +3,10 @@
 
 namespace trading_api {
 
-class SimExchange: public IExchangeService {
+class SimExchange: public Exchange {
 public:
     virtual ConfigSchema get_exchange_config_schema() const override;
     virtual ConfigSchema get_api_key_config_schema() const override;
-    virtual void init(ExchangeContext context, const Config &exchange_config) override;
     virtual void subscribe(MarketEventType type, const Instrument &i) override;
     virtual void unsubscribe(MarketEventType type, const Instrument &i) override;
     virtual void update_account(const Account &a) override;

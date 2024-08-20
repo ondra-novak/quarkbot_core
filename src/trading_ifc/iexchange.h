@@ -9,12 +9,12 @@ namespace trading_api {
 
 
 ///Implements exchange features - exchange implementation
-class IExchangeService {
+class IExchange {
 public:
 
     using Query = Config;
 
-    virtual ~IExchangeService() = default;
+    virtual ~IExchange() = default;
 
     ///Retrieve configuration schema for configuration needed to initialize the instance
     /**
@@ -36,7 +36,7 @@ public:
      * @param config optional configuration - probably you will need to pass
      * an API key through this
      */
-    virtual void init(ExchangeContext context, const Config &exchange_config) = 0;
+    virtual void init(IExchangeContext *context) = 0;
 
 
     ///Load credentials
@@ -243,19 +243,4 @@ public:
 
 
 };
-
-///Export the strategy, so the strategy can be loaded by the loader
-/**
- * @param class_name name of the strategy (class name). The strategy is
- * registered under its name
- */
-#define EXPORT_EXCHANGE(class_name) ::trading_api::IModule::Factory<IExchangeService> exchange_reg_##class_name(#class_name, std::in_place_type<class_name>)
-
-///Export the strategy, but specify other name
-/**
- * @param class_name class name of strategy
- * @param export_name exported name
- */
-#define EXPORT_EXCHANGE_AS(class_name, export_name) ::trading_api::IModule::Factory<IExchangeService> exchange_reg_##class_name(export_name, std::in_place_type<class_name>)
-
 }

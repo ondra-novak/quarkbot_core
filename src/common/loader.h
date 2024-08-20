@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../trading_ifc/strategy.h"
-#include "../trading_ifc/exchange_service.h"
+#include "../trading_ifc/istrategy.h"
+#include "../trading_ifc/iexchange.h"
 #include "../trading_ifc/module_decl.h"
 
 #include <string>
@@ -46,7 +46,7 @@ public:
     ///create strategy object identified by name
     std::unique_ptr<IStrategy> create_strategy(std::string_view name);
     ///create exchange object identified by name
-    std::unique_ptr<IExchangeService> create_exchange(std::string_view name);
+    std::unique_ptr<IExchange> create_exchange(std::string_view name);
     ///unload unused modules
     /**
      * Unused module is module which doesn't have any strategy or exchange

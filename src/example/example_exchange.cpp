@@ -4,7 +4,7 @@
 
 using namespace trading_api;
 
-class ExampleExchange: public IExchangeService {
+class ExampleExchange: public Exchange {
 public:
     virtual ConfigSchema get_exchange_config_schema() const
             override {return {};}
@@ -14,7 +14,6 @@ public:
             const Order::Setup &) override {return {};}
     virtual void unsubscribe(MarketEventType ,
             const Instrument &) override {}
-    virtual void init(ExchangeContext , const Config &) override {}
     virtual void order_apply_fill(const Order &,
             const Fill &) override {}
     virtual void update_account(const Account &) override {}

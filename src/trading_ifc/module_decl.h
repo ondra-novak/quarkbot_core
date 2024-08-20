@@ -6,7 +6,7 @@
 namespace trading_api {
 
 class IStrategy;
-class IExchangeService;
+class IExchange;
 
 class IModule {
 public:
@@ -96,7 +96,7 @@ public:
 
 
     virtual Inventory<IStrategy> get_strategies() const = 0;
-    virtual Inventory<IExchangeService> get_exchanges() const = 0;
+    virtual Inventory<IExchange> get_exchanges() const = 0;
     virtual bool can_unload() const = 0;
     virtual std::size_t get_active_objects() const = 0;
     virtual ~IModule()=default;

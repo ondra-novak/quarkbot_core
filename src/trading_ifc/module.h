@@ -34,8 +34,8 @@ public:
     virtual Inventory<IStrategy> get_strategies() const override {
         return Inventory<IStrategy>(IModule::Factory<IStrategy>::first);
     }
-    virtual Inventory<IExchangeService> get_exchanges() const override {
-        return Inventory<IExchangeService>(IModule::Factory<IExchangeService>::first);
+    virtual Inventory<IExchange> get_exchanges() const override {
+        return Inventory<IExchange>(IModule::Factory<IExchange>::first);
     }
     virtual bool can_unload() const override {
         return object_counter.load() == 0;

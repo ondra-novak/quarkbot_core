@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../trading_ifc/exchange_service.h"
+#include "../../trading_ifc/iexchange.h"
 #include "../../trading_ifc/weak_object_map.h"
 #include "../../trading_ifc/shared_lockable_ptr.h"
 
@@ -16,7 +16,7 @@
 #include <shared_mutex>
 #include <unordered_map>
 
-class BinanceExchange : public trading_api::IExchangeService,
+class BinanceExchange : public trading_api::IExchange,
                         public WSStreams::IEvents,
                         public RPCClient::IThreadMonitor
                         {
