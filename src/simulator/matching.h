@@ -29,9 +29,9 @@ public:
 
     struct Spread {
         Decimal bid = Decimal::nan();
-        Decimal bid_size = Decimal::inf();
         Decimal ask = Decimal::nan();
-        Decimal ask_size= Decimal::inf();
+        double bid_size = 0;
+        double ask_size= 0;
     };
 
     ///sets new spread
@@ -173,13 +173,18 @@ public:
     Decimal get_effective_price() const;
 
     MarketEvent get_ticker(Timestamp curTime) const;
+    void accept_ticker(const TickData &tk);
 
 protected:
     std::vector<WaitingOrder> _orders;
     std::vector<WaitingOrder> _updates;
     Spread _spread = {};
     Decimal _last = 0_dec;
-    Decimal _last_size = 0_dec;
+    Decimal _index = 0_dec;
+    unsigned long _trades = 0;
+    Decimal _last_size = 0;
+    double _prev_volume;
+
     std::shared_ptr<MarketEvent_TickData<> > _me_tick;
     void update_spread();
 

@@ -69,7 +69,7 @@ Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, D
            auto val = fnfo.calc_value(price, pos.amount);
            fills.push_back(Fill{
                tm,
-               generate_pos_id(),
+               generate_uid(),
                {},
                pos.id,
                fnfo,
@@ -93,7 +93,7 @@ Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, D
             auto val = fnfo.calc_value(price, remain_pos);
             fills.push_back(Fill{
                 tm,
-                generate_pos_id(),
+                generate_uid(),
                 {},
                 iter->id,
                 fnfo,
@@ -105,7 +105,7 @@ Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, D
             iter->amount -= remain_pos;
             _rpnl += fnfo.calc_pnl(iter->side, remain_pos, iter->open_price, price).as<double>();
         } else {
-            auto id = generate_pos_id();
+            auto id = generate_uid();
             auto val = fnfo.calc_value(price, remain_pos);
             const auto &cfg = i.get_config();
             fills.push_back(Fill{
@@ -141,7 +141,7 @@ std::optional<Fill> SimAccount::close_position(const Instrument &i, std::string 
         if (to_close > 0 && remain >= 0) {
             _rpnl += fnfo.calc_pnl(iter->side, to_close, iter->open_price, price).as<double>();
             out.emplace(Fill{
-                tm,generate_pos_id(), {}, id, fnfo, iter->side, iter->amount, price,
+                tm,generate_uid(), {}, id, fnfo, iter->side, iter->amount, price,
                         _fees * (price * iter->amount).as<double>()
             });
             if (remain) iter->amount = remain;
@@ -152,7 +152,7 @@ std::optional<Fill> SimAccount::close_position(const Instrument &i, std::string 
     return out;
 }
 
-std::string SimAccount::generate_pos_id() {
+std::string SimAccount::generate_uid() {
     static std::atomic<std::uint64_t> counter = 0;
     std::chrono::system_clock::time_point tm = std::chrono::system_clock::now();
     std::ostringstream buff;
@@ -166,9 +166,9 @@ Fill SimAccount::open_position(const Instrument &i,
     auto fnfo = InstrumentFillInfo::from_instrument(i);
     Fill out {
         tm,
-        generate_pos_id(),
+        generate_uid(),
         {},
-        generate_pos_id(),
+        generate_uid(),
         fnfo,
         side,
         size,

@@ -181,7 +181,6 @@ Order BasicContext::bind_order(const Instrument &instrument, const Account &acco
 
 
 void BasicContext::update_account(const Account &a) {
-    bool do_call = false;
     BasicExchangeContext &e = BasicExchangeContext::from_exchange(a.get_exchange());
     e.update_account(this, a);
 }
@@ -207,7 +206,6 @@ bool BasicContext::clear_timer(TimerID id) {
 
 
 void BasicContext::update_instrument(const Instrument &i) {
-    bool do_call = false;
     BasicExchangeContext &e = BasicExchangeContext::from_exchange(i.get_exchange());
     e.update_instrument(this, i);
 

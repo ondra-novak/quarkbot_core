@@ -40,7 +40,7 @@ protected:
 };
 
 ///Create error order (create_order cannot throw exception)
-Order order_error(Instrument instrument, Account account, Order::Reason r, std::string msg) {
+inline Order order_error(Instrument instrument, Account account, Order::Reason r, std::string msg) {
     return Order(std::make_shared<ErrorOrder>(
             std::move(instrument),
             std::move(account),

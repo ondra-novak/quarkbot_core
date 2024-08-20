@@ -37,10 +37,6 @@ void Matching::update_spread() {
     }
 }
 
-void Matching::set_trade(Decimal last, Decimal last_size) {
-    _last = last;
-    _last_size =last_size;
-}
 
 
 Matching::Execution Matching::place_market_order(Order ord, Side side, Decimal amount) {
@@ -170,12 +166,21 @@ Decimal Matching::get_effective_price() const {
 
 MarketEvent Matching::get_ticker(Timestamp curTime) const {
     _me_tick->set(TickData{
-        curTime,_spread.bid,_spread.bid_size,_spread.ask, _spread.ask_size, _last, _last_size,0
+        curTime,_spread.bid,_spread.ask,_last, _index,
+        _spread.bid_size,_spread.ask_size, static_cast<double>(_last_size), _trades
     });
     return MarketEvent(_me_tick);
 
 }
 
+void Matching::accept_ticker(const TickData &tk) {
+    set_spread({tk.bid, tk.ask, tk.bid_volume, tk.ask_volume});
+    double dff = tk.cum_volume < _prev_volume?tk.cum_volume:tk.cum_volume - _prev_volume;
+    _prev_volume = tk.cum_volume;
+    _last_size = dff;
+    _index = tk.index;
+    _trades = tk.cum_trades;
+}
 
 }
 

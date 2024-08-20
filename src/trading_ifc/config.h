@@ -1,16 +1,13 @@
 #pragma once
-
+#include "decimal.h"
+#include "timer.h"
 #include <variant>
 #include <span>
 #include <vector>
 #include <map>
 #include <string>
-#include "decimal.h"
-
+#include <charconv>
 namespace trading_api {
-
-
-class Value;
 
 struct DateValue {
     int year = 0;
@@ -31,88 +28,70 @@ struct TimeValue {
     std::strong_ordering operator <=> (const TimeValue &) const = default;
 };
 
-using ValueBase = std::variant<std::monostate,Decimal,DateValue,
-                               TimeValue,
-                               std::string,
-                               std::vector<Value> >;
 
-
-class Value : public ValueBase {
+class CfgValue : public std::string_view{
 public:
-    using ValueBase::ValueBase;
-};
+    using std::string_view::string_view;
+    CfgValue() = default;
+    CfgValue(const std::string_view &other):std::string_view(other) {}
 
-
-class Config {
-public:
-
-    Config() = default;
-
-    Config(const std::vector<std::pair<std::string, Value> > &values)
-        :_values(values.begin(), values.end()) {}
-
-
-    struct ValueRef {
-        const Value *ref;
-
-        template<typename T>
-        operator T () const {
-            if (ref == nullptr) return T();
-            return std::visit([&](const auto &x){
-                if constexpr(std::is_constructible_v<T, decltype(x)>) {
-                    return T(x);
-                } else {
-                    return T();
-                }
-            },*ref);
-        }
-
-
-        template<typename T>
-        T as() const {
-            if (ref == nullptr) return T();
-            return std::visit([&](const auto &x){
-                if constexpr(std::is_constructible_v<T, decltype(x)>) {
-                    return T(x);
-                } else {
-                    return T();
-                }
-            },*ref);
-        }
-
-        template<typename Def, typename T = Def>
-        T get(const Def &def) const {
-            static_assert(std::is_constructible_v<T, const Def &>);
-            if (ref == nullptr) return T(def);
-            return std::visit([&](const auto &x){
-                if constexpr(std::is_constructible_v<T, decltype(x)>) {
-                    return T(x);
-                } else {
-                    return T(def);
-                }
-            },*ref);
-        }
-
-        bool operator!() const {return ref == nullptr;}
-};
-
-    ValueRef operator[](std::string_view name) const {
-        auto iter = _values.find(name);
-        if (iter == _values.end()) return {nullptr};
-        else return {&iter->second};
+    operator Decimal() const {return Decimal(*this);}
+    template<typename T> requires(std::is_integral_v<T>)
+    operator T() const {
+        T out = {};
+        std::from_chars(data(), data()+size(),&out);
+        return out;
+    }
+    template<typename T> requires(std::is_floating_point_v<T>)
+    operator T() const {
+        return std::strtod(data(), nullptr);
+    }
+    operator DateValue() const {
+        DateValue out = {};
+        sscanf(data(), "%d-%d-%d", &out.year, &out.month, &out.day);
+        return out;
+    }
+    operator TimeValue() const {
+        TimeValue out = {};
+        sscanf(data(), "%d:%d:%d", &out.hour, &out.minute, &out.second);
+        return out;
+    }
+    operator Timestamp() const {
+        std::tm tnfo;
+        sscanf(data(), "%d-%d-%d%*c%d:%d:%d",
+                &tnfo.tm_year,&tnfo.tm_mon,&tnfo.tm_mday,
+                &tnfo.tm_hour,&tnfo.tm_min,&tnfo.tm_sec);
+        tnfo.tm_year-=1900;
+        tnfo.tm_mon-=1;
+        return std::chrono::system_clock::from_time_t(std::mktime(&tnfo));
+    }
+    operator std::string() const {
+        return std::string(*this);
+    }
+    operator bool() const {
+        if (*this == "false" || *this == "0" || *this == "") return false;
+        return true;
+    }
+    template<typename T>
+    T operator()(const T &def) const {
+        if (*this == "") return def;
+        else return *this;
     }
 
-
-
-    template<std::convertible_to<std::string_view> ... Args>
-    auto operator()(const Args & ... args) const {
-        return std::make_tuple(operator[](std::string_view(args))...);
-    }
-
-protected:
-    std::map<std::string, Value ,std::less<>> _values;
 };
 
+class Config: public std::unordered_map<std::string, std::string> {
+public:
+    CfgValue operator[](std::string name) const {
+        auto iter = this->find(name);
+        if (iter == this->end()) return {};
+        else return CfgValue(iter->second);
+    }
+    bool defined(std::string name) const {
+        auto iter = this->find(name);
+        return iter != this->end();
+    }
+};
 
 
 

@@ -79,11 +79,11 @@ public:
         auto bid_beg = _bid_side.begin();
         if (ask_beg != _ask_side.end()) {
             tk.ask = ask_beg->first;
-            tk.ask_volume = ask_beg->second;
+            tk.ask_volume = static_cast<double>(ask_beg->second);
         }
         if (bid_beg != _bid_side.end()) {
             tk.bid = bid_beg->first;
-            tk.bid_volume = bid_beg->second;
+            tk.bid_volume = static_cast<double>(bid_beg->second);
         }
     }
 

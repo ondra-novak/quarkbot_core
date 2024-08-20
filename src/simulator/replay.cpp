@@ -19,11 +19,11 @@ public:
         std::string time;
         std::string symbol;
         std::string bid_price;
-        std::string bid_size;
+        double bid_size;
         std::string ask_price;
-        std::string ask_size;
+        double ask_size;
         std::string trade_price;
-        std::string trade_size;
+        double trade_size;
         std::string index_price;
     };
 
@@ -123,12 +123,12 @@ inline std::optional<Data> CSVReplaySource::operator ()() {
             {
                 tp,
                 Decimal(_data.bid_price),
-                Decimal(_data.bid_size),
                 Decimal(_data.ask_price),
-                Decimal(_data.ask_size),
                 Decimal(_data.trade_price),
-                Decimal(_data.trade_size),
                 Decimal(_data.index_price),
+                _data.bid_size,
+                _data.ask_size,
+                _data.trade_size,
             },
             _data.symbol
         };

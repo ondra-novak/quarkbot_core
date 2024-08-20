@@ -10,8 +10,9 @@ add_executable (simulator
     replay.cpp
     controller.cpp
     sim_exchange.cpp
+    sim_order.cpp
 )
 
-add_dependencies(trading_api_common libjson20_single_header)
-add_dependencies(trading_api_common trading_api_single_header)
+add_dependencies(simulator libjson20_single_header)
+add_dependencies(simulator trading_api_single_header)
 

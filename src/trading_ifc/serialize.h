@@ -4,6 +4,12 @@
 
 namespace trading_api {
 
+template<typename T>
+concept custom_serialize = requires(T c, const std::string &s) {
+    {custom_to_binary(c)}->std::convertible_to<std::string>;
+    {custom_from_binary(c,s)};
+};
+
 
 namespace Serializer {
     template<std::output_iterator<char> Iter, typename T>
@@ -39,7 +45,7 @@ namespace Serializer {
                              reinterpret_cast<const char *>(&item)+sizeof(item), iter);
         } else if constexpr(is_variant_type<T>) {
             iter = to_binary(iter, static_cast<unsigned int>(item.index()));
-            return std::visit([&](const auto &x){return to_binary(iter, x);});
+            return std::visit([&](const auto &x){return to_binary(iter, x);}, item);
         } else if constexpr(is_optional_type<T>) {
             bool hv = item.has_value();
             iter = to_binary(iter, hv);
@@ -49,6 +55,8 @@ namespace Serializer {
             return std::apply([&](const auto & ... x){
                 to_binary_args(iter, x ... );
             },item);
+        } else if constexpr(custom_serialize<T>){
+             return to_binary(iter, custom_to_binary(item));
         } else {
             static_assert(assert_error<T>, "This type cannot be stored in BinTuple");
             return iter;
@@ -165,6 +173,11 @@ namespace Serializer {
                     using U = typename std::decay_t<decltype(tag)>::type;
                     return from_binary<U>(itr, end);
                 });
+            } else if constexpr(custom_serialize<T>){
+                std::string s = from_binary<std::string>(itr, end);
+                T out;
+                custom_from_binary(out,s);
+                return out;
             } else {
                 static_assert(assert_error<T>, "This type cannot be stored in BinTuple");
             }
@@ -192,7 +205,7 @@ namespace Serializer {
 template<typename T>
 concept SerializableType = (std::is_same_v<T, bool> || std::is_same_v<T, std::string_view>
         || std::is_integral_v<T> || is_container<T> || std::is_trivially_copy_constructible_v<T>
-        || is_variant_type<T> || is_optional_type<T> || is_tuple_type<T> );
+        || is_variant_type<T> || is_optional_type<T> || is_tuple_type<T> || custom_serialize<T>);
 
 
 ///defines format, converts from tuple to string and from string to tuple

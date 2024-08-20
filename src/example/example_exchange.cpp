@@ -33,12 +33,12 @@ public:
 
     virtual trading_api::ConfigSchema get_api_key_config_schema() const
             override {return {};}
-    virtual void update_market(const Instrument &i, MarketEventType type) override{}
+    virtual void update_market(const Instrument &, MarketEventType ) override{}
 
-    virtual void query_accounts(const ExchangeCredentials &creds,std::string_view label, const Query &query,Function<void(std::span<Account>)> result) override {}
-    virtual void query_instruments(const ExchangeCredentials &creds,const Query &query, std::string_view label,Function<void(std::span<Instrument>)> result) override {}
-    virtual void query_instruments(const Query &query,std::string_view label,Function<void(std::span<Instrument>)> result) override {}
-    virtual void load_credentials(const Config &credential_config, std::string_view label, Function<void(ExchangeCredentials)> result) override {}
+    virtual void query_accounts(const ExchangeCredentials &,std::string_view , const Query &query,Function<void(std::span<Account>)> ) override {}
+    virtual void query_instruments(const ExchangeCredentials &,const Query &, std::string_view label,Function<void(std::span<Instrument>)> ) override {}
+    virtual void query_instruments(const Query &,std::string_view ,Function<void(std::span<Instrument>)> ) override {}
+    virtual void load_credentials(const Config &, std::string_view , Function<void(ExchangeCredentials)> ) override {}
 };
 
 

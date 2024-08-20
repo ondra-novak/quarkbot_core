@@ -46,6 +46,8 @@ protected: //recommended overrides
      *
      */
     virtual std::string on_fill(const Order &o, const Fill &f) override {
+        std::ignore = o;
+        std::ignore = f;
         return {};
     }
 

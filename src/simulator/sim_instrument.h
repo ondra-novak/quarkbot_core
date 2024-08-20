@@ -43,6 +43,8 @@ public:
      */
     static shared_lockable_ptr<simulator::Matching>get_matching(const Instrument &i);
 
+    shared_lockable_ptr<simulator::Matching>get_matching() {return _matching;}
+
 
 protected:
     ExchangeInfo _ex;
