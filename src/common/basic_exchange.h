@@ -4,13 +4,16 @@
 #include "../trading_ifc/exchange_service.h"
 
 #include "event_target.h"
+#include "small_set.h"
 #include <map>
-#include <set>
+
 
 namespace trading_api {
 
-class BasicExchangeContext: public IExchangeContext, public IExchange, public std::enable_shared_from_this<BasicExchangeContext> {
+class BasicExchangeContext: public IExchangeContext, public IExchangeInfo, public std::enable_shared_from_this<BasicExchangeContext> {
 public:
+
+    using Query = IExchangeService::Query;
 
 
     BasicExchangeContext(std::string label, Network ntw, Log log);
@@ -146,10 +149,10 @@ public:
 
 
     ///Retrieve exchange icon
-    std::optional<IExchange::Icon> get_icon() const override;
+    std::optional<IExchangeInfo::Icon> get_icon() const override;
 
     ///Get pointer to AbstractExchange from Exchange object
-    static BasicExchangeContext &from_exchange(Exchange ex);
+    static BasicExchangeContext &from_exchange(ExchangeInfo ex);
 
     virtual std::string get_name() const override;
     virtual std::string get_id() const override;
@@ -183,41 +186,13 @@ public:
      */
     virtual void order_apply_fill(const Order &order, const Fill &fill);
 
+    void load_credentials(const Config &credential_config, std::string_view label, Function<void(ExchangeCredentials)> result);
+    void query_accounts(const ExchangeCredentials &creds,std::string_view label, const Query &query,Function<void(std::span<Account>)> result);
+    void query_instruments(const ExchangeCredentials &creds,const Query &query, std::string_view label,Function<void(std::span<Instrument>)> result);
+    void query_instruments(const Query &query,std::string_view label,Function<void(std::span<Instrument>)> result);
 
 
-    ///Query for instruments
-    /**
-     * @param query query string - this is exchange specific
-     * @param label defines label for populated instruments. It also works
-     *  as negative query, because causes removal of instruments populated under
-     *  different label from the result To repopulate instrument under
-     *  different label you need to destroy all copies of instrument instance
-     * @param cb callback function which receives result for each instrument. There is
-     *  'end' callback, however the closure of the function is eventually destroyed at
-     *  the end.
-     *
-     * @note function is asynchronous
-     */
-    void query_instruments(std::string_view query, std::string_view label, Function<void(Instrument)> cb);
-
-
-    ///Query for accounts
-    /**
-     * @param query query string - this is exchange specific
-     * @param label defines label for populated instruments. It also works
-     *  as negative query, because causes removal of accounts populated under
-     *  different label from the result To repopulate account under
-     *  different label you need to destroy all copies of instrument instance
-     * @param cb callback function which receives result for each instrument. There is
-     *  'end' callback, however the closure of the function is eventually destroyed at
-     *  the end.
-     *
-     * @note function is asynchronous
-     */
-    void query_accounts(std::string_view identity, std::string_view query, std::string_view label, Function<void(Account)> cb);
-
-
-    virtual Exchange get_exchange() const override;
+    virtual ExchangeInfo get_exchange() const override;
     virtual Log get_log() const override;
     virtual Network get_network() const override;
 
@@ -254,10 +229,10 @@ protected:
 
     std::unordered_map<Order, IEventTarget *, Order::Hasher> _orders;
 
-    std::unordered_map<Subscription, std::vector<IEventTarget *> , SubscriptionHasher> _subscriptions;
-    std::unordered_map<Subscription, std::vector<IEventTarget *> , SubscriptionHasher> _market_updates;
-    std::unordered_map<Instrument, std::vector<IEventTarget *> , Instrument::Hasher> _instrument_update_waiting;
-    std::unordered_map<Account, std::vector<IEventTarget *> , Account::Hasher> _account_update_waiting;
+    std::unordered_map<Subscription, SmallSet<IEventTarget *> , SubscriptionHasher> _subscriptions;
+    std::unordered_map<Subscription, SmallSet<IEventTarget *> , SubscriptionHasher> _market_updates;
+    std::unordered_map<Instrument, SmallSet<IEventTarget *> , Instrument::Hasher> _instrument_update_waiting;
+    std::unordered_map<Account, SmallSet<IEventTarget *> , Account::Hasher> _account_update_waiting;
 
 
     virtual void income_data(const Instrument &i, const MarketEvent &t) override;

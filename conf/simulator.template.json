@@ -1,11 +1,18 @@
 {
+
     "simulator": {
-        "accounts":{
-            "main":{
+        "settings": {},
+        "login":{
+            "main": {
                 "balance":123,
                 "currency":"USD"
             }
         },
+        "accounts":{
+            "main":{
+                "login":"main"
+            }
+        },   
         "instruments":{
             "Bitcoin":{
                 "replay":"bitcoin_replay.csv",
@@ -19,9 +26,10 @@
                 "required_margin":1,
                 "maintenance_margin":1,
                 "tradable":true,
-                "can_short":true
+                "can_short":true,
+                "currency":"USD"
             }
-        }        
+        }
     },
     "strategies": {
         "example":{

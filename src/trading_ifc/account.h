@@ -146,7 +146,7 @@ public:
 
     virtual std::string get_label() const = 0;
 
-    virtual Exchange get_exchange() const = 0;
+    virtual ExchangeInfo get_exchange() const = 0;
 
     virtual std::string get_id() const = 0;
 
@@ -161,7 +161,7 @@ public:
     virtual Status get_status() const override {return {};}
     virtual double get_ratio(const Instrument &) const override {return 0;}
     virtual std::string get_label() const override {return {};}
-    virtual Exchange get_exchange() const override {return {};}
+    virtual ExchangeInfo get_exchange() const override {return {};}
     virtual std::string get_id() const override {return {};}
     virtual Positions get_positions(const Instrument &) const override {return {};}
 };
@@ -245,7 +245,7 @@ public:
     double get_ratio(const Instrument &i) const {return _ptr->get_ratio(i);}
 
     ///Retrieve exchange instance, where this account is managed
-    Exchange get_exchange() const {return _ptr->get_exchange();}
+    ExchangeInfo get_exchange() const {return _ptr->get_exchange();}
 
     std::string get_id() const {return _ptr->get_id();}
 

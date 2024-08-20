@@ -9,7 +9,7 @@
 
 namespace trading_api {
 
-SimInstrument::SimInstrument(Exchange &&ex, std::string &&id, Config &&config)
+SimInstrument::SimInstrument(ExchangeInfo &&ex, std::string &&id, Config &&config)
         :_ex(std::move(ex)), _id(std::move(id)), _config(std::move(config))
         ,_matching(make_shared_lockable<simulator::Matching>()) {}
 
@@ -21,7 +21,7 @@ std::string SimInstrument::get_label() const {
     return _id;
 }
 
-Exchange SimInstrument::get_exchange() const {
+ExchangeInfo SimInstrument::get_exchange() const {
     return _ex;
 }
 

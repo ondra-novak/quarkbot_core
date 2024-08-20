@@ -1,7 +1,7 @@
 #pragma once
 
 #include "exchange_context.h"
-
+#include "exchange_credentials.h"
 
 #include "config_desc.h"
 namespace trading_api {
@@ -12,6 +12,7 @@ namespace trading_api {
 class IExchangeService {
 public:
 
+    using Query = Config;
 
     virtual ~IExchangeService() = default;
 
@@ -38,23 +39,56 @@ public:
     virtual void init(ExchangeContext context, const Config &exchange_config) = 0;
 
 
-    ///Add new api key.
+    ///Load credentials
     /**
+     * Function loads and checks credential validity. If the credentials are valid
+     * it returns initialized ExchangeCredentials object. Otherwise it returns uninitialized
+     * object.
      *
-     * @param name an unique name which identifies this api key for other calls
-     * @param api key configuration
-     * @note multiple calls of this function with same name changes the api key.
-
+     * @param credential_config defines all fields required to perform success loging (api key etc)
+     * @param label associated label (text)
+     * @param result a function, which is called upon completion. The function is asynchronous,
+     *
      */
-    virtual void set_api_key(std::string_view name, const Config &api_key_config) = 0;
+    virtual void load_credentials(const Config &credential_config, std::string_view label, Function<void(ExchangeCredentials)> result) = 0;
 
-    ///Deletes api key
+
+    ///Query for accounts
     /**
-     * @param name name of api key
-     *
-     * @note accounts associated with current api key are no longer useable
+     * @param creds credentials (see load_credentials)
+     * @param label associated label (text)
+     * @param query contains fields required to match specified account (exchange depend)
+     * @param result a function, which is called upon a completion. The function
+     * retrieves list of accounts matching the query
      */
-    virtual void unset_api_key(std::string_view name) = 0;
+    virtual void query_accounts(const ExchangeCredentials &creds,
+            std::string_view label, const Query &query,
+            Function<void(std::span<Account>)> result) = 0;
+
+    ///Query for exclusive instruments
+    /**
+     * The exchange can opt to not offer public instruments. It can require a login to
+     * retrieve list of instruments
+     *
+     * @param creds credentials
+     * @param query
+     * @param label
+     * @param result
+     */
+    virtual void query_instruments(const ExchangeCredentials &creds,
+            const Query &query, std::string_view label,
+            Function<void(std::span<Instrument>)> result) = 0;
+
+    ///Query for public instruments
+    /**
+     * @param query
+     * @param label
+     * @param result
+     */
+    virtual void query_instruments(const Query &query,
+            std::string_view label,
+            Function<void(std::span<Instrument>)> result) = 0;
+
 
     ///Subscribe instrument
     /** Subscribe this object to market data for given instrument
@@ -118,47 +152,13 @@ public:
      */
     virtual void batch_cancel(std::span<Order> orders) = 0;
 
-
-    ///Query for instruments
-    /**
-     * @param query query string - this is exchange specific
-     * @param label defines label for populated instruments. It also works
-     *  as negative query, because causes removal of instruments populated under
-     *  different label from the result To repopulate instrument under
-     *  different label you need to destroy all copies of instrument instance
-     * @param cb callback function which receives result for each instrument. There is
-     *  'end' callback, however the closure of the function is eventually destroyed at
-     *  the end.
-     *
-     * @note function is asynchronous
-     */
-    virtual void query_instruments(std::string_view query, std::string_view label, Function<void(Instrument)> cb) = 0;
-
-
-
-    ///Query for accounts
-    /**
-     * @param api_key_name identifier of registered api_key
-     * @param query query string - this is exchange specific.
-     * @param label defines label for populated instruments. It also works
-     *  as negative query, because causes removal of accounts populated under
-     *  different label from the result To repopulate account under
-     *  different label you need to destroy all copies of instrument instance
-     * @param cb callback function which receives result for each instrument. There is
-     *  'end' callback, however the closure of the function is eventually destroyed at
-     *  the end.
-     *
-     * @note function is asynchronous
-     */
-    virtual void query_accounts(std::string_view api_key_name, std::string_view query, std::string_view label, Function<void(Account)> cb) = 0;
-
     ///Get exchange human readable name
     virtual std::string get_name() const = 0;
     ///Get exchange unique identifier
     virtual std::string get_id() const  = 0;
 
     ///Get exchange's icon (optional)
-    virtual std::optional<IExchange::Icon> get_icon() const = 0;
+    virtual std::optional<IExchangeInfo::Icon> get_icon() const = 0;
 
     ///Create order base on request
     /**

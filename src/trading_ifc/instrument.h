@@ -2,7 +2,7 @@
 
 #include <cmath>
 #include "common.h"
-#include "exchange.h"
+#include "exchange_info.h"
 #include "decimal.h"
 
 namespace trading_api {
@@ -96,7 +96,7 @@ public:
 
     virtual std::string get_category() const = 0;
 
-    virtual Exchange get_exchange() const = 0;
+    virtual ExchangeInfo get_exchange() const = 0;
 
     class Null;
 };
@@ -113,7 +113,7 @@ public:
     virtual std::string get_id() const override {return {};}
     virtual std::string get_label() const override {return {};}
     virtual std::string get_category() const override {return {};}
-    virtual Exchange get_exchange() const override {return {};}
+    virtual ExchangeInfo get_exchange() const override {return {};}
 };
 
 
@@ -157,7 +157,7 @@ public:
 
 
     ///Retrieve exchange instance, where this instrument is managed
-    Exchange get_exchange() const {return _ptr->get_exchange();}
+    ExchangeInfo get_exchange() const {return _ptr->get_exchange();}
 
     ///converts lot to amount
     /**

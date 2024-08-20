@@ -7,6 +7,11 @@ namespace trading_api {
 
 namespace simulator {
 
+Matching::Matching()
+    :_me_tick(std::make_shared<MarketEvent_TickData<> >()) {}
+
+
+
 
 void Matching::set_spread(const Spread &spread) {
     _spread = spread;
@@ -162,6 +167,15 @@ Decimal Matching::get_effective_price() const {
     if (is_nan(_spread.bid) || is_nan(_spread.ask)) return _last;
     else return (_spread.bid + _spread.ask)/2_dec;
 }
+
+MarketEvent Matching::get_ticker(Timestamp curTime) const {
+    _me_tick->set(TickData{
+        curTime,_spread.bid,_spread.bid_size,_spread.ask, _spread.ask_size, _last, _last_size,0
+    });
+    return MarketEvent(_me_tick);
+
+}
+
 
 }
 

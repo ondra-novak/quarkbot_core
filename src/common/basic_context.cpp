@@ -128,7 +128,7 @@ Fills BasicContext::get_fills(Timestamp tp, std::string_view filter) const {
 
 Order BasicContext::place(const Instrument &instrument, const Account &account, const Order::Setup &setup) {
 
-    Exchange ex = account.get_exchange();
+    ExchangeInfo ex = account.get_exchange();
     BasicExchangeContext &e = BasicExchangeContext::from_exchange(ex);
     auto ord = e.create_order(instrument, account, setup);
     if (!ord.discarded()) {
@@ -139,7 +139,7 @@ Order BasicContext::place(const Instrument &instrument, const Account &account, 
 
 
 Order BasicContext::replace(const Order &order, const Order::Setup &setup, bool amend) {
-    Exchange ex = order.get_account().get_exchange();
+    ExchangeInfo ex = order.get_account().get_exchange();
     BasicExchangeContext &e = BasicExchangeContext::from_exchange(ex);
     auto ord = e.create_order_replace(order, setup, amend);
     if (!ord.discarded()) {
@@ -151,7 +151,7 @@ Order BasicContext::replace(const Order &order, const Order::Setup &setup, bool 
 
 
 void BasicContext::cancel(const Order &order) {
-    Exchange e = order.get_account().get_exchange();
+    ExchangeInfo e = order.get_account().get_exchange();
     _exchanges[e]._batch_cancel.push_back(order);
 }
 

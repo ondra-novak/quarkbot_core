@@ -13,6 +13,8 @@ namespace simulator {
 class Matching {
 public:
 
+    Matching();
+
     ///Contains information about execution
     struct Execution {
         ///associated order
@@ -170,12 +172,15 @@ public:
     ///Calculates price for conversion ratio etc.
     Decimal get_effective_price() const;
 
+    MarketEvent get_ticker(Timestamp curTime) const;
+
 protected:
     std::vector<WaitingOrder> _orders;
     std::vector<WaitingOrder> _updates;
     Spread _spread = {};
     Decimal _last = 0_dec;
     Decimal _last_size = 0_dec;
+    std::shared_ptr<MarketEvent_TickData<> > _me_tick;
     void update_spread();
 
 };

@@ -20,7 +20,7 @@ public:
 
     BinanceInstrument(std::string_view label,
             const Config &cfg,
-            trading_api::Exchange x);
+            trading_api::ExchangeInfo x);
 
     static const BinanceInstrument &from_instrument(const trading_api::Instrument &i);
 
@@ -29,7 +29,7 @@ public:
 
     std::string _label;
     Config _config;
-    trading_api::Exchange _x;
+    trading_api::ExchangeInfo _x;
     mutable uMutex _mx;
 
     using TickerEvent = trading_api::MarketEvent_TickData<std::mutex>;
@@ -41,7 +41,7 @@ public:
 
     virtual std::string get_category() const override;
     virtual std::string get_label() const override;
-    virtual trading_api::Exchange get_exchange() const override;
+    virtual trading_api::ExchangeInfo get_exchange() const override;
     virtual std::string get_id() const override;
     const virtual trading_api::IInstrument::Config& get_config() const override;
 

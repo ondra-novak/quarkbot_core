@@ -9,7 +9,7 @@
 class BinanceAccount: public trading_api::IAccount {
 public:
 
-    using Exchange = trading_api::Exchange;
+    using Exchange = trading_api::ExchangeInfo;
     using Instrument = trading_api::Instrument;
     using PositionMap = std::unordered_map<Instrument, Positions, Instrument::Hasher>;
 

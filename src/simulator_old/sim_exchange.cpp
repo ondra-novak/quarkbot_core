@@ -1,4 +1,4 @@
-#include "../simulator_old/sim_exchange.h"
+#include "../simulator_old/sim_exchange_info.h"
 
 #include "../trading_ifc/basic_order.h"
 namespace trading_api {
@@ -36,7 +36,7 @@ std::string SimExchange::get_id() const {
     return "simul";
 }
 
-std::optional<IExchange::Icon> SimExchange::get_icon() const {
+std::optional<IExchangeInfo::Icon> SimExchange::get_icon() const {
     return {};
 }
 

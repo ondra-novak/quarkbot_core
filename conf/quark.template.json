@@ -7,19 +7,25 @@
             },
             "login":{
                 "master": {
-                    "name":"xweqweqe",
-                    "secret":"xyrzw"
-                }
-            },
-            "accounts":{
-                "main":{
-                    "login":"master",
-                    "query":"USDT"
+                    "api_key":"binance-api.json",
+                    "accounts":{
+                        "main":"USDT"                    
+                    },
+                    "instruments":{
+                        "exclusive":{
+                            "symbol":"EXCLUSIVE_INSTRUMENT"
+                        }
+                    }
+
                 }
             },
             "instruments":{
-                "Bitcoin":"BTCUSDT",
-                "Ethereum":"ETHUSDT"
+                "Bitcoin":{
+                    "symbol":"BTCUSDT"
+                },
+                "Ethereum":{
+                    "symbol":"ETHUSDT"
+                }
             }
         }
     },
@@ -28,7 +34,7 @@
         "example":{
             "module":"example.so",
             "accounts":["main"],
-            "instruments":["Bitcoin","Ethereum"],
+            "instruments":["Bitcoin","Ethereum","exclusive"],
             "settings":{
                 "key":"value"
             },

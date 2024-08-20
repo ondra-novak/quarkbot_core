@@ -22,7 +22,7 @@ public:
             const Order &,
             const Order::Setup &, bool ) override {return {};}
     virtual std::string get_id() const override {return {};}
-    virtual std::optional<IExchange::Icon> get_icon() const override {return {};}
+    virtual std::optional<IExchangeInfo::Icon> get_icon() const override {return {};}
     virtual void update_instrument(const Instrument &) override {}
     virtual void order_apply_report(const Order &, const Order::Report &) override {}
     virtual std::string get_name() const override {return {};}
@@ -31,21 +31,17 @@ public:
     virtual void batch_cancel(std::span<Order> ) override {};
     virtual void restore_orders(void *, std::span<SerializedOrder> ) override {}
 
-    virtual void query_accounts(std::string_view, std::string_view , std::string_view ,
-            Function<void(Account)> ) override {}
-    virtual void query_instruments(std::string_view , std::string_view ,
-            Function<void(Instrument)> ) override {}
 
     virtual trading_api::ConfigSchema get_api_key_config_schema() const
             override {return {};}
-    virtual void unset_api_key(std::string_view ) override {}
-    virtual void set_api_key(std::string_view ,
-            const trading_api::Config &) override {}
     virtual void update_market(const Instrument &i, MarketEventType type) override{}
 
+    virtual void query_accounts(const ExchangeCredentials &creds,std::string_view label, const Query &query,Function<void(std::span<Account>)> result) override {}
+    virtual void query_instruments(const ExchangeCredentials &creds,const Query &query, std::string_view label,Function<void(std::span<Instrument>)> result) override {}
+    virtual void query_instruments(const Query &query,std::string_view label,Function<void(std::span<Instrument>)> result) override {}
+    virtual void load_credentials(const Config &credential_config, std::string_view label, Function<void(ExchangeCredentials)> result) override {}
 };
 
 
 EXPORT_EXCHANGE(ExampleExchange);
-
 

@@ -8,14 +8,14 @@ namespace trading_api {
 
 class SimInstrument: public IInstrument {
 public:
-    SimInstrument(Exchange &&ex, std::string &&id, Config &&config);
+    SimInstrument(ExchangeInfo &&ex, std::string &&id, Config &&config);
     virtual std::string get_category() const override;
     virtual std::string get_label() const override;
-    virtual Exchange get_exchange() const override;
+    virtual ExchangeInfo get_exchange() const override;
     virtual std::string get_id() const override;
     const virtual Config& get_config() const override;
 
-    static auto create(Exchange ex, std::string id, Config config) {
+    static auto create(ExchangeInfo ex, std::string id, Config config) {
         return std::make_shared<SimInstrument>(std::move(ex), std::move(id), std::move(config));
     }
 
@@ -45,7 +45,7 @@ public:
 
 
 protected:
-    Exchange _ex;
+    ExchangeInfo _ex;
     std::string _id;
     Config _config;
     shared_lockable_ptr<simulator::Matching> _matching;

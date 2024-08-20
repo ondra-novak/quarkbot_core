@@ -11,7 +11,7 @@
 
 namespace trading_api {
 
-SimAccount::SimAccount(Exchange exch, std::string label, std::string currency, double balance, double fees)
+SimAccount::SimAccount(ExchangeInfo exch, std::string label, std::string currency, double balance, double fees)
         :_exch(std::move(exch))
         ,_label(std::move(label))
         ,_currency(std::move(currency))
@@ -24,7 +24,7 @@ std::string SimAccount::get_label() const {
     return _label;
 }
 
-Exchange SimAccount::get_exchange() const {
+ExchangeInfo SimAccount::get_exchange() const {
     return _exch;
 }
 

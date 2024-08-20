@@ -51,7 +51,7 @@ public:
 
 
     ///Convert this object to exchange
-    virtual Exchange get_exchange() const = 0;
+    virtual ExchangeInfo get_exchange() const = 0;
 
     virtual Log get_log() const = 0;
 
@@ -73,7 +73,7 @@ public:
     virtual void object_updated(const Instrument &, AsyncStatus) override{throw_error();}
     virtual Network get_network() const override {throw_error();};
     virtual Log get_log() const override {throw_error();}
-    virtual Exchange get_exchange() const override {throw_error();}
+    virtual ExchangeInfo get_exchange() const override {throw_error();}
     virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) override{throw_error();}
 };
 
@@ -141,7 +141,7 @@ public:
     }
 
     ///convert to exchange
-    Exchange get_exchange() const {
+    ExchangeInfo get_exchange() const {
         return _ptr->get_exchange();
     }
 

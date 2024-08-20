@@ -68,7 +68,7 @@ public:
             const Order::Setup &setup, bool amend) override;
     virtual std::string get_id() const override;
 
-    virtual std::optional<trading_api::IExchange::Icon> get_icon() const override;
+    virtual std::optional<trading_api::IExchangeInfo::Icon> get_icon() const override;
     virtual void batch_cancel(std::span<Order> orders) override;
     virtual void update_instrument(const Instrument &i) override;
     virtual void order_apply_report(const Order &order,

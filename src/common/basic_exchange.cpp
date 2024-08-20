@@ -19,7 +19,7 @@ void BasicExchangeContext::subscribe(IEventTarget *target, MarketEventType sbsty
     if (v.empty()) {
         _ptr->subscribe(s.type, s.i);
     }
-    v.push_back(target);
+    v.set(target);
 }
 
 void BasicExchangeContext::unsubscribe(IEventTarget *target, MarketEventType sbstype, const Instrument &instrument) {
@@ -53,7 +53,7 @@ Order BasicExchangeContext::create_order_replace(const Order &replace,
     _ptr->create_order_replace(replace, setup, amend);
 }
 
-std::optional<IExchange::Icon> BasicExchangeContext::get_icon() const {
+std::optional<IExchangeInfo::Icon> BasicExchangeContext::get_icon() const {
     return _ptr->get_icon();
 }
 
@@ -81,41 +81,20 @@ std::string BasicExchangeContext::get_label() const {
     return _label;
 }
 
-void BasicExchangeContext::query_instruments(std::string_view query,
-        std::string_view label, Function<void(Instrument)> cb) {
-    _ptr->query_instruments(query, label, std::move(cb));
 
-}
-
-void BasicExchangeContext::query_accounts(std::string_view identity,
-        std::string_view query,
-        std::string_view label, Function<void(Account)> cb) {
-    _ptr->query_accounts(identity, query, label, std::move(cb));
-}
-
-
-
-void BasicExchangeContext::update_ticker(IEventTarget *target, const Instrument &instrument) {
-    std::lock_guard _(_mx);
-    //todo
-}
 
 void BasicExchangeContext::update_account(IEventTarget *target, const Account &account) {
     std::lock_guard _(_mx);
     auto &lst = _account_update_waiting[account];
-    if (lst.empty()) {
-        _ptr->update_account(account);
-    }
-    lst.push_back(target);
+    if (lst.empty()) _ptr->update_account(account);
+    lst.set(target);
 }
 
 void BasicExchangeContext::update_instrument(IEventTarget *target, const Instrument &instrument) {
     std::lock_guard _(_mx);
     auto &lst = _instrument_update_waiting[instrument];
-    if (lst.empty()) {
-        _ptr->update_instrument(instrument);
-    }
-    lst.push_back(target);
+    if (lst.empty()) _ptr->update_instrument(instrument);
+    lst.set(target);
 }
 
 void BasicExchangeContext::object_updated(const Account &account, AsyncStatus st) {
@@ -190,14 +169,14 @@ void BasicExchangeContext::order_restore(void *target, const Order &order) {
 
 }
 
-BasicExchangeContext &BasicExchangeContext::from_exchange(Exchange ex) {
-    const IExchange *e = ex.get_handle().get();
+BasicExchangeContext &BasicExchangeContext::from_exchange(ExchangeInfo ex) {
+    const IExchangeInfo *e = ex.get_handle().get();
     const BasicExchangeContext *be = dynamic_cast<const BasicExchangeContext *>(e);
     return const_cast<BasicExchangeContext &>(*be);
 }
 
-Exchange BasicExchangeContext::get_exchange() const {
-    return Exchange(shared_from_this());
+ExchangeInfo BasicExchangeContext::get_exchange() const {
+    return ExchangeInfo(shared_from_this());
 }
 
 Log BasicExchangeContext::get_log() const {
@@ -212,17 +191,9 @@ void BasicExchangeContext::update_market(IEventTarget *target, const Instrument 
     std::lock_guard _(_mx);
     auto &lst = _market_updates[Subscription{type,i}];
     if (lst.empty()) _ptr->update_market(i, type);
-    lst.push_back(target);
+    lst.set(target);
 }
 
-
-void BasicExchangeContext::set_api_key(std::string_view name, const Config &api_key_config) {
-    _ptr->set_api_key(name, api_key_config);
-}
-
-void BasicExchangeContext::unset_api_key(std::string_view name) {
-    _ptr->unset_api_key(name);
-}
 
 void BasicExchangeContext::object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) {
     std::lock_guard _(_mx);
@@ -234,5 +205,29 @@ void BasicExchangeContext::object_updated(const Instrument &i, AsyncStatus st, M
         for (auto x: lst) x->on_event(i, st, ev);
     }
 }
+
+void BasicExchangeContext::load_credentials(const Config &credential_config,
+        std::string_view label, Function<void(ExchangeCredentials)> result) {
+    _ptr->load_credentials(credential_config, label, std::move(result));
+
+}
+
+void BasicExchangeContext::query_accounts(const ExchangeCredentials &creds,
+        std::string_view label, const Query &query,
+        Function<void(std::span<Account>)> result) {
+    _ptr->query_accounts(creds, label, query, std::move(result));
+}
+
+void BasicExchangeContext::query_instruments(const ExchangeCredentials &creds,
+        const Query &query, std::string_view label,
+        Function<void(std::span<Instrument>)> result) {
+    _ptr->query_instruments(creds, query, label, std::move(result));
+}
+
+void BasicExchangeContext::query_instruments(const Query &query,
+        std::string_view label, Function<void(std::span<Instrument>)> result) {
+    _ptr->query_instruments(query, label,std::move(result));
+}
+
 
 }

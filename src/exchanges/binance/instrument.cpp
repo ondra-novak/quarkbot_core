@@ -3,7 +3,7 @@
 
 BinanceInstrument::BinanceInstrument(std::string_view label,
         const Config &cfg,
-        trading_api::Exchange x)
+        trading_api::ExchangeInfo x)
 :_label(std::move(label))
 ,_config(cfg)
 ,_x(std::move(x))
@@ -28,7 +28,7 @@ std::string BinanceInstrument::get_label() const {
     return _label;
 }
 
-trading_api::Exchange BinanceInstrument::get_exchange() const {
+trading_api::ExchangeInfo BinanceInstrument::get_exchange() const {
     return _x;
 }
 

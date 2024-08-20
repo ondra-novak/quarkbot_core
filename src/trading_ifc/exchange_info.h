@@ -15,7 +15,7 @@ struct TickData;
 class OrderBook;
 
 
-class IExchange {
+class IExchangeInfo {
 public:
 
     struct Icon {
@@ -26,7 +26,7 @@ public:
     };
 
 
-    virtual ~IExchange() = default;
+    virtual ~IExchangeInfo() = default;
     virtual std::string get_id() const = 0;
     virtual std::string get_label() const = 0;
     virtual std::string get_name() const = 0;
@@ -35,7 +35,7 @@ public:
 };
 
 
-class IExchange::Null: public IExchange {
+class IExchangeInfo::Null: public IExchangeInfo {
 public:
     virtual std::string get_label() const override {return {};}
     virtual std::string get_name() const override  {return {};}
@@ -54,12 +54,12 @@ public:
  *
  *
  */
-class Exchange: public Wrapper<IExchange> {
+class ExchangeInfo: public Wrapper<IExchangeInfo> {
 public:
 
-    using Icon = IExchange::Icon;
+    using Icon = IExchangeInfo::Icon;
 
-    using Wrapper<IExchange>::Wrapper;
+    using Wrapper<IExchangeInfo>::Wrapper;
 
 
     ///Retrieve user defined label (configured for this exchange)

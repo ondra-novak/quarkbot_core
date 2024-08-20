@@ -31,7 +31,7 @@ public:
     virtual Order create_order_replace(const Order &replace,
             const Order::Setup &setup, bool amend) override;
     virtual std::string get_id() const override;
-    virtual std::optional<IExchange::Icon> get_icon() const override;
+    virtual std::optional<IExchangeInfo::Icon> get_icon() const override;
     virtual void restore_orders(void *context,
             std::span<SerializedOrder> orders) override;
     virtual void batch_place(std::span<Order> orders) override;

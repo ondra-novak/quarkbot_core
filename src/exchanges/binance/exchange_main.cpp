@@ -225,7 +225,7 @@ std::string BinanceExchange::get_id() const {
     return "binance";
 }
 
-std::optional<trading_api::IExchange::Icon> BinanceExchange::get_icon() const {
+std::optional<trading_api::IExchangeInfo::Icon> BinanceExchange::get_icon() const {
 }
 
 void BinanceExchange::batch_cancel(std::span<Order> orders) {

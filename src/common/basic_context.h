@@ -206,7 +206,7 @@ protected:
     std::deque<MarketEventItem> _mequeue;
     PriorityQueue<TimerItem, typename TimerItem::ordering> _timed_queue;
 
-    std::map<Exchange, Batches> _exchanges;
+    std::map<ExchangeInfo, Batches> _exchanges;
 
     void begin_transaction();
     void commit();
