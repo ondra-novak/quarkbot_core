@@ -28,15 +28,17 @@ static_assert(custom_serialize<trading_api::Order::ClosePosition>);
 
 
 
-using BinOrder = TupleBin<Order::Setup, Decimal, Decimal, Order::State, Order::Reason, std::string>;
+using BinOrder = TupleBin<std::string, Order::Setup, Decimal, Decimal, Order::State, Order::Reason, std::string>;
 
 SerializedOrder SimOrder::to_binary() const {
 
-    BinOrder::compose(this->_setup, this->_status.filled, this->_status.last_price,
+    BinOrder::compose(this->_instrument.get_id(), this->_setup, this->_status.filled, this->_status.last_price,
             this->_status.last_report.new_state,
             this->_status.last_report.reason,
             this->_status.last_report.message);
 
 }
+
+
 
 }
