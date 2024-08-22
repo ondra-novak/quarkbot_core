@@ -3,8 +3,6 @@
 #include <list>
 #include <unordered_set>
 #include <chrono>
-#include <thread>
-#include <condition_variable>
 
 template<typename T, typename Hasher = std::hash<T>, typename Compare = std::equal_to<T> >
 class DispatcherCore {
@@ -36,6 +34,7 @@ public:
 
     template<std::invocable<T &&> Executor>
     bool process_message(Executor &&executor) {
+        static_assert(std::is_convertible_v<std::invoke_result_t<Executor, T &&>, bool>);
         auto f = _queue.begin();
         while (_queue_recurse &&  f != _queue.end()) {
             --_queue_recurse;
@@ -59,18 +58,19 @@ public:
     bool post_timed(Ident ident, TimePoint tp, Args && ... args ) {
         T *ax = _alloc.allocate(1);
         std::construct_at(ax, std::forward<Args>(args)...);
-        return post_timed_allocated(tp, ax, ident);
+        return post_timed_allocated(tp, {ax,{&_alloc}}, ident);
     }
 
     template<typename ... Args>
     bool post_timed(TimePoint tp, Args && ... args) {
         T *ax = _alloc.allocate(1);
         std::construct_at(ax, std::forward<Args>(args)...);
-        return post_timed_allocated(tp, ax, ax);
+        return post_timed_allocated(tp, {ax,{&_alloc}}, ax);
     }
 
     template<std::invocable<T &&> Executor>
     bool process_message(TimePoint tp, Executor &&executor) {
+        static_assert(std::is_convertible_v<std::invoke_result_t<Executor, T &&>, bool>);
         if (process_message(std::forward<Executor>(executor))) return true;
         if (_tqueue.empty()) {
             _near_tp = TimePoint::max();
@@ -119,7 +119,7 @@ public:
     TimePoint get_nearest_schedule() const {return _near_tp;}
 
 protected:
-    
+
     static constexpr int _cluster_size = 16;
     using Queue = std::list<T, ClusterAlloc<T, _cluster_size> >;
     using QueueIter = Queue::iterator;
@@ -131,9 +131,9 @@ protected:
         Compare _cmp = {};
         bool operator()(const QueueIter &a, const QueueIter &b) const {return _cmp(*a,*b);}
     };
-    using CollapsMap = std::unordered_set<QueueIter,HasherIter, CmpIter, ClusterAlloc<T,_cluster_size> >;
+    using CollapsMap = std::unordered_set<QueueIter,HasherIter, CmpIter, ClusterAlloc<QueueIter,_cluster_size> >;
     struct ClusterDeleter {
-        ClusterAlloc<T> *_alloc;
+        ClusterAlloc<T, _cluster_size> *_alloc;
         void operator()(T *item) {std::destroy_at(item); _alloc->deallocate(item,1);}
     };
     struct TimedItem {
@@ -143,13 +143,13 @@ protected:
     };
     using TimedQueue = std::vector<TimedItem>;
     static bool cmp_timed(const TimedItem &a, const TimedItem &b) {return a._tp > b._tp;}
-    
-    
+
+
     Queue _queue;
     CollapsMap _collaps_map;
     TimedQueue _tqueue;
     TimePoint _near_tp = TimePoint::max();
-    ClusterAlloc<T> _alloc = _queue.get_allocator();
+    ClusterAlloc<T, _cluster_size> _alloc;
     int _queue_recurse = 0;
     Ident _executing_ident = nullptr;
 
@@ -160,128 +160,6 @@ protected:
         std::push_heap(_tqueue.begin(), _tqueue.end(), cmp_timed);
         return r;
     }
-    
+
 };
 
-class DispatcherBase {
-protected:
-    static thread_local DispatcherBase *_current;
-};
-
-
-template<std::invocable<> T,typename Hasher =  std::hash<T>, typename Compare = std::equal_to<T> >
-class DispatcherThread: public DispatcherCore<T, Hasher, Compare>, public DispatcherBase {
-public:
-
-    using Super = DispatcherCore<T, Hasher,Compare>;
-    using TimePoint = typename Super::TimePoint;
-    using Ident = typename Super::Ident;
-
-    ~DispatcherThread() {
-        stop();
-    }
-
-    template<typename ... Args> requires(std::is_constructible_v<T, Args...>)
-    void post(Args && ... args) {
-        std::lock_guard _(_mx);
-        if (Super::post(std::forward<Args>(args)...)) {
-            notify();
-        }
-    }
-
-    template<typename ... Args> requires(std::is_constructible_v<T, Args...>)
-    void post_collapse(Args && ... args) {
-        std::lock_guard _(_mx);
-        if (Super::post_collapse(std::forward<Args>(args)...)) {
-            notify();
-        }
-    }
-
-    template<typename ... Args>
-    void post_timed(Ident ident, TimePoint tp, Args && ... args ) {
-        std::lock_guard _(_mx);
-        if (Super::post_timed(ident, tp, std::forward<Args>(args)...)) {
-            notify();
-        }
-    }
-
-    template<typename ... Args>
-    void post_timed(TimePoint tp, Args && ... args) {
-        std::lock_guard _(_mx);
-        if (Super::post_timed(tp, std::forward<Args>(args)...)) {
-            notify();
-        }
-    }
-
-    bool cancel(Ident ident) {
-        std::unique_lock lk(_mx);
-        bool r = Super::cancel(ident);
-        if (r == false) {
-            if (this->_executing_ident == ident) {
-                _awaiting = true;
-                _cond.wait(lk, [this, ident]{return this->_executing_ident != ident;});
-                return true;
-            }
-        }
-        return r;
-    }
-
-protected:
-    std::mutex _mx;
-    std::thread _wrk;
-    std::condition_variable _cond;
-    bool _stopped = false;
-    bool _awaiting = false;
-
-    void worker() {
-
-        _current = this;
-        std::unique_lock lk(_mx);
-
-        auto executor = [this,&lk](T &&x) noexcept {
-            lk.unlock();
-            x();
-            if (DispatcherBase::_current != this) return false;
-            lk.lock();
-            return true;
-        };
-
-        while (!_stopped) {
-            if (!this->process_message(executor)) {
-                if (DispatcherBase::_current != this) return;
-                auto nx = this->get_nearest_schedule();
-                if (nx == TimePoint::max()) _cond.wait(lk);
-                else _cond.wait(lk,nx);
-            }
-            if (_awaiting) {
-                _awaiting = false;
-                _cond.notify_all();
-            }
-        }
-    }
-
-    void notify() {
-        if (!_wrk.joinable()) {
-            _wrk = std::thread([this]{worker();});
-        } else {
-            _cond.notify_all();
-        }
-    }
-
-    void stop() {
-        if (_wrk.joinable()) {
-            if (std::this_thread::get_id() == _wrk.get_id()) {
-                _wrk.detach();
-                this->_current = nullptr;
-                return; 
-            } else {
-                std::lock_guard _(_mx);
-                _stopped = true;
-            }
-            _cond.notify_all();
-            _wrk.join();
-        }
-    }
-};
-
-inline thread_local DispatcherBase *DispatcherBase::_current = nullptr;

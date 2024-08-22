@@ -10,7 +10,8 @@ set(testFiles
 	decimal.cpp
 	cluster_alloc.cpp
 	dispatcher.cpp
-)
+	stream_merge.cpp
+)   
 
 link_libraries(
      trading_api_common
