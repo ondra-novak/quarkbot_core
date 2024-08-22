@@ -35,7 +35,7 @@ public:
     CfgValue() = default;
     CfgValue(const std::string_view &other):std::string_view(other) {}
 
-    operator Decimal() const {return Decimal(*this);}
+    operator Decimal() const {return Decimal(static_cast<std::string_view>(*this));}
     template<typename T> requires(std::is_integral_v<T>)
     operator T() const {
         T out = {};

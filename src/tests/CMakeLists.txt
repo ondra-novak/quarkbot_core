@@ -8,6 +8,8 @@ set(testFiles
 	config_desc.cpp
 	wandering_bst.cpp
 	decimal.cpp
+	cluster_alloc.cpp
+	dispatcher.cpp
 )
 
 link_libraries(

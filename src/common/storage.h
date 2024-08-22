@@ -105,8 +105,8 @@ public:
     virtual std::string get_var(std::string_view ) const override {return {};}
     virtual Positions load_positions(std::string_view ) const override {return {};}
     virtual Trades load_closed(Timestamp , std::string_view ) const override {return {};}
-    virtual VarSet<std::string_view> get_vars(std::string_view ) const {return {};}
-    virtual VarSet<std::string_view> get_vars(std::string_view , std::string_view ) const {return {};}
+    virtual VarSet<std::string_view> get_vars(std::string_view ) const override {return {};}
+    virtual VarSet<std::string_view> get_vars(std::string_view , std::string_view ) const override {return {};}
 };
 
 

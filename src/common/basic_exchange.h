@@ -198,7 +198,7 @@ public:
 
     void update_market(IEventTarget *, const Instrument &i, MarketEventType type);
 
-    virtual const Config &get_config() const;
+    virtual const Config &get_config() const override;
 
 protected:
 

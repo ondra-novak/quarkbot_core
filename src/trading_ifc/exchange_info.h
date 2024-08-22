@@ -11,7 +11,7 @@
 namespace trading_api {
 
 class Instrument;
-struct TickData;
+class TickData;
 class OrderBook;
 
 
