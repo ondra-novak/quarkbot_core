@@ -54,13 +54,18 @@ void LvlDBStorage::erase_var(std::string_view name)
     _batch.Delete(build_key(RecordType::variable, name));
 }
 
+using OrderKey = TupleBin<std::string_view, std::string_view>;
+using OrderKeyPrefix = TupleBin<std::string_view>;
+
 void LvlDBStorage::put_order(const Order &ord)
 {
     auto b = ord.to_binary();
+    std::string account_id = ord.get_account().get_id();
+    std::string key = OrderKey::compose(account_id, key);
     if (ord.done()) {
-        _batch.Delete(build_key(RecordType::order,b.order_id));
+        _batch.Delete(build_key(RecordType::order,key));
     } else {
-        _batch.Put(build_key(RecordType::order, b.order_id), b.order_content);
+        _batch.Put(build_key(RecordType::order, key), b.order_content);
     }
     auto_commit();
 }
@@ -177,12 +182,14 @@ Fills LvlDBStorage::load_fills(Timestamp limit, std::string_view filter) const
 
 }
 
-std::vector<SerializedOrder> LvlDBStorage::load_open_orders() const
+std::vector<SerializedOrder> LvlDBStorage::load_open_orders(const Account &account) const
 {
     std::vector<SerializedOrder> ret;
     std::unique_ptr<leveldb::Iterator> iter (_db->NewIterator({}));
     std::string s;
-    iter->Seek(build_key(s,RecordType::order,""));
+    build_key(s,RecordType::order,"");
+    Serializer::to_binary(std::back_inserter(s), account.get_id());
+    iter->Seek(s);
     while (iter->Valid() && key_match_prefix(s,iter->key()))  {
         ret.push_back({std::string(remove_key_prefix(iter->key())), std::string(extract_slice(iter->value()))});
         iter->Next();

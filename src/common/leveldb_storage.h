@@ -34,7 +34,7 @@ public:
     virtual bool is_duplicate_fill(const Fill &fill) const override;
     virtual Fills load_fills(std::size_t limit, std::string_view filter = {}) const override;
     virtual Fills load_fills(Timestamp limit, std::string_view filter = {}) const override;
-    virtual std::vector<SerializedOrder> load_open_orders() const override;
+    virtual std::vector<SerializedOrder> load_open_orders(const Account &account) const override;
     virtual std::string get_var(std::string_view var_name) const override;
     virtual VarSet<std::string_view> get_vars(std::string_view prefix) const override;
     virtual VarSet<std::string_view> get_vars(std::string_view start, std::string_view end) const override;

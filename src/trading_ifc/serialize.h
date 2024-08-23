@@ -18,7 +18,7 @@ namespace Serializer {
         if constexpr(std::is_same_v<T, bool>) {
             return to_binary(iter, item?1:0);
         } else if constexpr(std::is_same_v<T,std::string_view>) {
-            iter = to_binary(item.size());
+            iter = to_binary(iter, item.size());
             return std::copy(item.begin(), item.end(), iter);
         } else if constexpr(std::is_integral_v<T>) {
             if constexpr(std::is_unsigned_v<T>) {
@@ -220,6 +220,7 @@ public:
         Serializer::to_binary_args(std::back_inserter(buff), args...);
         return buff;
     }
+
 
     static std::string compose(const std::tuple<Args ...> &tup) {
         std::string buff;

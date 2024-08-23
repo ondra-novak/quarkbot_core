@@ -247,6 +247,11 @@ public:
     ///Retrieve exchange instance, where this account is managed
     ExchangeInfo get_exchange() const {return _ptr->get_exchange();}
 
+    ///Retrive account's unique identifier.
+    /**
+     * @return returns account's unique identifier. It is used to identify database records.
+     * so it must not change between runs.
+     */
     std::string get_id() const {return _ptr->get_id();}
 
     ///Retrieve all positions for given instrument

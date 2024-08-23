@@ -73,6 +73,10 @@ public:
     ///called when fill is detected
     virtual void on_event(const Order &order, const Fill &fill) = 0;
 
+    ///called when orders are restored (even if empty)
+    /** Response to restore_order - must always return, even if there is nothing to restore */
+    virtual void on_event(std::span<Order> restored_orders) = 0;
+
 
 };
 

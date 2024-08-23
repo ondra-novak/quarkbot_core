@@ -66,6 +66,7 @@ public:
     virtual void on_event(const Instrument &i, const MarketEvent &subscription_type) override;
     virtual void on_event(const Order &order, const Order::Report &report) override;
     virtual void on_event(const Order &order, const Fill &fill) override;
+    virtual void on_event(std::span<Order> restored_orders) override;
     virtual void subscribe(MarketEventType type, const Instrument &i)override;
     virtual void unsubscribe(MarketEventType type, const Instrument &i) override;
     virtual Order replace(const Order &order, const Order::Setup &setup, bool amend) override;
@@ -160,6 +161,12 @@ protected:
         void operator()();
     };
 
+    struct EvOrderRestore {
+        BasicContext *me;
+        Order order;
+        void operator()();
+    };
+
     struct EvOrderFill {
         BasicContext *me;
         Order order;
@@ -181,7 +188,8 @@ protected:
             EvOrderStatus,
             EvOrderFill,
             EvMQ,
-            EvUpdateMarket
+            EvUpdateMarket,
+            EvOrderRestore
             >;
 
     struct TimerItem {
@@ -207,6 +215,7 @@ protected:
     PriorityQueue<TimerItem, typename TimerItem::ordering> _timed_queue;
 
     std::map<ExchangeInfo, Batches> _exchanges;
+    unsigned int _start_counter = 0;
 
     void begin_transaction();
     void commit();

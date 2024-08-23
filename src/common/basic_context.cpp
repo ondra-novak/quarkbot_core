@@ -31,9 +31,28 @@ void BasicContext::init(std::unique_ptr<IStrategy> strategy,
         _exchanges.emplace(i.get_exchange(),Batches{});
     }
     _strategy->on_init(this);
-    auto orders = _storage->load_open_orders();
-    for (auto &[e, _]: _exchanges) {
-        BasicExchangeContext::from_exchange(e).restore_orders(this, {orders.data(), orders.size()});
+    for (const auto &a: _accounts) {
+        auto ex = a.get_exchange();
+        auto &ctx = BasicExchangeContext::from_exchange(ex);
+        auto orders = _storage->load_open_orders(a);
+        if (!orders.empty()) {
+            ctx.restore_orders(this, {orders.data(), orders.size()});
+            ++_start_counter;
+        }
+    }
+    _queue.push(EvStart{this});
+    if (_start_counter == 0) {
+        notify_queue();
+    }
+}
+
+void BasicContext::on_event(std::span<Order> restored_orders) {
+    for (const auto &ord: restored_orders) {
+        _queue.push(EvOrderRestore{this, ord});
+    }
+    _start_counter--;
+    if (_start_counter == 0) {
+        notify_queue();
     }
 }
 
@@ -273,6 +292,11 @@ void BasicContext::EvMarketEventItem::operator ()() {
 void BasicContext::EvOrderStatus::operator ()() {
     auto &e = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
     e.order_apply_report(order, report);
+    me->_storage->put_order(order);
+    me->_strategy->on_order(std::move(order));
+}
+
+void BasicContext::EvOrderRestore::operator ()() {
     me->_storage->put_order(order);
     me->_strategy->on_order(std::move(order));
 }

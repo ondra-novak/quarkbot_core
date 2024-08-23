@@ -27,7 +27,7 @@ void MemoryStorage::erase_var(std::string_view name)
 void MemoryStorage::put_order(const Order &ord)
 {
     auto b = ord.to_binary();
-    _tx.push_back(TxOrder{std::move(b), ord.done()});
+    _tx.push_back(TxOrder{ord.get_account(),std::move(b), ord.done()});
     auto_commit();
 }
 
@@ -42,8 +42,9 @@ void MemoryStorage::put_fill(const Fill &fill)
 struct MemoryStorage::StoreAction {
     MemoryStorage *me;
     void operator()(TxOrder &ord) const {
-        if (ord.erase) me->_orders.erase(ord.ord.order_id);
-        else me->_orders[std::move(ord.ord.order_id)] = std::move(ord.ord.order_content);
+        auto &lst = me->_orders[ord.acc];
+        if (ord.erase) lst.erase(ord.ord.order_id);
+        else lst[std::move(ord.ord.order_id)] = std::move(ord.ord.order_id);
     }
     void operator()(TxVar &var) const {
         if (var.value.has_value()) {
@@ -123,11 +124,16 @@ Fills MemoryStorage::load_fills(Timestamp limit, std::string_view filter) const
 
 }
 
-std::vector<SerializedOrder> MemoryStorage::load_open_orders() const
+std::vector<SerializedOrder> MemoryStorage::load_open_orders(const Account &acc) const
 {
     std::shared_lock _(_mx);
     std::vector<SerializedOrder> out;
-    for (const auto &[k,v]: _orders) out.push_back({k,v});
+    auto i1 = _orders.find(acc);
+    if (i1 != _orders.end()) {
+        for (const auto &[k,v]: i1->second) {
+            out.push_back({k,v});
+        }
+    }
     return out;
 
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../trading_ifc/strategy_context.h"
+#include "../trading_ifc/account.h"
 #include <unordered_set>
 #include <list>
 
@@ -44,7 +45,11 @@ public:
      */
     virtual Fills load_fills(Timestamp limit, std::string_view filter = {}) const = 0;
     ///load all open orders (stored binary)
-    virtual std::vector<SerializedOrder> load_open_orders() const = 0;
+    /**
+     * @param account account identifier. It expects, that account unique identifier
+     * is preserved between runs.
+     */
+    virtual std::vector<SerializedOrder> load_open_orders(const Account &account) const = 0;
     ///get value of variable
     /**
      * @param var_name variable name
@@ -99,7 +104,7 @@ public:
     virtual void commit() override {}
     virtual bool is_duplicate_fill(const Fill &) const override {return false;} ;
     virtual void put_var(std::string_view , std::string_view ) override {}
-    virtual std::vector<SerializedOrder> load_open_orders() const override {return {};}
+    virtual std::vector<SerializedOrder> load_open_orders(const Account &) const override {return {};}
     virtual Fills load_fills(std::size_t, std::string_view) const override{return {};}
     virtual Fills load_fills(Timestamp ,std::string_view) const  override{return {};}
     virtual std::string get_var(std::string_view ) const override {return {};}

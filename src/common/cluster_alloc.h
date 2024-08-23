@@ -4,9 +4,11 @@
 #include <memory>
 #include <array>
 
-template<typename T, unsigned int _cluster_size = 4096/sizeof(T)>
+template<typename T, unsigned int _cluster_size = 0>
 class ClusterAlloc {
 public:
+
+    static constexpr auto _cs = _cluster_size?_cluster_size:4096/sizeof(T);
 
     using value_type = T;
 
@@ -56,7 +58,7 @@ protected:
 
     struct Cluster {
         std::unique_ptr<Cluster> _next;
-        std::array<Item, _cluster_size> _data;
+        std::array<Item, _cs> _data;
     };
 
     std::unique_ptr<Cluster> _clusters;
