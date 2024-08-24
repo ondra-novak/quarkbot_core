@@ -35,19 +35,7 @@ public:
      * @param reason optional reason (for the state)
      * @param message optional string message if error
      */
-    virtual void order_state_changed(const Order &order, const Order::Report &report) = 0;
-    ///call this function for every fill on the order
-    /**
-     * @param order order instance
-     * @param fill fill information
-     */
-    virtual void order_fill(const Order &order, const Fill &fill) = 0;
-    ///call this function for every restored order from set passed to restore_orders()
-    /**
-     * @param context pointer which has been passed to restore_orders.
-     * @param order restored order instance
-     */
-    virtual void order_restore(void *context, const Order &order) = 0;
+    virtual void order_report(const Order &order, Order::Report report, Fills fills) = 0;
 
     virtual const Config &get_config() const = 0;
 

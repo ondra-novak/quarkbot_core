@@ -12,7 +12,7 @@ public:
     virtual Status get_status() const override;
     virtual std::string get_id() const override;
     virtual Positions get_positions(const Instrument &i) const override;
-    virtual double get_ratio(const Instrument &i) const override {return 0;}
+    virtual double get_ratio(const Instrument &) const override {return 0;}
 
     Fills create_fills(const Instrument &i, Side side, Decimal amount, Decimal price, Timestamp tm);
     std::optional<Fill> close_position(const Instrument &i, std::string id, Decimal price, Timestamp tm, Decimal remain = 0_dec);

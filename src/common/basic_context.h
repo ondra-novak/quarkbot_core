@@ -60,23 +60,21 @@ public:
             std::vector<Instrument> instruments,
             Config config);
 
-    virtual void on_event(const Instrument &i, AsyncStatus st) override;
-    virtual void on_event(const Account &a, AsyncStatus st) override;
-    virtual void on_event(const Instrument &i, AsyncStatus st, MarketEvent event) override;
-    virtual void on_event(const Instrument &i, const MarketEvent &subscription_type) override;
-    virtual void on_event(const Order &order, const Order::Report &report) override;
-    virtual void on_event(const Order &order, const Fill &fill) override;
-    virtual void on_event(std::span<Order> restored_orders) override;
+    virtual void on_event(const Instrument &i, AsyncResult<void> st) override;
+    virtual void on_event(const Account &a, AsyncResult<void> st)  override;
+    virtual void on_event(const Instrument &i, const MarketEvent &subscription_type)  override;
+    virtual void on_event(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev)  override;
+    virtual void on_event(const Order &order,Order::Report report, Fills fills)  override;
     virtual void subscribe(MarketEventType type, const Instrument &i)override;
     virtual void unsubscribe(MarketEventType type, const Instrument &i) override;
-    virtual Order replace(const Order &order, const Order::Setup &setup, bool amend) override;
+    virtual Order replace(const Order &order, const Order::Setup &setup, std::string_view label) override;
     virtual Fills get_fills(std::size_t limit, std::string_view filter = {}) const override;
     virtual Fills get_fills(Timestamp tp, std::string_view filter = {}) const override;
-    virtual Order place(const Instrument &instrument, const Account &account,  const Order::Setup &setup) override;
+    virtual Order place(const Instrument &instrument, const Account &account,  const Order::Setup &setup, std::string_view label) override;
     virtual void cancel(const Order &order) override;
     virtual void set_timer(Timestamp at, TimerEventCB fnptr, TimerID id) override;
     virtual Timestamp get_event_time() const override;
-    virtual Order bind_order(const Instrument &instrument, const Account &account) override;
+    virtual Order bind_order(const Instrument &instrument, const Account &account, std::string_view label) override;
     virtual void update_account(const Account &a) override;
     virtual void allocate(const Account &a, double equity) override;
     virtual bool clear_timer(TimerID id) override;
@@ -125,6 +123,12 @@ protected:
         void operator()();
     };
 
+    struct EvRestoreOrders {
+        BasicContext *me;
+        std::vector<Order> orders;
+        void operator()();
+    };
+
     struct EvMarketEventItem{
         BasicContext *me;
         Instrument i;
@@ -135,44 +139,33 @@ protected:
     struct EvUpdateInstrument {
         BasicContext *me;
         Instrument i;
-        AsyncStatus st;
+        AsyncResult<void> st;
         void operator()();
     };
 
     struct EvUpdateAccount {
         BasicContext *me;
         Account a;
-        AsyncStatus st;
+        AsyncResult<void> st;
         void operator()();
     };
 
     struct EvUpdateMarket {
         BasicContext *me;
         Instrument i;
-        AsyncStatus st;
-        MarketEvent ev;
+        MarketEventType type;
+        AsyncResult<MarketEvent> ev;
         void operator()();
     };
 
-    struct EvOrderStatus {
+    struct EvOrderReport {
         BasicContext *me;
         Order order;
         Order::Report report;
+        std::vector<Fill> fills;
         void operator()();
     };
 
-    struct EvOrderRestore {
-        BasicContext *me;
-        Order order;
-        void operator()();
-    };
-
-    struct EvOrderFill {
-        BasicContext *me;
-        Order order;
-        Fill fill;
-        void operator()();
-    };
 
     struct EvMQ {
         BasicContext *me;
@@ -185,11 +178,10 @@ protected:
             EvUpdateAccount,
             EvMarketEventItem,
             EvUpdateInstrument,
-            EvOrderStatus,
-            EvOrderFill,
+            EvOrderReport,
             EvMQ,
-            EvUpdateMarket,
-            EvOrderRestore
+            EvRestoreOrders,
+            EvUpdateMarket
             >;
 
     struct TimerItem {

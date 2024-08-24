@@ -14,6 +14,40 @@ public:
 
     using Query = Config;
 
+    ///Defines collector which accepts restored orders
+    /** @see restore_orders
+     * */
+    class IRestoredOrderCollector {
+    public:
+        ///mandatory dtor
+        virtual ~IRestoredOrderCollector() = default;
+        ///called when order has been restored
+        /**
+         * @param ord instance of order
+         * @param report last order's report
+         *
+         * @note initial state of the order must be State::restoring. The report
+         * contans last known state (captured during restoring)
+         *
+         * The strategy receives all orders as restored, then receives all
+         * fills and statuses as final.
+         */
+        virtual void order(Order ord, Order::Report report) = 0;
+        ///called for each fill recorded for the order
+        /**
+         * @param ord order
+         * @param fill fill
+         * @note the exchange should call the function order() for every new order
+         * and then the function fill() for all its fills (regardless on, whether
+         * already was reported or not).
+         */
+        virtual void fill(Order ord, Fills fill) = 0;
+        ///called when exchange finished the operation successfully
+        virtual void ok() = 0;
+        ///called when an exception / error. The exception is available as current_exception()
+        virtual void error() = 0;
+    };
+
     virtual ~IExchange() = default;
 
     ///Retrieve configuration schema for configuration needed to initialize the instance
@@ -166,51 +200,46 @@ public:
      * @param instrument associated instrument
      * @param account associated account
      * @param setup order configuration
+     * @param label user defined custom label, can be later read by get_label(). Label
+     * should be also serialized into binary form
      * @return created order.
      * @note if order cannot be created, the function should create error order,
      * which is returned in discarded state.
      */
-    virtual Order create_order(const Instrument &instrument, const Account &account, const Order::Setup &setup) = 0;
+    virtual Order create_order(const Instrument &instrument, const Account &account, const Order::Setup &setup, std::string_view label) = 0;
 
 
     ///Create order which replaces other order
     /**
      * @param replace order to replace
      * @param setup setup of new order
-     * @param amend set true if amend is required. In this case,
-     * order is not canceled, but setup is used to change its properties. If
-     * this is false, it creates atomic cancel+place operation. Both types of
-     * operation can fail and it is also possible, that failure causes that
-     * original order will be canceled but new order is not placed
+     * @param label user defined custom label, can be later read by get_label(). Label
+     * should be also serialized into binary form
      * @return created order.
      * @note if order cannot be created, the function should create error order,
      * which is returned in discarded state.
      */
-    virtual Order create_order_replace(const Order &replace, const Order::Setup &setup, bool amend) = 0;
+    virtual Order create_order_replace(const Order &replace, const Order::Setup &setup, std::string_view label) = 0;
 
-    ///Restore order which has been stored in permanent storage
+    ///restore orders
     /**
-     * @param context an arbitrary pointer passed to the function. This pointer is passed
-     * to function order_restored.
-     * @param orders list of orders
+     * Each order is stored in the database as its binary form. The serialization to
+     * binary form is performed by the exchange through Order::to_binary(). At
+     * the begin of strategy, all stored orders must be restored and associated instances
+     * recreated. This function is responsible for such operation.
      *
-     * The binary representation of the order can be obtained by function to_binary(). The
-     * format of binary representation is not specified. It can be just order identifier
-     * from the exchange. The function must use connection to the exchange to
-     * retrieve informations about the order, its status and fills and
-     * call following functions
+     * The strategy should at least remember an unique identifier of the order.
      *
-     *   - order_restore() - when order is created
-     *   - order_fill() - for all fills
-     *   - order_state_change - for final order status
+     * This function can be asynchronous. Multiple pending requests are possible at the time
+     * (so it is allowed to call this function even if previous call is not done yet)
      *
-     *   This order must be kept for single order. However it is possible to
-     *   mix events from different orders. For example you can call order_restore
-     *   for each order, then order_fill for each order and fill, and then order_state_change
-     *   for each order. Or you can call this sequence per signle order.
+     * @param acc account specifies account which should own these orders.
+     * @param orders list of orders in binary form
+     * @param collector reference to instance which receives orders and all fills
      *
+     * @note function can be asynchronous but it is allowed to execute it synchronously.
      */
-    virtual void restore_orders(void *context, std::span<SerializedOrder> orders) = 0;
+    virtual void restore_orders(const Account &acc, std::span<SerializedOrder> orders, IRestoredOrderCollector &collector) = 0;
 
     ///Applies report to order object
     /**

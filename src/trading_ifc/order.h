@@ -63,11 +63,10 @@ public:
         not_found,
         ///discarded because position would be out of limit
         position_limit,
-        ///disc
-        /// arded because max leverage would be reached
+        ///discarded because max leverage would be reached
         max_leverage,
         ///rejected during replace because there is unprocessed fill on way
-        replace_unprocessed_fill,
+        unprocessed_fill,
         ///discarded because invalid params
         invalid_params,
         ///discarded because order used in call is not compatible (dynamic cast failed)
@@ -131,32 +130,27 @@ public:
         Behavior behavior = Behavior::standard;
         ///specifies new position leverage - if applicable - default value: use shared leverage
         Decimal leverage = 0;
+        /// specifies, that replace should use amend
+        /**
+         * Amend operation causes, that order's fill is perserved. If the order
+         * is already done, the new order is canceled. If the order is
+         * not in compatible state (for example order is discarded or associated),
+         * the new order is discarded.
+         *
+         * If this argument is false, you can replace any order, however, if
+         * the state of the replacing order is different than expected, the
+         * replace operation can be rejected with reason Reason::unprocessed_fill
+         *
+         * @note this field is ignored for new order
+         */
+        bool amend = false;
+
         ///specified amount is in volume - so amount of money you want to spend on retrieve on trade (fees are not included)
         /** especially market orders can be executed as series of IOC orders if the
          * exchange doesn't support this feature
          */
         bool amount_is_volume = false;
 
-        ///Specifies constrain on filled amount when order is being replaced
-        /**
-         *
-         * Creates a constrain which is active during replace. This constrain is tested
-         * when cancel+place is used to implement replace (amend == false). The
-         * service provider checks the filled field on canceled order and if this number
-         * is below or equal to specified value, the new order is placed. If this
-         * number is above specified value, the new order is rejected.
-         *
-         * In all cases, the original order is canceled.
-         *
-         * This constrain should be checked atomically. If this not handled by exchange,
-         * the service provider must handle it by self. In this case, there can
-         * be a small lag between cancel and place, when the service provider must check
-         * the filled amount. If this field is left on default value, the constrain is not
-         * checked.
-         *
-         * This option is not checked when new order is created using place().
-         */
-        Decimal replace_filled_constrain = Decimal::inf();
 
         static constexpr Options Default() {return {};}
     };
@@ -293,6 +287,10 @@ public:
     ///Retrieve internal order id
     virtual std::string get_id() const = 0;
 
+    ///Retrieve label
+    virtual std::string get_label() const = 0;
+
+
     class Null;
 };
 
@@ -326,6 +324,7 @@ public:
     virtual SerializedOrder to_binary() const override {return {};}
     virtual Origin get_origin() const override {return Origin::unknown;};
     virtual std::string get_id() const override {return {};}
+    virtual std::string get_label() const override {return {};}
     virtual const Setup &get_setup() const override {
         static Setup empty;
         return empty;
@@ -498,6 +497,9 @@ public:
      * to retrieve Order from ID
      */
     std::string get_id() const {return _ptr->get_id();}
+
+    ///Retrieve label which was set on place_order or replace_order
+    std::string get_label() const {return _ptr->get_label();}
 
 
 };

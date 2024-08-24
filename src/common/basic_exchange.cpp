@@ -45,13 +45,13 @@ void BasicExchangeContext::income_data(const Instrument &i, const MarketEvent &e
 }
 
 Order BasicExchangeContext::create_order(const Instrument &instrument,
-        const Account &account, const Order::Setup &setup) {
-    _ptr->create_order(instrument, account, setup);
+        const Account &account, const Order::Setup &setup, std::string_view label) {
+    return _ptr->create_order(instrument, account, setup, label);
 }
 
 Order BasicExchangeContext::create_order_replace(const Order &replace,
-        const Order::Setup &setup, bool amend) {
-    _ptr->create_order_replace(replace, setup, amend);
+        const Order::Setup &setup, std::string_view label) {
+    return _ptr->create_order_replace(replace, setup, label);
 }
 
 std::optional<IExchangeInfo::Icon> BasicExchangeContext::get_icon() const {
@@ -141,34 +141,22 @@ void BasicExchangeContext::batch_place(IEventTarget *target, std::span<Order> or
 void BasicExchangeContext::batch_cancel(std::span<Order> orders) {
     _ptr->batch_cancel(orders);
 }
-void BasicExchangeContext::restore_orders(IEventTarget *target, std::span<SerializedOrder> orders) {
-    _ptr->restore_orders(target, orders);
+void BasicExchangeContext::restore_orders(const Account &acc, std::span<SerializedOrder> orders, IRestoredOrderCollector &collector) {
+    _ptr->restore_orders(acc, orders, collector);
 }
 
-void BasicExchangeContext::order_state_changed(const Order &order, const Order::Report &report) {
+void BasicExchangeContext::order_report(const Order &order, Order::Report report, Fills fills) {
     std::lock_guard _(_mx);
     auto iter= _orders.find(order);
     if (iter != _orders.end()) {
-        iter->second->on_event(iter->first, report);
-        if (IOrder::is_done(report.new_state)) {
+        bool is_done = IOrder::is_done(report.new_state);
+        iter->second->on_event(iter->first, std::move(report), std::move(fills));
+        if (is_done) {
             _orders.erase(iter);
         }
     }
 }
 
-void BasicExchangeContext::order_fill(const Order &order, const Fill &fill) {
-    std::lock_guard _(_mx);
-    auto iter= _orders.find(order);
-    if (iter != _orders.end()) {
-        iter->second->on_event(iter->first, fill);
-    }
-
-}
-
-void BasicExchangeContext::order_restore(void *target, const Order &order) {
-    _orders.emplace(order, reinterpret_cast<IEventTarget *>(target));
-
-}
 
 BasicExchangeContext &BasicExchangeContext::from_exchange(ExchangeInfo ex) {
     const IExchangeInfo *e = ex.get_handle().get();

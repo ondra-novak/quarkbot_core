@@ -10,24 +10,26 @@ namespace trading_api {
 class AssociatedOrder: public IOrder::Null {
 public:
 
-    AssociatedOrder(Instrument instrument, Account account)
-        :_instrument(std::move(instrument)),_account(std::move(account)) {}
+    AssociatedOrder(Instrument instrument, Account account, std::string_view label)
+        :_instrument(std::move(instrument)),_account(std::move(account)),label(label) {}
 
     virtual Instrument get_instrument() const override {return _instrument;}
     virtual Account get_account() const override {return _account;}
     virtual State get_state() const override {return State::associated;}
     virtual SerializedOrder to_binary() const override {return {};}
     virtual Origin get_origin() const override {return Origin::strategy;}
+    virtual std::string get_label() const {return label;}
 
 protected:
     Instrument _instrument;
     Account _account;
+    std::string label;
 };
 
 class ErrorOrder: public AssociatedOrder {
 public:
-    ErrorOrder(Instrument instrument, Account account, Reason r, std::string message)
-        :AssociatedOrder(std::move(instrument),std::move(account))
+    ErrorOrder(Instrument instrument, Account account, std::string_view label, Reason r, std::string message)
+        :AssociatedOrder(std::move(instrument),std::move(account), label)
         ,_r(r),_message(std::move(message)) {}
 
     virtual State get_state() const override {return State::discarded;}
@@ -40,10 +42,11 @@ protected:
 };
 
 ///Create error order (create_order cannot throw exception)
-inline Order order_error(Instrument instrument, Account account, Order::Reason r, std::string msg) {
+inline Order order_error(Instrument instrument, Account account, std::string_view label, Order::Reason r, std::string msg) {
     return Order(std::make_shared<ErrorOrder>(
             std::move(instrument),
             std::move(account),
+            label,
             r,std::move(msg)));
 }
 
@@ -61,18 +64,19 @@ public:
     };
 
 
-    BasicOrder(Instrument instrument, Account account, Setup setup, Origin origin)
+    BasicOrder(Instrument instrument, Account account, Setup setup, std::string_view label, Origin origin)
         :_instrument(std::move(instrument))
         ,_account(std::move(account))
         ,_setup(std::move(setup))
-        ,_origin(std::move(origin)) {}
-    BasicOrder(Order replaced, Setup setup, bool amend, Origin origin)
+        ,_origin(std::move(origin))
+        ,_label(label){}
+    BasicOrder(Order replaced, Setup setup, std::string_view label, Origin origin)
         :_instrument(replaced.get_instrument())
         ,_account(replaced.get_account())
         ,_setup(std::move(setup))
         ,_origin(std::move(origin))
         ,_replaced(replaced.get_handle())
-        ,_amend(amend) {}
+        ,_label(label) {}
     virtual State get_state() const override {
         return _status.last_report.new_state;
     }
@@ -113,6 +117,8 @@ public:
         return dynamic_cast<const BasicOrder &>(*ord.get_handle());
     }
 
+    virtual std::string get_label() const {return _label;}
+
 protected:
 
     Instrument _instrument;
@@ -120,7 +126,7 @@ protected:
     Setup _setup;
     Origin _origin;
     std::weak_ptr<const IOrder> _replaced;
-    bool _amend = false;
+    std::string _label;
 
     mutable Status _status;
 

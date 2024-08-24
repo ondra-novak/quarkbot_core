@@ -48,34 +48,16 @@ public:
     virtual bool clear_timer(TimerID id) = 0;
 
     ///Place an order
-    virtual Order place(const Instrument &instrument, const Account &account, const Order::Setup &setup) = 0;
+    virtual Order place(const Instrument &instrument, const Account &account, const Order::Setup &setup, std::string_view label) = 0;
 
     ///Creates and bind an order to an instrument
-    /**
-     * You can use replace() function to place the order with new setup. This
-     * allows to track single order without need to know, whether order is actually
-     * placed or not
-     *
-     * @param instrument associated instrument
-     * @return dummy order (can be replaced)
-     */
-    virtual Order bind_order(const Instrument &instrument, const Account &account) = 0;
+    virtual Order bind_order(const Instrument &instrument, const Account &account, std::string_view label) = 0;
 
     ///Cancel given order
     virtual void cancel(const Order &order) = 0;
 
     ///Replace order
-    /**
-     * @param order order to replace
-     * @param setup new setup of the order
-     * @return new order
-     *
-     * @note if replace partially filled order, filled amount is perserved
-     * @note replace can fail, if exchange cannot garanteed to replace order
-     * without avoiding double execution. In this case, old order is canceled
-     * new order is rejected
-     */
-    virtual Order replace(const Order &order, const Order::Setup &setup, bool amend) = 0;
+    virtual Order replace(const Order &order, const Order::Setup &setup, std::string_view label) = 0;
 
     ///Retrieve recent fills
     virtual Fills get_fills(std::size_t limit, std::string_view filter = {}) const = 0;

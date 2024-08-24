@@ -8,7 +8,7 @@
 #include "../trading_ifc/order.h"
 #include "../trading_ifc/fill.h"
 #include "../trading_ifc/function.h"
-#include "../trading_ifc/async.h"
+#include "../trading_ifc/awaiter.h"
 #include "../trading_ifc/market_event.h"
 
 
@@ -38,7 +38,7 @@ public:
      * into execution queue. Don't call exchange object directly from the event. Do
      * not perform blocking operations in this event
      */
-    virtual void on_event(const Instrument &i, AsyncStatus st) = 0;
+    virtual void on_event(const Instrument &i, AsyncResult<void> st) = 0;
 
     ///called when update on an account is finished
     /**
@@ -47,7 +47,7 @@ public:
      * into execution queue. Don't call exchange object directly from the event. Do
      * not perform blocking operations in this event
      */
-    virtual void on_event(const Account &a, AsyncStatus st) = 0;
+    virtual void on_event(const Account &a, AsyncResult<void> st) = 0;
 
     ///called when subscription update
     /**
@@ -65,17 +65,11 @@ public:
      * @param st operation status
      * @param subscription_type
      */
-    virtual void on_event(const Instrument &i, AsyncStatus st, MarketEvent ev) = 0;
+    virtual void on_event(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) = 0;
 
-    ///called when order state changed
-    virtual void on_event(const Order &order,const Order::Report &report) = 0;
+    ///called when order state changed or fills
+    virtual void on_event(const Order &order,Order::Report report, Fills fills) = 0;
 
-    ///called when fill is detected
-    virtual void on_event(const Order &order, const Fill &fill) = 0;
-
-    ///called when orders are restored (even if empty)
-    /** Response to restore_order - must always return, even if there is nothing to restore */
-    virtual void on_event(std::span<Order> restored_orders) = 0;
 
 
 };

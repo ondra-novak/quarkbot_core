@@ -1,11 +1,24 @@
 #pragma once
 #include "istrategy.h"
+#include "awaiter.h"
+
+#include <queue>
 
 namespace trading_api {
 
 ///Strategy base object - extend this object to create own strategy
 class Strategy: public IStrategy {
 public:
+
+
+    template<typename T>
+    using AwaitableRegFn = Function<void(Function<void(AsyncResult<T>)>)>;
+    template<typename T>
+    using Awaitable = AwaitableResult<T,  AwaitableRegFn<T> >;
+    template<typename T>
+    using Callback = typename Awaitable<T>::Callback;
+    template<typename T>
+    using CallbackList = std::deque<Callback<T> >;
 
     ///strategy has always default constructor
     Strategy() = default;
@@ -21,6 +34,15 @@ protected: //recommended overrides
         return {};
     }
 
+    ///called before on_start() if there are active orders (from previous run)
+    /**
+     * @param active_orders active orders. All orders have restored state. They
+     * actuall state is set through standard report which is send after on_start()
+     */
+    virtual void on_active_orders(ActiveOrders active_orders) {
+        log.warning("called pure virtual on_active_orders() - you should override");
+    }
+
     ///this is strategy's entry point. You need to declare own implementation
     /**
      * Function is called as an event, but only once at the beginning. In this
@@ -31,24 +53,9 @@ protected: //recommended overrides
      * strategy finishes on_start(). If you need a special processing after these
      * reports arrive, you can use on_idle() to schedule execution
      */
-    virtual void on_start() override {}
+    virtual void on_start() override {
+        log.warning("called pure virtual on_start() - you should override");
 
-    ///called when order is filled (full or partially)
-    /**
-     * @param o order reference
-     * @param f fill record
-     * @return function should return a label of this fill. This fill is then
-     * stored to the database with this label and allows later filtering. If you
-     * don't using labels, return empty string
-     *
-     * @note if the exception is thrown during processing this function, the fill
-     * is not stored into database!!!
-     *
-     */
-    virtual std::string on_fill(const Order &o, const Fill &f) override {
-        std::ignore = o;
-        std::ignore = f;
-        return {};
     }
 
     ///Called when an uncaught exception is detected
@@ -61,7 +68,9 @@ protected: //recommended overrides
      * However, if the function throws an exception, the exception is reported
      * to the log file and all active transactions are rollbacked
      */
-    virtual void on_unhandled_exception() override {throw;}
+    virtual void on_unhandled_exception() override {
+        throw;
+    }
 
 
 
@@ -205,9 +214,11 @@ public:  //context API
      *
      * @note In most cases, you don't need to update account when fill.
      */
-    UpdateAwaiter<Strategy, Account> update_account(const Account &a)  {
+    Awaitable<void> update_account(const Account &a)  {
         _ctx->update_account(a);
-        return {this, a};
+        return [this, a](auto &&cb){
+            _update_account_cbs[a].emplace_back(std::move(cb));
+        };
     }
 
 
@@ -220,9 +231,11 @@ public:  //context API
      * @note you don't need to update instrument often.
      */
 
-    UpdateAwaiter<Strategy,Instrument> update_instrument(const Instrument &i)  {
+    Awaitable<void> update_instrument(const Instrument &i)  {
         _ctx->update_instrument(i);
-        return {this, i};
+        return [this, i](auto &&cb){
+            _update_instrument_cbs[i].emplace_back(std::move(cb));
+        };
     }
 
 
@@ -256,8 +269,12 @@ public:  //context API
      * co_await sleep_until(at, id);
      * @endcode
      */
-    TimerAwaiter sleep_until(Timestamp at, TimerID id = 0) {
-        return {_ctx, at, id};
+    Awaitable<void> wait_until(Timestamp at, TimerID id = 0) {
+        return [this, at, id](auto &&cb) {
+            _ctx->set_timer(at, [cb = std::move(cb)]{
+                cb(AsyncResult<void>(std::in_place));
+            });
+        };
     }
 
     ///Sleep for specified duration
@@ -283,8 +300,8 @@ public:  //context API
      * @endcode
      */
     template<typename A, typename B>
-    TimerAwaiter sleep_for(std::chrono::duration<A,B> dur, TimerID id = 0) {
-        return {_ctx, get_event_time()+dur, id};
+    Awaitable<void> wait_for(std::chrono::duration<A,B> dur, TimerID id = 0) {
+        return wait_until(get_event_time()+dur, id);
     }
 
     ///Interrupts a sleep operation
@@ -297,28 +314,17 @@ public:  //context API
      * sleep operation is co_awaited, then an AsyncCallException is thrown inside in
      * coroutine (coroutine is finished during this call)
      */
-    bool interrupt_sleep(TimerID id) {return _ctx->clear_timer(id);}
+    bool interrupt_wait(TimerID id) {return _ctx->clear_timer(id);}
     ///Place an order
     /**
+     * @param account account used to trade the instrument
      * @param instrument instrument on where order will be placed
-     * @param account account used to trade on the instrument
      * @param setup order type and configuration
-     * @return an object, which can be used to define callback and convert to Order instance
-     *
-     * @code
-     * Order new_order = place_order(i,a,setup) >> [this](Order ord) {
-     *      //handle order report
-     * };
-     * if (new_order.discarded()) {
-     *      //failed to place
-     * }
-     * @endcode
-     * @note setting callback function is optional. Without it, order reports are
-     * passed through function on_order. If you override this function, you should
-     * call original implementation.
+     * @param label custom label (don't need to be unique). The label can be retrieves by get_label()
+     * @return created order
      */
-    OrderResult<Strategy> place_order(const Instrument &instrument, const Account &account, const Order::Setup &setup) {
-        return {this,_ctx->place(instrument, account, setup)};
+    Order place_order(const Account &account, const Instrument &instrument, const Order::Setup &setup, std::string_view label = {}) {
+        return _ctx->place(instrument, account, setup, label);
     }
 
     ///Creates an order, which is asociated with an instrument, but it is not placed
@@ -327,11 +333,14 @@ public:  //context API
      * allows to track single order without need to know, whether order is actually
      * placed or not
      *
+     * @param account associated account
      * @param instrument associated instrument
+     * @param label custom label.
+     *
      * @return dummy order (can be replaced)
      */
-    Order bind_order(const Instrument &instrument, const Account &account) const {
-        return _ctx->bind_order(instrument, account);
+    Order bind_order(const Account &account, const Instrument &instrument, std::string_view label) const {
+        return _ctx->bind_order(instrument, account, label);
     }
 
     ///Cancel given order
@@ -348,26 +357,36 @@ public:  //context API
     /**
      * @param order order to replace.
      * @param setup new setup of the order
-     * @param amend try to amend current order - the exchange just modifies amount,
-     * limit or stop price if order is pending (waiting for trigger). So you can
-     * amend only order with same side, instrument, etc. If amend is not possible,
-     * because above rules, new order is discarded and original order is untouched.
-     * If exchange doesn't support amend, the service provider can simulate this
-     * feature. In all cases, filled amount is transfered to the new order.
+     * @param label custom label. If this value is empty, the function uses label of the
+     * order being replaced.
      *
      * @return new order
-     *
-     * @note if replace partially filled order, filled amount is perserved
-     * @note replace can fail, if exchange cannot garanteed to replace order
-     * without avoiding double execution. In this case, old order is canceled
-     * new order is rejected
-     *
-     * @note if order is pending, you probably can replace with order of same
-     * side and behavior. If order is done, it can be replaced with any
-     * order (it only associates with order's original instrument)
      */
-    OrderResult<Strategy> replace_order(const Order &order, const Order::Setup &setup, bool amend)  {
-        return {this,_ctx->replace(order, setup, amend)};
+    Order replace_order(const Order &order, const Order::Setup &setup, std::string_view label)  {
+        return _ctx->replace(order, setup, label.empty()?order.get_label():label);
+    }
+
+
+
+    ///Request awaiter for order report
+    /**
+     * @param order order
+     * @return awaiter. Awaiter can be used to co_await, or you can attach a callback.
+     * Note this is one-shot action - only first report is received by callback, you
+     * need to request report again. Result of co_await operation is fills. This
+     * array can be empty, which means, that only status changed, without fills
+     * @note there can be only one awaiter per order. Multiple awaiters cancels each other
+     */
+    Awaitable<Fills> on_report(const Order &order) {
+        if (order.done()) {
+            return [](auto &&cb){
+                cb(Fills{});
+            };
+        } else {
+            return [this, order](auto &&cb) {
+                _order_report[order].emplace_back(std::move(cb));
+            };
+        }
     }
 
 
@@ -448,19 +467,12 @@ public:  //context API
     /**
      * @param type type of subscription (ticker, orderbook)
      * @param i instrument instance
-     * @return subcription control object. You can use operator >> to defined callback
-     * function which handles market data. This is optional feature, otherwise
-     * all market events are passed through function on_market_event()
      *
-     * @code
-     * subscribe(SubcriptionType::ticker, i) >> [this](Instrument i, MarketEvent ev) {
-     *      //process market event
-     * };
-     * @endcode
+     * market events are passed through on_market_event. You can one-shot wait on
+     * specific market event by function receive_event()
      */
-    Subscription<Strategy> subscribe(MarketEventType type, const Instrument &i) {
+    void subscribe(MarketEventType type, const Instrument &i) {
         _ctx->subscribe(type, i);
-        return {this, type, i};
     }
 
     ///Unsubscribe market data
@@ -475,7 +487,19 @@ public:  //context API
      */
     void unsubscribe(MarketEventType type, const Instrument &i) {
         _ctx->unsubscribe(type, i);
-        remove_subscription(type, i);
+    }
+
+
+    ///Awaitable to receive next market event
+    /**
+     * @return awaitable, which returns pair, containing instrument and market event.
+     * This function is introduced to help write strategies as coroutines.
+     * You can call receive_event multiple times, all awaiters will receive the next event
+     */
+    Awaitable<std::pair<Instrument, MarketEvent> > receive_event() {
+        return [this](auto &&cb) {
+            _receive_market_event_cbs.emplace_back(std::move(cb));
+        };
     }
 
     ///Request one-shot market update
@@ -518,9 +542,11 @@ public:  //context API
      * }
      * @endcode
      */
-    MarketEventAwaiter<Strategy> update_market(MarketEventType type, const Instrument &i) {
+    Awaitable<MarketEvent> update_market(MarketEventType type, const Instrument &i) {
         _ctx->update_market(i, type);
-        return {this, i, type};
+        return [this, i, type](auto &&cb) {
+            _update_market_cbs[InstSubPair(i, type)].emplace_back(std::move(cb));
+        };
     }
 
     ///Retrieve logger object (for logging and output)
@@ -534,9 +560,8 @@ public:  //context API
      *
      * @param channel channel name. Name can't be empty string
      */
-    MQSubscription<Strategy> subscribe_channel(std::string_view channel) {
+    void subscribe_channel(std::string_view channel) {
         _ctx->mq_subscribe_channel(channel);
-        return {this, channel};
     }
 
     ///Unsubscribe MQ channel
@@ -545,7 +570,6 @@ public:  //context API
      */
     void unsubscribe_channel(std::string_view channel) {
         _ctx->mq_unsubscribe_channel(channel);
-        _mq_callbacks.erase(std::string(channel));
     }
 
     ///Send message to a channel
@@ -561,22 +585,6 @@ public:  //context API
         _ctx->mq_send_message(channel, msg);
     }
 
-    ///Defines callback function for all messages sent directly to mailbox
-    /**
-     * @return subscription object
-     *
-     * @code
-     * on_private_message() >> [this](const Message &msg) {
-     *      auto sender = msg.get_sender();
-     *      auto content = msg.get_content;
-     *      //process message
-     *      send_message(sender, response);
-     * };
-     * @endcode
-     */
-    MQSubscription<Strategy> on_private_message() {
-        return {this, {}};
-    }
 
     ///Enqueue operation on idle cycle
     /**
@@ -594,7 +602,11 @@ public:  //context API
      *
      * You can enqueue multiple idle calls. They will consume more idle cycles
      */
-    IdleAwaiter<Strategy> on_idle() {return this;}
+    Awaitable<void> on_idle() {
+        return [this](auto &&cb) {
+            _on_idle_cbs.push_back(std::move(cb));
+        };
+    }
 
     ///Get extension service
     /**
@@ -622,6 +634,7 @@ public:  //context API
 
 
 
+
 protected: //optional overrides
     ///called on market event
     /**
@@ -631,35 +644,36 @@ protected: //optional overrides
      * @note you need to call the original implementation in order to call all registered callbacks
      */
     virtual void on_market_event(const Instrument &i, const MarketEvent &ev) override {
-        handle_market_event(i, ev);
+        invoke_callbacks(_receive_market_event_cbs, std::pair<Instrument,MarketEvent>(i, ev));
     }
     ///Called when a change of order status occurs
     /**
      * @param ord order reference
      * @note you need to call the original implementation in order to call all registered callbacks
      */
-    virtual void on_order(const Order &ord) override {
-        handle_callbacks(ord);
+    virtual void on_order_report(const Order &ord, std::vector<Fill> fills) override {
+        auto iter = _order_report.find(ord);
+            if (iter != _order_report.end() && invoke_callbacks(iter->second, std::move(fills))) {
+        }
     }
     ///It is called when an MQ message arrives on the subscribed channel or in the private mailbox
     /**
      * @param msg MQ message
      * @note you need to call the original implementation in order to call all registered callbacks
      */
-    virtual void on_mq_message(const Message &msg) override {
-        handle_callbacks(msg);
-    };
+    virtual void on_mq_message(const Message &) override {};
     ///Called when there are no events
     /**
      * @note you need to call the original implementation in order to call all registered callbacks
      *
      */
     virtual bool on_context_idle() override {
-        if (!_on_idle_queue.empty()) {
-            _on_idle_queue.front()();
-            _on_idle_queue.pop();
+        if (!_on_idle_cbs.empty()) {
+            _on_idle_cbs.front()(true);
+            _on_idle_cbs.pop_front();
+            return false;
         }
-        return _on_idle_queue.empty();
+        return true;
     }
     ///
     /**
@@ -669,8 +683,11 @@ protected: //optional overrides
      * @note you need to call the original implementation in order to call all registered callbacks
      *
      */
-    virtual void on_update_complete(const Account &a, const AsyncStatus &status) override {
-        complete_update(_update_account_cbs, a, status);
+    virtual void on_update_complete(const Account &a, AsyncResult<void> result) override {
+        auto iter = _update_account_cbs.find(a);
+        if (iter != _update_account_cbs.end() && invoke_callbacks(iter->second,std::move(result))) {
+            _update_account_cbs.erase(iter);
+        }
     }
     /**
      * @param i instrument updated
@@ -679,19 +696,22 @@ protected: //optional overrides
      * @note you need to call the original implementation in order to call all registered callbacks
      *
      */
-    virtual void on_update_complete(const Instrument &i, const AsyncStatus &status) override {
-        complete_update(_update_instrument_cbs, i, status);
-    }
-
-    virtual void on_update_complete(const Instrument &i, const AsyncStatus &status, const MarketEvent &event) override {
-        InstSubPair key(i, event.get_type());
-        if (status.get_status() == AsyncStatus::ok) {
-            complete_update(_update_market_event_cbs, key, MarketEventStatus(event));
-        } else {
-            complete_update(_update_market_event_cbs, key, MarketEventStatus(status));
+    virtual void on_update_complete(const Instrument &i, AsyncResult<void> result) override {
+        auto iter = _update_instrument_cbs.find(i);
+        if (iter != _update_instrument_cbs.end() && invoke_callbacks(iter->second,std::move(result))) {
+            _update_instrument_cbs.erase(iter);
         }
     }
 
+    virtual void on_update_complete(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> result) override {
+        auto iter = _update_market_cbs.find(InstSubPair(i, type));
+        if (iter != _update_market_cbs.end() && invoke_callbacks(iter->second,std::move(result))) {
+            _update_market_cbs.erase(iter);
+        }
+    }
+
+protected:
+    Log log;
 
 private:
     IContext *_ctx = nullptr;
@@ -703,96 +723,28 @@ private:
         }
     };
 
-
-    virtual void on_init(IContext *ctx) override {_ctx = ctx;}
-    std::unordered_map<InstSubPair, Function<void(const Instrument &, const MarketEvent &)>, InstSubPairHasher > _subscriptions_callbacks;
-    std::unordered_map<Order, Function<void(const Order &) >, Order::Hasher > _order_callbacks;
-    std::unordered_map<std::string, Function<void(MQClient::Message)> > _mq_callbacks;
-    std::queue<Function<void()> > _on_idle_queue;
-    std::vector<std::pair<Account, CompletionCB> > _update_account_cbs;
-    std::vector<std::pair<Instrument, CompletionCB> > _update_instrument_cbs;
-    std::vector<std::pair<InstSubPair, Function<void(const MarketEventStatus &)> > > _update_market_event_cbs;
-
-    template<typename Fn>
-    void add_callback(const Order &ord, Fn &&fn) {
-        if (ord.discarded()) return;
-        _order_callbacks[ord] = std::forward<Fn>(fn);
+    virtual void on_init(IContext *ctx) override {
+        _ctx = ctx;
+        log = _ctx->get_logger();
     }
-    bool handle_callbacks(const Order &ord) {
-        auto iter = _order_callbacks.find(ord);
-        if (iter != _order_callbacks.end()) {
-            iter->second(ord);
-            if (ord.done()) _order_callbacks.erase(iter);
-            return true;
+
+    std::unordered_map<Account, CallbackList<void>, Account::Hasher> _update_account_cbs;
+    std::unordered_map<Instrument, CallbackList<void>,Instrument::Hasher> _update_instrument_cbs;
+    std::unordered_map<InstSubPair, CallbackList<MarketEvent>,InstSubPairHasher> _update_market_cbs;
+    std::unordered_map<Order, CallbackList<Fills>,Order::Hasher> _order_report;
+    CallbackList<void>  _on_idle_cbs;
+    CallbackList<std::pair<Instrument,MarketEvent> > _receive_market_event_cbs;
+
+    template<typename CBList, typename Result>
+    bool invoke_callbacks(CBList &lst, Result res) {
+        std::size_t cnt = lst.size();
+        for (std::size_t i = 0; i <cnt; ++i) {
+            lst.front()(res);
+            lst.pop_front();
         }
-        return false;
-    }
-    template<typename Fn>
-    void add_subscription(MarketEventType type, const Instrument &i, Fn &&fn) {
-        _subscriptions_callbacks[InstSubPair(i, type)] = std::forward<Fn>(fn);
-    }
-    void remove_subscription(MarketEventType type, const Instrument &i) {
-        _subscriptions_callbacks.erase(InstSubPair(i, type));
+        return lst.empty();
     }
 
-    bool handle_market_event(const Instrument &i, const MarketEvent &ev) {
-        auto iter = _subscriptions_callbacks.find(InstSubPair(i, ev.get_type()));
-        if (iter != _subscriptions_callbacks.end()) {
-            iter->second(i, ev);
-            return true;
-        }
-        return false;
-    }
-    template<typename Fn>
-    void add_mq_subscription(std::string channel, Fn &&fn) {
-        _mq_callbacks[std::move(channel)] = std::forward<Fn>();
-    }
-
-    bool handle_callbacks(const Message &msg) {
-        auto iter = _mq_callbacks.find(std::string(msg.get_channel()));
-        if (iter != _mq_callbacks.end()) {
-            iter->second(msg);
-            return true;
-        }
-        return false;
-    }
-    template<typename Fn>
-    void register_idle(Fn &&fn) {
-        _on_idle_queue.push(std::forward<Fn>(fn));
-    }
-    template<typename A, typename B, typename Status>
-    void complete_update(A &cbs, B &subj, const Status &st) {
-        std::exception_ptr e = {};
-        auto z = std::move(cbs);
-        auto iter = std::remove_if(z.begin(), z.end(), [&](const auto &x){
-            if (x.first == subj) {
-                try {
-                    x.second(st);
-                } catch (...) {
-                    e = std::current_exception();
-                }
-                return true;
-            } else {
-                return false;
-            }
-        });
-        z.erase(iter, z.end());
-        std::swap(z, cbs);
-        for (auto &x: z) cbs.push_back(std::move(x));
-        if (e) std::rethrow_exception(e);
-    }
-    template<std::invocable<AsyncStatus> CB>
-    void register_update(const Account &a, CB &&cb) {
-        _update_account_cbs.emplace_back(a, std::forward<CB>(cb));
-    }
-    template<std::invocable<AsyncStatus> CB>
-    void register_update(const Instrument &i, CB &&cb) {
-        _update_instrument_cbs.emplace_back(i, std::forward<CB>(cb));
-    }
-    template<std::invocable<AsyncStatus> CB>
-    void register_update(const Instrument &i, MarketEventType type, CB &&cb) {
-        _update_market_event_cbs.emplace_back(InstSubPair(i, type), std::forward<CB>(cb));
-    }
 };
 
 

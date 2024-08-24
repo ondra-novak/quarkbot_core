@@ -14,6 +14,7 @@ class BasicExchangeContext: public IExchangeContext, public IExchangeInfo, publi
 public:
 
     using Query = IExchange::Query;
+    using IRestoredOrderCollector = IExchange::IRestoredOrderCollector;
 
 
     BasicExchangeContext(std::string label, Network ntw, Log log);
@@ -37,25 +38,25 @@ public:
      */
     void disconnect(const IEventTarget *target);
 
-    ///Request to update orders from exchange
+    ///restore orders
     /**
-     * Function is used to update state of orders stored in database
+     * Each order is stored in the database as its binary form. The serialization to
+     * binary form is performed by the exchange through Order::to_binary(). At
+     * the begin of strategy, all stored orders must be restored and associated instances
+     * recreated. This function is responsible for such operation.
      *
-     * @param target target which will consume update events. Impementation
-     * must pass this pointer to order_restore()
-     * @param orders list of orders to update. The orders are passed in binary
-     * serialized form (because they are read from the database). The
-     * exchange instance must use binary form to restore instances of Order class.
-     * Then all these orders are passed as on_order event. If there are unprocessed
-     * fills, the exachange must also generate on_fill()
+     * The strategy should at least remember an unique identifier of the order.
      *
-     * @b implementation: the service provider must know, which order can restore.
-     * The binary representation must contain identification of the exchange. So
-     * the service provider can restore orders which are known for the exchange.
-     * other orders are order_restore(), then order_fill for every fill on the order,
-     * and finally order_state_change with final order state.
+     * This function can be asynchronous. Multiple pending requests are possible at the time
+     * (so it is allowed to call this function even if previous call is not done yet)
+     *
+     * @param acc account specifies account which should own these orders.
+     * @param orders list of orders in binary form
+     * @param collector reference to instance which receives orders and all fills
+     *
+     * @note function can be asynchronous but it is allowed to execute it synchronously.
      */
-    void restore_orders(IEventTarget *target, std::span<SerializedOrder> orders);
+    void restore_orders(const Account &acc, std::span<SerializedOrder> orders, IRestoredOrderCollector &collector);
     ///Request to subscribe market data (stream)
     /**
      * @param target object which consumes updates
@@ -80,7 +81,7 @@ public:
      * @b implementation: The function must create own instance of the order. Default implementation
      * creates BasicOrder instance. It must not place the order
      */
-    Order create_order(const Instrument &instrument, const Account &account, const Order::Setup &setup);
+    Order create_order(const Instrument &instrument, const Account &account, const Order::Setup &setup, std::string_view label);
 
     ///Create order instance which replaces other order - don't place order yet
     /**
@@ -92,7 +93,7 @@ public:
      * @b implementation: The function must create own instance of the order. Default implementation
      * creates BasicOrder instance. It must not place the order
      */
-    Order create_order_replace(const Order &replace, const Order::Setup &setup, bool amend);
+    Order create_order_replace(const Order &replace, const Order::Setup &setup, std::string_view label);
 
     ///Place orders in batch
     /**
@@ -244,30 +245,9 @@ protected:
     virtual void object_updated(const Instrument &i, AsyncStatus st) override;
 
     virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) override;
-    ///call this function when order's state changed
-    /**
-     * As the orders are const, you cannot change state of the order directly. The
-     * state is changed during processing the event because orders are in possesion
-     * of the strategy
-     *
-     * @param order order instance
-     * @param state new state
-     * @param reason optional reason (for the state)
-     * @param message optional string message if error
-     */
-    virtual void order_state_changed(const Order &order, const Order::Report &report) override;
-    ///call this function for every fill on the order
-    /**
-     * @param order order instance
-     * @param fill fill information
-     */
-    virtual void order_fill(const Order &order, const Fill &fill) override;
-    ///call this function for every restored order from set passed to restore_orders()
-    /**
-     * @param target target argument passed to function restored_orders
-     * @param order restored order instance
-     */
-    virtual void order_restore(void *target, const Order &order) override;
+
+
+    virtual void order_report(const Order &order, Order::Report report, Fills fills) override;
 
     virtual std::string get_label() const override;
 

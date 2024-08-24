@@ -1,5 +1,8 @@
 #include "basic_context.h"
 #include "../trading_ifc/basic_order.h"
+#include <list>
+#include <future>
+#include <vector>
 
 namespace trading_api {
 
@@ -13,6 +16,30 @@ BasicContext::~BasicContext() {
     }
 
 }
+
+class OrderCollector: public IExchange::IRestoredOrderCollector {
+public:
+    virtual void order(Order ord, Order::Report report) {
+        orders[ord].report = report;
+    }
+    virtual void fill(Order ord, Fills fill) {
+        auto &f = orders[ord].fills;
+        f.insert(f.end(), fill.begin(), fill.end());
+    }
+    virtual void ok() {
+        promise.set_value();
+    }
+    virtual void error(){
+        promise.set_exception(std::current_exception());
+    }
+
+    struct Status {
+        Order::Report report;
+        Fills fills;
+    };
+    std::unordered_map<Order, Status, Order::Hasher> orders;
+    std::promise<void> promise;
+};
 
 
 void BasicContext::init(std::unique_ptr<IStrategy> strategy,
@@ -31,30 +58,40 @@ void BasicContext::init(std::unique_ptr<IStrategy> strategy,
         _exchanges.emplace(i.get_exchange(),Batches{});
     }
     _strategy->on_init(this);
+    std::list<OrderCollector> collected_orders;
+    std::list<std::future<void> > collected_futures;
     for (const auto &a: _accounts) {
         auto ex = a.get_exchange();
         auto &ctx = BasicExchangeContext::from_exchange(ex);
         auto orders = _storage->load_open_orders(a);
         if (!orders.empty()) {
-            ctx.restore_orders(this, {orders.data(), orders.size()});
-            ++_start_counter;
+            auto &c = collected_orders.emplace_back();
+            ctx.restore_orders(a, orders, c);
         }
     }
-    _queue.push(EvStart{this});
-    if (_start_counter == 0) {
-        notify_queue();
+    std::transform(collected_orders.begin(), collected_orders.end(),
+            std::back_inserter(collected_futures), [](OrderCollector &x) {
+       return x.promise.get_future();
+    });
+    for (auto &x: collected_futures) x.wait();
+    for (auto &x: collected_futures) x.get();
+
+    EvRestoreOrders restored_orders{this,{}};
+    for (auto &x: collected_orders) {
+        for (auto &[k,v]: x.orders) restored_orders.orders.push_back(k);
     }
+    if (!restored_orders.orders.empty()) {
+        _queue.push(std::move(restored_orders));
+    }
+    _queue.push(EvStart{this});
+    for (auto &x: collected_orders) {
+        for (auto &[k,v]: x.orders) {
+            _queue.push(EvOrderReport{this,k, std::move(v.report), std::move(v.fills)});
+        }
+    }
+    notify_queue();
 }
 
-void BasicContext::on_event(std::span<Order> restored_orders) {
-    for (const auto &ord: restored_orders) {
-        _queue.push(EvOrderRestore{this, ord});
-    }
-    _start_counter--;
-    if (_start_counter == 0) {
-        notify_queue();
-    }
-}
 
 void BasicContext::on_event(const Instrument &i, const MarketEvent &event) {
     std::lock_guard _(_queue_mx);
@@ -73,24 +110,16 @@ void BasicContext::on_event(const Instrument &i, const MarketEvent &event) {
     }
 }
 
-void BasicContext::on_event(const Order &order, const Fill &fill) {
+void BasicContext::on_event(const Order &order,Order::Report report, Fills fills) {
     std::lock_guard _(_queue_mx);
-    _queue.push(EvOrderFill{this, order, fill});
-    notify_queue();
-}
-
-
-
-void BasicContext::on_event(const Order &order, const Order::Report &report) {
-    std::lock_guard _(_queue_mx);
-    _queue.push(EvOrderStatus{this, order, report});
+    _queue.push(EvOrderReport{this, order, std::move(report), std::move(fills)});
     notify_queue();
 }
 
 
 
 
-void BasicContext::on_event(const Instrument &i, AsyncStatus st) {
+void BasicContext::on_event(const Instrument &i, AsyncResult<void> st) {
     std::lock_guard _(_queue_mx);
     _queue.push(EvUpdateInstrument{this, i, std::move(st)});
     notify_queue();
@@ -99,15 +128,15 @@ void BasicContext::on_event(const Instrument &i, AsyncStatus st) {
 
 
 
-void BasicContext::on_event(const Account &a, AsyncStatus st ) {
+void BasicContext::on_event(const Account &a, AsyncResult<void> st ) {
     std::lock_guard _(_queue_mx);
-    _queue.push(EvUpdateAccount{this, a, st});
+    _queue.push(EvUpdateAccount{this, a, std::move(st)});
     notify_queue();
 }
 
-void BasicContext::on_event(const Instrument &i, AsyncStatus st, MarketEvent event) {
+void BasicContext::on_event(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> event) {
     std::lock_guard _(_queue_mx);
-    _queue.push(EvUpdateMarket{this, i, std::move(st), std::move(event)});
+    _queue.push(EvUpdateMarket{this, i, type, std::move(event)});
      notify_queue();
 }
 
@@ -145,11 +174,11 @@ Fills BasicContext::get_fills(Timestamp tp, std::string_view filter) const {
 }
 
 
-Order BasicContext::place(const Instrument &instrument, const Account &account, const Order::Setup &setup) {
+Order BasicContext::place(const Instrument &instrument, const Account &account, const Order::Setup &setup, std::string_view label) {
 
     ExchangeInfo ex = account.get_exchange();
     BasicExchangeContext &e = BasicExchangeContext::from_exchange(ex);
-    auto ord = e.create_order(instrument, account, setup);
+    auto ord = e.create_order(instrument, account, setup, label);
     if (!ord.discarded()) {
         _exchanges[ex]._batch_place.push_back(ord);
     }
@@ -157,10 +186,10 @@ Order BasicContext::place(const Instrument &instrument, const Account &account, 
 }
 
 
-Order BasicContext::replace(const Order &order, const Order::Setup &setup, bool amend) {
+Order BasicContext::replace(const Order &order, const Order::Setup &setup, std::string_view label) {
     ExchangeInfo ex = order.get_account().get_exchange();
     BasicExchangeContext &e = BasicExchangeContext::from_exchange(ex);
-    auto ord = e.create_order_replace(order, setup, amend);
+    auto ord = e.create_order_replace(order, setup, label);
     if (!ord.discarded()) {
         _exchanges[ex]._batch_place.push_back(ord);
     }
@@ -194,7 +223,7 @@ Timestamp BasicContext::get_event_time() const {
 }
 
 
-Order BasicContext::bind_order(const Instrument &instrument, const Account &account) {
+Order BasicContext::bind_order(const Instrument &instrument, const Account &account, std::string_view label) {
     return Order(std::make_shared<AssociatedOrder>(instrument, account));
 }
 
@@ -444,6 +473,13 @@ VarSet<> BasicContext::get_vars(std::string_view start, std::string_view end) co
 
 void BasicContext::EvStart::operator ()() {
     me->_strategy->on_start();
+}
+
+void BasicContext::EvRestoreOrders::operator ()() {
+    me->_strategy->on_active_orders(std::move(orders));
+}
+void BasicContext::EvOrderReport::operator ()() {
+    me->_strategy->on_order_report(std::move(order), std::move(fills));
 }
 
 }

@@ -1,92 +1,112 @@
 #pragma once
 
 #include "async.h"
+#include "awaiter.h"
 #include <coroutine>
 #include <optional>
 
 namespace trading_api {
 
 
+namespace _details {
 
-///simple coroutine
-/**
- * Starts coroutine - allows to use co_await. There is no synchronization
- */
-class coroutine {
-public:
-    struct promise_type {
-        static constexpr std::suspend_never initial_suspend() noexcept {return {};}
-        static constexpr std::suspend_never final_suspend() noexcept {return {};}
-        static constexpr void return_void() {}
-        coroutine get_return_object() {return {};}
-        void unhandled_exception() {
-            stored_exception = std::current_exception();
+    template<typename T>
+    struct CoroutineResult { // @suppress("Miss copy constructor or assignment operator")
+        AsyncResult<T> _result = {};
+        template<std::convertible_to<T> X>
+        constexpr void return_value(X &&x) {
+            _result.set_value(std::forward<X>(x));
+        }
+        template<std::invocable<> X>
+        constexpr void return_value(X &&x) {
+            _result.set_by_fn(std::forward<X>(x));
         }
     };
 
+    template<>
+    struct CoroutineResult<void> { // @suppress("Miss copy constructor or assignment operator")
+        AsyncResult<void> _result = {};
+        constexpr void return_void() {
+            _result.set_value();
+        }
+    };
+
+
+
+}
+
+class CoroutineBase {
+public:
     static thread_local std::exception_ptr stored_exception;
+
     static void rethrow_stored_exception() {
         auto e = std::move(stored_exception);
         if (e) std::rethrow_exception(e);
     }
-
 };
 
-inline thread_local std::exception_ptr coroutine::stored_exception = {};
+inline thread_local std::exception_ptr CoroutineBase::stored_exception = {};
 
 
-
-
-///awaitable object
-template<typename _AsyncStatus = AsyncStatus>
-class [[nodiscard]] completion_awaiter {
+template<typename T>
+class Coroutine: public CoroutineBase {
 public:
 
-    using CompletionCB = Function<void(const _AsyncStatus &)>;
 
-    template<std::invocable<CompletionCB> Fn>
-    completion_awaiter(Fn &&fn) {
-        fn(create_callback());
-    }
+    struct promise_type: public _details::CoroutineResult<T> {
+        std::coroutine_handle<> _awaiting = {};
 
+        struct finisher { // @suppress("Miss copy constructor or assignment operator")
+            promise_type *me;
+            static constexpr bool await_ready() {return false;}
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) noexcept {
+                auto r = me->_awaiting;
+                if (!r) {
+                    if (me->_result.has_exception()) {
+                        stored_exception = me->_result.get_exception();
+                    }
+                    r = std::noop_coroutine();
+                    h.destroy();
+                }
+                return r;
+            }
+            static constexpr void await_resume() noexcept {}
+        };
 
-    completion_awaiter(const completion_awaiter &) = delete;
-    completion_awaiter &operator=(const completion_awaiter &) = delete;
-
-    static constexpr bool await_ready() noexcept {return false;}
-    void await_suspend(std::coroutine_handle<> h) {
-        _h = h;
-    }
-    auto await_resume() {
-        if (!_status.has_value()) {
-            throw AsyncCallException(AsyncStatus::canceled);;
+        static constexpr std::suspend_always initial_suspend() noexcept {return {};}
+        constexpr finisher final_suspend() noexcept {return {this};}
+        constexpr Coroutine get_return_object() {return {this};}
+        void unhandled_exception() {
+            this->_result.set_exception();
         }
-        if (_status->get_status() != AsyncStatus::ok) {
-            throw AsyncCallException(*_status);
+        std::coroutine_handle<promise_type> get_handle() const {
+            return std::coroutine_handle<promise_type>::from_promise(*this);
         }
-        return _status->get_result();
+    };
+
+    static constexpr bool await_ready() {return false;}
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) {
+        _prom->_awaiting = h;
+        _prom.get_deleter()._ran = true;
+        return _prom->from_handle();
+    }
+    decltype(auto) await_resume() {
+        return _prom->_result.get();
     }
 
 protected:
 
-    struct Resumer {
-        void operator()(completion_awaiter *x) {
-            x->_h.resume();
+    struct Detacher {
+        bool _ran = false;
+        void operator()(promise_type *p){
+            if (!_ran) p->get_handle().destroy();
+            else p->get_handle().resume();
         }
     };
 
-    CompletionCB create_callback() {
-        return [me = std::unique_ptr<completion_awaiter, Resumer>(this)](_AsyncStatus status){
-            me->_status.emplace(std::move(status));
-        };
-    }
 
-    std::optional<_AsyncStatus> _status;
+    Coroutine(promise_type *p):_prom(p) {}
 
-
-    std::coroutine_handle<> _h = {};
+    std::unique_ptr<promise_type, Detacher> _prom;
 };
-
-
-
 }

@@ -32,12 +32,13 @@ public:
     virtual std::string get_name() const override;
     virtual std::string get_id() const  override;
     virtual std::optional<IExchangeInfo::Icon> get_icon() const override;
+#if 0
     virtual Order create_order(const Instrument &instrument, const Account &account, const Order::Setup &setup) override;
     virtual Order create_order_replace(const Order &replace, const Order::Setup &setup, bool amend) override;
     virtual void restore_orders(void *context, std::span<SerializedOrder> orders) override;
     virtual void order_apply_report(const Order &order, const Order::Report &report)  =0;
     virtual void order_apply_fill(const Order &order, const Fill &fill) override;
-
+#endif
     void replay_accept(std::string_view symbol, const TickData &ticker);
 
 protected:

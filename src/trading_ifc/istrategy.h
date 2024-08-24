@@ -2,6 +2,7 @@
 #include "strategy_context.h"
 #include "config_desc.h"
 #include "orderbook.h"
+#include "awaiter.h"
 #include <queue>
 
 
@@ -13,6 +14,7 @@ class IStrategy {
 public:
 
     using Message = IMQBroker::Message;
+    using ActiveOrders = std::vector<Order>;
 
     static constexpr unsigned int signal_configuration_changed  = 0;
 
@@ -24,12 +26,31 @@ public:
     ///called on initialization
     virtual void on_init(IContext *ctx) = 0;
 
+    ///called before on_start and carries active orders
+    /** these orders are associated with the strategy, and they are probably
+     * created by previous run, or it is part of initial state.
+     * @param active_orders list of active orders.
+     * @note all orders has origin and state 'restored'. Their state will be updated by
+     * function on_order_report() which immediately follows per order.
+     * That function can also report fills received
+     * in between time. You should not process state of the orders now, you just need
+     * to use them to restore the strategy state.
+     */
+    virtual void on_active_orders(ActiveOrders active_orders) = 0;
+
     ///called when strategy is officially started, when context is fully initialized and ready to process requests
     /**
-     * This function is called right after on_init and it is standard event (on_init is
-     * not event).
+     * @note the function is called `before` on_start();
+     *
+     * - on_active_orders()
+     * - on_start()
+     * - on_order_report (each active order)
+     * - on_order_report (each active order)
+     * - on_order_report (each active order)
+     * - on_order_report (each active order)
      */
     virtual void on_start() = 0;
+
 
     ///called when market event happened
     /**
@@ -40,24 +61,18 @@ public:
      */
     virtual void on_market_event(const Instrument &i, const MarketEvent &event) = 0;
 
-    ///called when order state is updated (market triggers) and also at the beginning for all open orders
-    virtual void on_order(const Order &ord) = 0;
-
-    ///called when fill is detected
+    ///called when order state is updated or when fill detected
     /**
-     * @param ord associated order
-     * @param fill recorded fill
-     * @return strategy's custom label. This allows to filter fills later. This
-     * is also critical to calculate pnl. It is recommended to use different label
-     * for different currency
+     * @param ord order which status changed. You can read new status on the order.
+     * @param fills all fills which are part of this report.
      *
-     * @note the label can have a an internal structure.
-     *      you can filter labels by a prefix. For example "usd_1234" means
-     *      usd for currency and 1234 is custom identifier. Label don't need to be
-     *      unique.
+     * @note the field fills don't need to contain all fills. More fills can
+     * be received by next report. There is no specification how many fills
+     * can reported in signle report. It is also possible to send a report without
+     * fills, which means, that order status changed, but no fills has been made
+     *
      */
-    virtual std::string on_fill(const Order &ord, const Fill &fill) = 0;
-
+    virtual void on_order_report(const Order &ord, std::vector<Fill> fills) = 0;
 
     ///called when MQ message is received
     /**
@@ -97,154 +112,12 @@ public:
     virtual bool on_context_idle() = 0;
 
     ///update account is complete
-    virtual void on_update_complete(const Account &a, const AsyncStatus &status) = 0;
+    virtual void on_update_complete(const Account &a, AsyncResult<void> result) = 0;
     ///update instrument is complete
-    virtual void on_update_complete(const Instrument &i, const AsyncStatus &status) = 0;
+    virtual void on_update_complete(const Instrument &i, AsyncResult<void> result) = 0;
     ///update instrument market state (ticker, orderbook etc)
-    virtual void on_update_complete(const Instrument &i, const AsyncStatus &status, const MarketEvent &event) = 0;
+    virtual void on_update_complete(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> result) = 0;
 
-protected:
-
-
-    template<typename Strategy>
-    class OrderResult { // @suppress("Miss copy constructor or assignment operator")
-    public:
-        OrderResult(Strategy *s, Order ord):_s(s), _ord(ord) {}
-        operator Order() const {return _ord;}
-        template<std::invocable<const Order &> CB>
-        OrderResult &operator >>(CB &&cb) {
-            _s->add_callback(_ord, std::forward<CB>(cb));
-            return *this;
-        }
-
-    protected:
-        Strategy *_s;
-        Order _ord;
-    };
-
-    template<typename Strategy>
-    class Subscription { // @suppress("Miss copy constructor or assignment operator")
-    public:
-        Subscription(Strategy *s, MarketEventType type, const Instrument &i):_s(s),_t(type),_i(i) {}
-        template<std::invocable<const Instrument &, const MarketEvent &> CB>
-        void operator >>(CB &&cb) {
-            _s->add_subscription(_t, _i, std::forward<CB>(cb));
-        }
-    protected:
-        Strategy *_s;
-        MarketEventType _t;
-        const Instrument &_i;
-    };
-
-    template<typename Strategy>
-    class MQSubscription { // @suppress("Miss copy constructor or assignment operator")
-    public:
-        MQSubscription(Strategy *s, std::string_view c):_s(s),_c(c) {}
-        template<std::invocable<const Message &> CB>
-        void operator >>(CB &&cb) {
-            _s->add_mq_subscription(_c, std::forward<CB>(cb));
-        }
-    protected:
-        Strategy *_s;
-        std::string_view _c;
-
-    };
-    template<typename Strategy>
-    class IdleAwaiter { // @suppress("Miss copy constructor or assignment operator")
-    public:
-        IdleAwaiter(Strategy *s):_s(s) {}
-        template<std::invocable<> CB>
-        void operator >>(CB &&cb) {
-            _s->register_idle(std::forward<CB>(cb));
-        }
-        completion_awaiter<> operator co_await() {
-            return [this](auto &&cb) {
-                (*this) >> [cb = std::move(cb)]{
-                    cb(AsyncStatus::ok);
-                };
-            };
-        }
-    protected:
-        Strategy *_s;
-    };
-
-    class TimerAwaiter { // @suppress("Miss copy constructor or assignment operator")
-    public:
-        TimerAwaiter(IContext *ctx, Timestamp at, TimerID id):_ctx(ctx),_at(at),_id(id) {}
-        template<std::invocable<> CB>
-        void operator>>(CB &&cb) {
-            _ctx->set_timer(_at, std::forward<CB>(cb), _id);
-        }
-        completion_awaiter<> operator co_await() {
-            return [&](auto fn) {
-                _ctx->set_timer(_at, [fn = std::move(fn)]{
-                    AsyncStatus st;
-                      fn(st);
-                },_id);
-            };
-        }
-
-
-    protected:
-        IContext *_ctx;
-        Timestamp _at;
-        TimerID _id;
-
-    };
-
-    template<typename Strategy, typename Object>
-    class UpdateAwaiter { // @suppress("Miss copy constructor or assignment operator")
-    public:
-        UpdateAwaiter(Strategy *s,const Object &o):_s(s),_o(o) {}
-        template<std::invocable<const AsyncStatus &> CB>
-        void operator>>(CB &&cb) {
-            _s->register_update(_o, std::forward<CB>(cb));
-
-        }
-        completion_awaiter<> operator co_await() {
-            return [&](auto cb) {
-                _s->register_update(_o, std::move(cb));
-            };
-        }
-
-
-    protected:
-        Strategy *_s;
-        const Object &_o;
-
-    };
-
-    class MarketEventStatus: public AsyncStatus {
-    public:
-        using AsyncStatus::AsyncStatus;
-        MarketEventStatus(MarketEvent ev):_ev(std::move(ev)) {}
-        MarketEvent get_result() {return std::move(_ev);}
-    protected:
-        MarketEvent _ev;
-    };
-
-    template<typename Strategy>
-    class MarketEventAwaiter {
-    public:
-        MarketEventAwaiter(Strategy *s, const Instrument &i, MarketEventType type)
-            :_s(s),_i(i),_type(type) {}
-
-        template<std::invocable<const AsyncStatus &, const MarketEvent &> CB>
-        void operator>>(CB &&cb) {
-            _s->register_update(_i, _type, [cb = std::move(cb)](MarketEventStatus st){
-                cb(static_cast<const AsyncStatus &>(st), st.get_result());
-            });
-        }
-        completion_awaiter<MarketEventStatus> operator co_await() {
-            return [&](auto cb) {
-                   _s->register_update(_i,_type, std::move(cb));
-            };
-        }
-   protected:
-        Strategy *_s;
-        const Instrument &_i;
-        MarketEventType _type;
-    };
 
 
 };
