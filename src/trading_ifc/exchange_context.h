@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../trading_ifc/awaiter.h"
 #include "config.h"
 #include "order.h"
 #include "fill.h"
@@ -20,10 +21,10 @@ public:
 
     virtual void income_data(const Instrument &i, const MarketEvent &t) = 0;
     ///call this function when account is updated
-    virtual void object_updated(const Account &i, AsyncStatus st) = 0;
+    virtual void object_updated(const Account &i, AsyncResult<void> st) = 0;
     ///call this function when instrument is updated
-    virtual void object_updated(const Instrument &i, AsyncStatus st) = 0;
-    virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) = 0;
+    virtual void object_updated(const Instrument &i, AsyncResult<void> st) = 0;
+    virtual void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) = 0;
     ///call this function when order's state changed
     /**
      * As the orders are const, you cannot change state of the order directly. The

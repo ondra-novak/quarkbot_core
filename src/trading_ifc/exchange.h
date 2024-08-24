@@ -18,50 +18,18 @@ public:
         _ctx->income_data(i, t);
     }
     ///call this function when account is updated
-    void object_updated(const Account &a, AsyncStatus st) const {
+    void object_updated(const Account &a, AsyncResult<void> st) const {
         _ctx->object_updated(a, std::move(st));
     }
     ///call this function when instrument is updated
-    void object_updated(const Instrument &i, AsyncStatus st) const {
+    void object_updated(const Instrument &i, AsyncResult<void> st) const {
         _ctx->object_updated(i, std::move(st));
     }
-    void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) const {
-        _ctx->object_updated(i, std::move(st), std::move(ev));
+    void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) const {
+        _ctx->object_updated(i, std::move(type), std::move(ev));
     }
-    ///call this function when order's state changed
-    /**
-     * As the orders are const, you cannot change state of the order directly. The
-     * state is changed during processing the event because orders are in possesion
-     * of the strategy
-     *
-     * @param order order instance
-     * @param report report
-     *
-     * As result of this function, the strategy context will eventually call
-     * order_apply_report (asynchronously in different thread)
-     */
-    void order_state_changed(const Order &order, const Order::Report &report) const {
-        _ctx->order_state_changed(order, report);
-    }
-    ///call this function for every fill on the order
-    /**
-     * @param order order instance
-     * @param fill fill information
-     *
-     * As result of this function, the strategy context will eventually call
-     * order_apply_fill(asynchronously in different thread)
-     *
-     */
-    void order_fill(const Order &order, const Fill &fill) const {
-        return _ctx->order_fill(order, fill);
-    }
-    ///call this function for every restored order from set passed to restore_orders()
-    /**
-     * @param context pointer which has been passed to restore_orders.
-     * @param order restored order instance
-     */
-    void order_restore(void *context, const Order &order) const {
-        return _ctx->order_restore(context, order);
+    void order_report(const Order &order, Order::Report report, Fills fills) const {
+        _ctx->order_report(order, std::move(report), std::move(fills));
     }
 
     ///allows to convert this to ExchangeInfo (required by instruments and accounts)

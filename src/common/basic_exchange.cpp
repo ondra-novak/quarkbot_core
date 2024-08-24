@@ -98,7 +98,7 @@ void BasicExchangeContext::update_instrument(IEventTarget *target, const Instrum
     lst.set(target);
 }
 
-void BasicExchangeContext::object_updated(const Account &account, AsyncStatus st) {
+void BasicExchangeContext::object_updated(const Account &account, AsyncResult<void> st) {
     std::lock_guard _(_mx);
     auto &lst = _account_update_waiting[account];
     for (auto x: lst) {
@@ -107,7 +107,7 @@ void BasicExchangeContext::object_updated(const Account &account, AsyncStatus st
     lst.clear();
 }
 
-void BasicExchangeContext::object_updated(const Instrument &instrument, AsyncStatus st) {
+void BasicExchangeContext::object_updated(const Instrument &instrument, AsyncResult<void> st) {
     std::lock_guard _(_mx);
     auto &lst = _instrument_update_waiting[instrument];
     for (auto x: lst) {
@@ -184,14 +184,14 @@ void BasicExchangeContext::update_market(IEventTarget *target, const Instrument 
 }
 
 
-void BasicExchangeContext::object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) {
+void BasicExchangeContext::object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) {
     std::lock_guard _(_mx);
-    Subscription sub{ev.get_type(),i};
+    Subscription sub{type,i};
     auto iter = _market_updates.find(sub);
     if (iter != _market_updates.end()) {
         auto lst = std::move(iter->second);
         _market_updates.erase(iter);
-        for (auto x: lst) x->on_event(i, st, ev);
+        for (auto x: lst) x->on_event(i, type, ev);
     }
 }
 

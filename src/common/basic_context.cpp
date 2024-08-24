@@ -224,7 +224,7 @@ Timestamp BasicContext::get_event_time() const {
 
 
 Order BasicContext::bind_order(const Instrument &instrument, const Account &account, std::string_view label) {
-    return Order(std::make_shared<AssociatedOrder>(instrument, account));
+    return Order(std::make_shared<AssociatedOrder>(instrument, account, label));
 }
 
 
@@ -311,33 +311,13 @@ void BasicContext::EvUpdateAccount::operator ()() {
 }
 
 void BasicContext::EvUpdateMarket::operator ()() {
-    me->_strategy->on_update_complete(i, st, ev);
+    me->_strategy->on_update_complete(i, type, ev);
 }
 
 void BasicContext::EvMarketEventItem::operator ()() {
     me->_strategy->on_market_event(i, event);
 }
 
-void BasicContext::EvOrderStatus::operator ()() {
-    auto &e = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
-    e.order_apply_report(order, report);
-    me->_storage->put_order(order);
-    me->_strategy->on_order(std::move(order));
-}
-
-void BasicContext::EvOrderRestore::operator ()() {
-    me->_storage->put_order(order);
-    me->_strategy->on_order(std::move(order));
-}
-
-void BasicContext::EvOrderFill::operator ()() {
-    auto &e = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
-    if (me->_storage->is_duplicate_fill(fill)) return;
-    e.order_apply_fill(order, fill);
-    fill.label = me->_strategy->on_fill(Order(std::move(order)), fill);
-    me->_storage->put_fill(fill);
-
-}
 
 std::string BasicContext::get_var(std::string_view var_name) const {
     return _storage->get_var(var_name);
@@ -363,7 +343,7 @@ void BasicContext::call_strategy(Fn &&strategy_fn) {
     try {
         strategy_fn();
         //any exception thrown by coroutine is rethrown here
-        coroutine::rethrow_stored_exception();
+        CoroutineBase::rethrow_stored_exception();
     } catch (...) {
         try {
             _strategy->on_unhandled_exception();

@@ -240,11 +240,11 @@ protected:
 
     virtual void income_data(const Instrument &i, const MarketEvent &t) override;
     ///call this function when account is updated
-    virtual void object_updated(const Account &i, AsyncStatus st) override;
+    virtual void object_updated(const Account &i, AsyncResult<void> st) override;
     ///call this function when instrument is updated
-    virtual void object_updated(const Instrument &i, AsyncStatus st) override;
+    virtual void object_updated(const Instrument &i, AsyncResult<void> st) override;
 
-    virtual void object_updated(const Instrument &i, AsyncStatus st, MarketEvent ev) override;
+    virtual void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) override;
 
 
     virtual void order_report(const Order &order, Order::Report report, Fills fills) override;
