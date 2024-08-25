@@ -63,6 +63,14 @@ void Matching::place_waiting_order(WaitingOrder ord) {
     _orders.push_back(std::move(ord));
 }
 
+const Matching::WaitingOrder *Matching::find_order(Order ord) const {
+    auto iter = std::find_if(_orders.begin(), _orders.end(), [&](const WaitingOrder &w){
+       return std::visit([&](const auto &x){return x.order == ord;},w);
+    });
+    if (iter == _orders.end()) return nullptr;
+    return &(*iter);
+}
+
 bool Matching::cancel_order(Order order) {
     auto iter = std::find_if(_orders.begin(), _orders.end(), [&](const WaitingOrder &w){
        return std::visit([&](const auto &x){return x.order == order;},w);

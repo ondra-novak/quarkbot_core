@@ -161,6 +161,10 @@ public:
      */
     bool cancel_order(Order ord);
 
+    ///Finds order a receives its pointer
+    const WaitingOrder *find_order(Order ord) const;
+
+
     ///Simulates execution for current state (spread, trade)
     /**
      * @return list of executions

@@ -14,11 +14,13 @@ public:
     virtual Positions get_positions(const Instrument &i) const override;
     virtual double get_ratio(const Instrument &) const override {return 0;}
 
-    Fills create_fills(const Instrument &i, Side side, Decimal amount, Decimal price, Timestamp tm);
-    std::optional<Fill> close_position(const Instrument &i, std::string id, Decimal price, Timestamp tm, Decimal remain = 0_dec);
-    Fill open_position(const Instrument &i, Side side, Decimal price, Decimal size, Timestamp tm);
+    Fills create_fills(const Instrument &i, Side side, Decimal amount, Decimal price, Timestamp tm, std::string_view label);
+    std::optional<Fill> close_position(const Instrument &i, std::string id, Decimal bid, Decimal ask, Timestamp tm, std::string_view label, Decimal remain = 0_dec);
+    Fill open_position(const Instrument &i, Side side, Decimal price, Decimal size, Timestamp tm, std::string_view label);
 
     static std::string generate_uid();
+
+    static SimAccount &from_account(const Account &a);
 
 protected:
 

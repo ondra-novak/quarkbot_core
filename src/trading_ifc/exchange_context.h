@@ -4,7 +4,6 @@
 #include "config.h"
 #include "order.h"
 #include "fill.h"
-#include "async.h"
 #include "network.h"
 
 #include "log.h"

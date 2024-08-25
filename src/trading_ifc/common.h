@@ -144,4 +144,9 @@ public:
     static constexpr bool try_lock() {return true;}
 };
 
+class UnsupportedException: public std::exception {
+public:
+    virtual const char *what() const noexcept override {return "Unsupported feature";}
+};
+
 }

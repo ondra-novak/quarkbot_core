@@ -32,9 +32,9 @@ public:
     virtual std::string get_name() const override;
     virtual std::string get_id() const  override;
     virtual std::optional<IExchangeInfo::Icon> get_icon() const override;
+    virtual Order create_order(const Instrument &instrument, const Account &account, const Order::Setup &setup, std::string_view label) override;
+    virtual Order create_order_replace(const Order &replace, const Order::Setup &setup, std::string_view label) override;
 #if 0
-    virtual Order create_order(const Instrument &instrument, const Account &account, const Order::Setup &setup) override;
-    virtual Order create_order_replace(const Order &replace, const Order::Setup &setup, bool amend) override;
     virtual void restore_orders(void *context, std::span<SerializedOrder> orders) override;
     virtual void order_apply_report(const Order &order, const Order::Report &report)  =0;
     virtual void order_apply_fill(const Order &order, const Fill &fill) override;
@@ -47,6 +47,25 @@ protected:
     Timestamp _cur_sim_time;
     WeakObjectMap<SimInstrument> _instruments;
 
+    void match_order(simulator::Matching &m, const Order &ord);
+
+    struct ExecuteInfo;
+
+    void execute_order(ExecuteInfo ctx, const Order::Market &setup);
+    void execute_order(ExecuteInfo ctx, const Order::Limit &setup);
+    void execute_order(ExecuteInfo ctx, const Order::LimitPostOnly &setup);
+    void execute_order(ExecuteInfo ctx, const Order::ImmediateOrCancel &setup);
+    void execute_order(ExecuteInfo ctx, const Order::Stop &setup);
+    void execute_order(ExecuteInfo ctx, const Order::StopLimit &setup);
+    void execute_order(ExecuteInfo ctx, const Order::TrailingStop &setup);
+    void execute_order(ExecuteInfo ctx, const Order::TpSl &setup);
+    void execute_order(ExecuteInfo ctx, const Order::Transfer &setup);
+    void execute_order(ExecuteInfo ctx, const Order::ClosePosition &setup);
+    void execute_order(ExecuteInfo ctx, const IOrder::Undefined &setup);
+
+    bool validate_order(const Order::Setup &setup);
+
+    void process_execution(const simulator::Matching::Execution &ex);
 
 };
 

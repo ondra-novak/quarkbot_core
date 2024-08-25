@@ -7,7 +7,7 @@ namespace trading_api {
 template<typename T>
 concept custom_serialize = requires(T c, const std::string &s) {
     {custom_to_binary(c)}->std::convertible_to<std::string>;
-    {custom_from_binary(c,s)};
+    {custom_from_binary(std::in_place_type<T>,s)}->std::convertible_to<T>;
 };
 
 
@@ -83,7 +83,7 @@ namespace Serializer {
     auto to_constant(std::size_t idx, Fn &&fn) {
         if constexpr(curidx >= count) return fn(invalid_constant{});
         else if (curidx == idx) return fn(valid_constant<curidx>{});
-        else return to_constant<count, curidx+1>(idx, std::forward<Fn>(fn));
+        else return to_constant<count, Fn, curidx+1>(idx, std::forward<Fn>(fn));
     }
 
     template<typename T>
@@ -102,6 +102,10 @@ namespace Serializer {
         }
     };
 
+    class UnexpectedEndException : public std::exception {
+    public:
+        const char *what() const noexcept override {return "unexpected end of record while parsing a binary message";}
+    };
 
     template<typename T, typename Iter>
     T from_binary(Iter &itr, Iter end) {
@@ -133,8 +137,7 @@ namespace Serializer {
                     if (x & 0x1) r = -(r+1);
                     return r;
                 }
-            }
-            if constexpr(is_container<T>) {
+            } else if constexpr(is_container<T>) {
                 auto sz = from_binary<std::size_t>(itr, end);
                 T out;
                 auto ins = std::inserter(out, out.end());
@@ -145,17 +148,24 @@ namespace Serializer {
                 }
                 return out;
             } else if constexpr(std::is_trivially_copy_constructible_v<T>) {
-                T out;
-                char *c = reinterpret_cast<char *>(&out);
-                char *ce = c + sizeof(out);
+                union CopyHelper {
+                    char buffer[sizeof(T)];
+                    T val;
+                    CopyHelper() {}
+                    ~CopyHelper() {}
+                };
+                CopyHelper tmp;
+                char *c = tmp.buffer;
+                char *ce = c + sizeof(T);
                 while (c != ce && itr != end) {
                     *c = *itr;
                     ++c; ++itr;
                 }
+                return tmp.val;
             } else if constexpr(is_variant_type<T>) {
                 unsigned int idx = from_binary<unsigned int>(itr, end);
                 return to_constant<std::variant_size_v<T> >(idx,[&](auto c){
-                    if (c.valid) {
+                    if constexpr (c.valid) {
                         return T(from_binary<std::variant_alternative_t<c.value, T> >(itr, end));
                     } else {
                         return T();
@@ -175,14 +185,14 @@ namespace Serializer {
                 });
             } else if constexpr(custom_serialize<T>){
                 std::string s = from_binary<std::string>(itr, end);
-                T out;
-                custom_from_binary(out,s);
-                return out;
+                return custom_from_binary(std::in_place_type<T>,s);
             } else {
                 static_assert(assert_error<T>, "This type cannot be stored in BinTuple");
+                throw;
             }
-        };
-        return T();
+        } else {
+            throw UnexpectedEndException();
+        }
     }
 
     template<typename T, typename Iter>

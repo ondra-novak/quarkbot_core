@@ -61,6 +61,8 @@ public:
         enum E {
             ///no error reported
             no_reason,
+            ///reason of cancel is replace
+            replace,
             ///order to replace not found, or already filled
             not_found,
             ///discarded because position would be out of limit
@@ -112,6 +114,7 @@ public:
         std::string_view get_reason_as_string() const {
             switch (_reason) {
                 case no_reason: return "no reason given";
+                case replace: return "replace";
                 case not_found: return "not found";
                 case position_limit: return "position limit";
                 case max_leverage: return "max leverage";
@@ -144,15 +147,15 @@ public:
     ///carries report of an order (excepct fill)
     struct Report {
         ///new state
-        std::optional<State> new_state;
+        std::optional<State> new_state = {};
         ///error reason
-        std::optional<Reason> reason;
+        std::optional<Reason> reason = {};
         ///contains updated filled amount
-        std::optional<Decimal> filled_amount;
+        std::optional<Decimal> filled_amount = {};
         ///contains average fill price
-        std::optional<Decimal> avg_price;
+        std::optional<Decimal> avg_price = {};
         ///order fills
-        Fills fills;
+        Fills fills = {};
     };
 
     enum class Behavior {
@@ -225,53 +228,68 @@ public:
     };
 
     ///Limit order
-    struct Limit: Market {
+    struct Limit: Common {
+        Decimal amount;
         Decimal limit_price;
         Limit(Side s, Decimal amount, Decimal limit_price, Options opt = Options::Default())
-            :Market(s, amount, opt), limit_price(limit_price) {}
+            :Common(s, opt),amount(amount), limit_price(limit_price) {}
     };
 
     ///Limit post only - rejlastected if would immediately match
-    struct LimitPostOnly: Limit {
-        using Limit::Limit;
+    struct LimitPostOnly: Common {
+        Decimal amount;
+        Decimal limit_price;
+        LimitPostOnly(Side s, Decimal amount, Decimal limit_price, Options opt = Options::Default())
+            :Common(s, opt),amount(amount), limit_price(limit_price) {}
     };
 
     ///Limit immediate or cancel - rejects when order ends in orderbook (just fill up to limit)
-    struct ImmediateOrCancel: Limit {
-        using Limit::Limit;
+    struct ImmediateOrCancel : Common {
+        Decimal amount;
+        Decimal limit_price;
+        ImmediateOrCancel(Side s, Decimal amount, Decimal limit_price, Options opt = Options::Default())
+            :Common(s, opt),amount(amount), limit_price(limit_price) {}
 
     };
 
     ///Stop order
-    struct Stop: Market {
+    struct Stop: Common{
+        Decimal amount;
         Decimal stop_price;
         Stop(Side s, Decimal amount, Decimal stop_price, Options opt = Options::Default())
-            :Market(s, amount, opt), stop_price(stop_price) {}
+            :Common(s, opt), amount(amount), stop_price(stop_price) {}
     };
 
     ///StopLimit order
-    struct StopLimit: Stop {
+    struct StopLimit: Common{
+        Decimal amount;
+        Decimal stop_price;
         Decimal limit_price;
         StopLimit(Side s, Decimal amount, Decimal stop_price, Decimal limit_price, Options opt = Options::Default())
-            :Stop(s, amount, stop_price, opt), limit_price(limit_price) {}
+            :Common(s, opt), amount(amount), stop_price(stop_price), limit_price(limit_price) {}
     };
 
     ///Trailing stop order
-    struct TrailingStop: Market {
+    struct TrailingStop: Common {
+        Decimal amount;
         Decimal stop_distance;
         TrailingStop(Side s, Decimal amount, Decimal stop_distance, Options opt = Options::Default())
-            :Market(s, amount, opt), stop_distance(stop_distance) {}
+            :Common(s, opt), amount(amount), stop_distance(stop_distance) {}
     };
 
     ///Target and StopLoss order (OCO)
-    struct TpSl: StopLimit {
-        TpSl(Side s, Decimal amount, Decimal target_price, Decimal stoploss_price, Options opt = Options::Default())
-            :StopLimit(s, amount, stoploss_price, target_price, opt) {}
+    struct TpSl: Common {
+        Decimal amount;
+        Decimal stop_price;
+        Decimal limit_price;
+        TpSl(Side s, Decimal amount, Decimal stop_price, Decimal limit_price, Options opt = Options::Default())
+            :Common(s, opt), amount(amount), stop_price(stop_price), limit_price(limit_price) {}
     };
     ///Close position order (CFD)
     struct ClosePosition {
         std::string pos_id;
-        ClosePosition(const std::string  &pos):pos_id(pos) {}
+        Decimal remain;
+        ClosePosition(const std::string  &pos, Decimal remain = 0):pos_id(pos), remain(remain) {}
     };
 
     ///Transfer money from one account to other account
@@ -322,6 +340,8 @@ public:
     ///get average execution price
     virtual Decimal get_avg_price() const = 0;
 
+    ///retrieves replaced order (if order replacing other order)
+    virtual std::shared_ptr<const IOrder> get_replaced_order() const = 0;
     ///retrieve associated instrument instance
     virtual Instrument get_instrument() const = 0;
 
@@ -347,23 +367,28 @@ public:
     class Null;
 };
 
+#ifndef __CDT_PARSER__ //Eclipse CDT is able to break this section
+
 template<typename T>
 concept is_order = requires(T order) {
     {order.side}->std::same_as<Side>;
     {order.behavior}->std::same_as<IOrder::Behavior>;
 };
 
+
+
 template<typename T>
 concept order_has_amount = (is_order<T> && requires(T order) {
     {order.amount};
 });
+
 
 template<typename T>
 concept order_has_options= (is_order<T> && requires(T order) {
     {order.options};
 });
 
-
+#endif
 
 class IOrder::Null: public IOrder {
 public:
@@ -377,6 +402,7 @@ public:
     virtual Origin get_origin() const override {return Origin::unknown;};
     virtual std::string get_id() const override {return {};}
     virtual std::string get_label() const override {return {};}
+    virtual std::shared_ptr<const IOrder> get_replaced_order() const override {return {};}
     virtual const Setup &get_setup() const override {
         static Setup empty;
         return empty;
@@ -462,12 +488,12 @@ public:
         return _ptr->get_account();
     }
 
-    static std::optional<Side> get_side(const Order::Setup &setup) {
-        return std::visit([](const auto &x) ->std::optional<Side> {
+    static Side get_side(const Order::Setup &setup) {
+        return std::visit([](const auto &x) -> Side {
             if constexpr(is_order<decltype(x)>) {
                 return x.side;
             } else {
-                return {};
+                return Side::undefined;
             }
         }, setup);
     }
@@ -484,7 +510,7 @@ public:
     }
 
     ///order's side
-    std::optional<Side> get_side() const {
+    Side get_side() const {
         return get_side(_ptr->get_setup());
     }
 
@@ -548,6 +574,15 @@ public:
     ///Retrieve label which was set on place_order or replace_order
     std::string get_label() const {return _ptr->get_label();}
 
+    ///Retrieve order which has been replaced
+    /**
+     * @return retrieves replaced order.
+     *
+     * @note referenced order must be active or must be stored. The reference
+     * to the order is stored as weak reference. Once the replaced order
+     * is no longer available, returns undefined order.
+     */
+    Order get_replaced_order() const {return Order(_ptr->get_replaced_order());}
 
 };
 

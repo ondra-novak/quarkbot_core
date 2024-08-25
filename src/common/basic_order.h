@@ -28,22 +28,24 @@ protected:
 
 class ErrorOrder: public AssociatedOrder {
 public:
-    ErrorOrder(Instrument instrument, Account account, std::string_view label, Reason r)
+    ErrorOrder(Instrument instrument, Account account, Setup setup, std::string_view label, Reason r)
         :AssociatedOrder(std::move(instrument),std::move(account), label)
-        ,_r(r) {}
-
+        ,_r(std::move(r)),_setup(std::move(setup)) {}
     virtual State get_state() const override {return State::discarded;}
     virtual Reason get_reason() const override {return _r;}
     virtual Origin get_origin() const override {return Origin::strategy;}
+    virtual const Setup &get_setup() const override {return _setup;}
 protected:
     Reason _r;
+    Setup _setup;
 };
 
 ///Create error order (create_order cannot throw exception)
-inline Order order_error(Instrument instrument, Account account, std::string_view label, Order::Reason r) {
+inline Order order_error(Instrument instrument, Account account, Order::Setup setup, std::string_view label, Order::Reason r) {
     return Order(std::make_shared<ErrorOrder>(
             std::move(instrument),
             std::move(account),
+            std::move(setup),
             label,
             r));
 }
@@ -108,10 +110,10 @@ public:
         return _status;
     }
 
-    Order get_replaced_order() const {
+    virtual std::shared_ptr<const IOrder> get_replaced_order() const override {
         auto lk = _replaced.lock();
-        if (lk) return Order(lk);
-        else return Order();
+        if (lk) return lk;
+        else return Order::null_instance_ptr;
     }
 
     static const BasicOrder &from_order(const Order &ord) {
@@ -123,7 +125,6 @@ public:
     static void apply_report(const Order &ord, const Order::Report &rep) {
         from_order(ord).get_status().apply_report(rep);
     }
-
 
 protected:
 

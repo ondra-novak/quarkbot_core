@@ -56,7 +56,7 @@ SimAccount::Positions SimAccount::get_positions(const Instrument &i) const {
     }
 }
 
-Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, Decimal price, Timestamp tm) {
+Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, Decimal price, Timestamp tm, std::string_view label) {
     std::unique_lock _(_mx);
     Fills fills;
     auto fnfo = InstrumentFillInfo::from_instrument(i);
@@ -70,7 +70,7 @@ Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, D
            fills.push_back(Fill{
                tm,
                generate_uid(),
-               {},
+               std::string(label),
                pos.id,
                fnfo,
                side,
@@ -94,7 +94,7 @@ Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, D
             fills.push_back(Fill{
                 tm,
                 generate_uid(),
-                {},
+                std::string(label),
                 iter->id,
                 fnfo,
                 side,
@@ -111,7 +111,7 @@ Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, D
             fills.push_back(Fill{
                 tm,
                 id,
-                {},
+                std::string(label),
                 id,
                 fnfo,
                 side,
@@ -128,7 +128,7 @@ Fills SimAccount::create_fills(const Instrument &i, Side side, Decimal amount, D
 }
 
 std::optional<Fill> SimAccount::close_position(const Instrument &i, std::string id,
-        Decimal price, Timestamp tm, Decimal remain) {
+        Decimal bid, Decimal ask,  Timestamp tm, std::string_view label, Decimal remain) {
     std::unique_lock _(_mx);
     std::optional<Fill> out;
     auto fnfo = InstrumentFillInfo::from_instrument(i);
@@ -137,11 +137,13 @@ std::optional<Fill> SimAccount::close_position(const Instrument &i, std::string 
         return pos.id == id;
     });
     if (iter != pslst.end()) {
+        Side close_side = reverse(iter->side);
+        Decimal price = close_side == Side::buy?bid:ask;
         Decimal to_close = iter->amount - remain;
         if (to_close > 0 && remain >= 0) {
             _rpnl += fnfo.calc_pnl(iter->side, to_close, iter->open_price, price).as<double>();
             out.emplace(Fill{
-                tm,generate_uid(), {}, id, fnfo, iter->side, iter->amount, price,
+                tm,generate_uid(), std::string(label), id, fnfo, close_side, iter->amount, price,
                         _fees * (price * iter->amount).as<double>()
             });
             if (remain) iter->amount = remain;
@@ -162,12 +164,12 @@ std::string SimAccount::generate_uid() {
 }
 
 Fill SimAccount::open_position(const Instrument &i,
-        Side side, Decimal price, Decimal size, Timestamp tm) {
+        Side side, Decimal price, Decimal size, Timestamp tm, std::string_view label) {
     auto fnfo = InstrumentFillInfo::from_instrument(i);
     Fill out {
         tm,
         generate_uid(),
-        {},
+        std::string(label),
         generate_uid(),
         fnfo,
         side,
@@ -198,6 +200,11 @@ SimAccount::PositionStats SimAccount::calc_position_stats() const {
         }
     }
     return mi;
+}
+
+SimAccount &SimAccount::from_account(const Account &a) {
+    return dynamic_cast<SimAccount &>(
+            const_cast<IAccount &>(*a.get_handle()));
 }
 
 
