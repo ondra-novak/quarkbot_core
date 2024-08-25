@@ -8,6 +8,17 @@ template<typename T, typename Hasher = std::hash<T>, typename Compare = std::equ
 class DispatcherCore {
 public:
 
+    class Ident {
+        std::uintptr_t id = 0;
+    public:
+        Ident():id(0) {}
+        template<typename X> requires(std::is_integral_v<X>)
+        Ident(X v):id(static_cast<std::uintptr_t>(v)) {}
+        template<typename X> requires(std::is_pointer_v<X>)
+        Ident(X v):id(reinterpret_cast<std::uintptr_t>(v)) {}
+        bool operator==(const Ident &other) const {return id == other.id;}
+    };
+
     template<typename ... Args> requires(std::is_constructible_v<T, Args...>)
     bool post(Args && ... args) {
         bool wk = _queue.empty();
@@ -50,7 +61,6 @@ public:
     }
 
     using TimePoint = std::chrono::system_clock::time_point;
-    using Ident = const void *;
 
 
 
@@ -71,23 +81,21 @@ public:
     template<std::invocable<T &&> Executor>
     bool process_message(TimePoint tp, Executor &&executor) {
         static_assert(std::is_convertible_v<std::invoke_result_t<Executor, T &&>, bool>);
-        if (process_message(std::forward<Executor>(executor))) return true;
         if (_tqueue.empty()) {
             _near_tp = TimePoint::max();
-            return false;
-        }
-        if (_tqueue.front()._tp > tp) {
+        } else  if (_tqueue.front()._tp > tp) {
             _near_tp = _tqueue.front()._tp;
-            return false;
+        } else {
+            auto fn = std::move(_tqueue.front()._item);
+            _executing_ident = _tqueue.front()._ident;
+            std::pop_heap(_tqueue.begin(), _tqueue.end(), cmp_timed);
+            _tqueue.pop_back();
+            _near_tp = tp;
+            if (!executor(std::move(*fn))) return false;
+            _executing_ident = {};
+            return true;
         }
-        auto fn = std::move(_tqueue.front()._item);
-        _executing_ident = _tqueue.front()._ident;
-        std::pop_heap(_tqueue.begin(), _tqueue.end(), cmp_timed);
-        _tqueue.pop_back();
-        _near_tp = tp;
-        if (!executor(std::move(*fn))) return false;
-        _executing_ident = nullptr;
-        return true;
+        return process_message(std::forward<Executor>(executor));
     }
 
     bool cancel(Ident ident) {
@@ -151,7 +159,7 @@ protected:
     TimePoint _near_tp = TimePoint::max();
     ClusterAlloc<T, _cluster_size> _alloc;
     int _queue_recurse = 0;
-    Ident _executing_ident = nullptr;
+    Ident _executing_ident = {};
 
     bool post_timed_allocated(TimePoint tp, std::unique_ptr<T, ClusterDeleter> ptr, Ident ident) {
         bool r = _near_tp > tp;

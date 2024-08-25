@@ -56,7 +56,7 @@ public:
      *
      * @note function can be asynchronous but it is allowed to execute it synchronously.
      */
-    void restore_orders(const Account &acc, std::span<SerializedOrder> orders, IRestoredOrderCollector &collector);
+    void restore_orders(const Account &acc, std::span<SerializedOrder> orders, IExchange::RestoreOrdersCallback collector);
     ///Request to subscribe market data (stream)
     /**
      * @param target object which consumes updates
@@ -107,6 +107,14 @@ public:
      * @param orders list of orders to cancel
      */
     void batch_cancel(std::span<Order> orders);
+    ///Subscribe for other events
+    /**
+     * Need only if order has been restored, otherwise batch_place automatically subscribes
+     * @param target target which receives events
+     * @param order order. Ensure that order is not done
+     */
+    void subscribe_order(IEventTarget *target, const Order &order);
+
     ///Request update of ticker
     /**
      * You can request update of a current ticker in case that your strategy doesn't
@@ -171,21 +179,8 @@ public:
      *
      * @note the order must be created by this exchange, otherwise function can throw exception
      */
-    virtual void order_apply_report(const Order &order, const Order::Report &report);
+    void order_apply_report(const Order &order, const Order::Report &report);
 
-
-    ///Applies fill to order object
-    /**
-     * Because order object can be modified only synchronously with the strategy,
-     * this function must be called in strategy thread.
-     *
-     * @param order order
-     * @param fill fill
-     *
-     * @note the order must be created by this exchange, otherwise function can throw exception
-     *
-     */
-    virtual void order_apply_fill(const Order &order, const Fill &fill);
 
     void load_credentials(const Config &credential_config, std::string_view label, Function<void(ExchangeCredentials)> result);
     void query_accounts(const ExchangeCredentials &creds,std::string_view label, const Query &query,Function<void(std::span<Account>)> result);
@@ -247,7 +242,7 @@ protected:
     virtual void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) override;
 
 
-    virtual void order_report(const Order &order, Order::Report report, Fills fills) override;
+    virtual void order_report(const Order &order, Order::Report report) override;
 
     virtual std::string get_label() const override;
 

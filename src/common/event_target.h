@@ -38,7 +38,7 @@ public:
      * into execution queue. Don't call exchange object directly from the event. Do
      * not perform blocking operations in this event
      */
-    virtual void on_event(const Instrument &i, AsyncResult<void> st) = 0;
+    virtual void on_update(Instrument i, AsyncResult<void> st) = 0;
 
     ///called when update on an account is finished
     /**
@@ -47,7 +47,7 @@ public:
      * into execution queue. Don't call exchange object directly from the event. Do
      * not perform blocking operations in this event
      */
-    virtual void on_event(const Account &a, AsyncResult<void> st) = 0;
+    virtual void on_update(Account a, AsyncResult<void> st) = 0;
 
     ///called when subscription update
     /**
@@ -57,7 +57,7 @@ public:
      * @note actual market data are not part of event. When event is processed
      * the strategy must read last market data from the exchange object
      */
-    virtual void on_event(const Instrument &i, const MarketEvent &subscription_type) = 0;
+    virtual void on_subscription_event(Instrument i, MarketEvent event) = 0;
 
     ///called when update_market is complete
     /**
@@ -65,10 +65,10 @@ public:
      * @param st operation status
      * @param subscription_type
      */
-    virtual void on_event(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) = 0;
+    virtual void on_update(Instrument i, MarketEventType type, AsyncResult<MarketEvent> ev) = 0;
 
     ///called when order state changed or fills
-    virtual void on_event(const Order &order,Order::Report report, Fills fills) = 0;
+    virtual void on_order_report(Order order,Order::Report report) = 0;
 
 
 

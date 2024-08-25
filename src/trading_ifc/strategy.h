@@ -11,12 +11,35 @@ class Strategy: public IStrategy {
 public:
 
 
+
+    ///Awaitable object
+    /**
+     * Awaitable object is placeholder for asynchronous result. It allows two operations
+     * to retrieve the result
+     *
+     * 1. you can use co_await on this object, which pefroms suspenssion of the execution
+     * and resumption when the result is awailable. The return value of co_await is
+     * result of asynchronous operation. This requires to run code as Coroutine
+     *
+     * 2. you can attach a callback by operation `>> []{lambda}`. The result of the
+     * operation is passed as AsyncResult object and you must use get() to retrieve
+     * the result.
+     *
+     * @tparam T type of result. This can be void, so asynchronous operation has no
+     * result, but you still receive information about completion. Result to the
+     * callback function is carried as AsyncResult even if T is void (AsyncResult<void>).
+     * In this case, you should check for exception, which can indiciate that operation
+     * failed. This is not necessery in Coroutine, because co_await can throw that
+     * exception as result.
+     */
     template<typename T>
-    using AwaitableRegFn = Function<void(Function<void(AsyncResult<T>)>)>;
-    template<typename T>
-    using Awaitable = AwaitableResult<T,  AwaitableRegFn<T> >;
+    using Awaitable = AwaitableResult<T,  Function<void(Function<void(AsyncResult<T>)>)> >;
+
+    ///Specifies type of callback for given Awaitable
     template<typename T>
     using Callback = typename Awaitable<T>::Callback;
+
+    ///Declaration of list of callbacks
     template<typename T>
     using CallbackList = std::deque<Callback<T> >;
 
@@ -379,9 +402,7 @@ public:  //context API
      */
     Awaitable<Fills> on_report(const Order &order) {
         if (order.done()) {
-            return [](auto &&cb){
-                cb(Fills{});
-            };
+            throw std::runtime_error("Order already done (order.done() == true)");
         } else {
             return [this, order](auto &&cb) {
                 _order_report[order].emplace_back(std::move(cb));
@@ -586,26 +607,46 @@ public:  //context API
     }
 
 
-    ///Enqueue operation on idle cycle
+    ///Schedule operation on idle cycle
     /**
-     * @return idle awaiter. You can use co_await or operator >> to a enqueue callback
+     * @return awaitable. You can use co_await or operator >> to a enqueue callback
      *
-     * @code
-     * on_idle() >> [this]{
-     *      //process on idle
-     * };
-     * @endcode
+     * You can schedule multiple idle calls. They will consume more idle cycles
      *
-     * @code
-     * co_await on_idle(); //suspend and continue on idle
-     * @endcode
+     * @note idle has lowest priority. Which also means, that market events, order
+     * updates and even timers can be processed between each idle cycle
      *
-     * You can enqueue multiple idle calls. They will consume more idle cycles
+     * You can use `co_await on_idle()` in coroutine, if you need to retrieve latest
+     * data. However, do not waste CPU time by calling this function in cycle
+     *
      */
     Awaitable<void> on_idle() {
         return [this](auto &&cb) {
             _on_idle_cbs.push_back(std::move(cb));
         };
+    }
+
+    ///Schedule operation on idle cycle after next event
+    /**
+     * This schedules operation to be executed in idle cycle after next event.
+     *  - event : on_idle(A)
+     *  - event : on_next_event(B)
+     *  - A is executed : on_idle(C), on_next_event(D)
+     *  - C is executed :
+     *  - event : on_idle(E)
+     *  - event : on_next_event(F)
+     *  - B is executed :
+     *  - E is executed :
+     *  - event
+     *  - F is executed :
+     *
+     * @return awaitable. You can co_await or attach a callback
+     */
+    Awaitable<void> on_next_event() {
+        return [this](auto &&cb) {
+            _on_next_event_cbs.push_back(std::move(cb));
+        };
+
     }
 
     ///Get extension service
@@ -643,15 +684,15 @@ protected: //optional overrides
      * @param ev market event
      * @note you need to call the original implementation in order to call all registered callbacks
      */
-    virtual void on_market_event(const Instrument &i, const MarketEvent &ev) override {
-        invoke_callbacks(_receive_market_event_cbs, std::pair<Instrument,MarketEvent>(i, ev));
+    virtual void on_market_event(const Instrument i, MarketEvent ev) override {
+        invoke_callbacks(_receive_market_event_cbs, std::pair<Instrument,MarketEvent>(std::move(i), ev));
     }
     ///Called when a change of order status occurs
     /**
      * @param ord order reference
      * @note you need to call the original implementation in order to call all registered callbacks
      */
-    virtual void on_order_report(const Order &ord, std::vector<Fill> fills) override {
+    virtual void on_order_report(const Order ord, std::vector<Fill> fills) override {
         auto iter = _order_report.find(ord);
             if (iter != _order_report.end() && invoke_callbacks(iter->second, std::move(fills))) {
         }
@@ -668,12 +709,21 @@ protected: //optional overrides
      *
      */
     virtual bool on_context_idle() override {
+        //any idle?
         if (!_on_idle_cbs.empty()) {
+            //retrieve front and execute it
             _on_idle_cbs.front()(true);
+            //pop it
             _on_idle_cbs.pop_front();
+            //indicate that we are not complete
             return false;
+        } else {
+            //no more idle
+            //prepare on_next_event callbacks to be scheduled on next on_idle
+            std::swap(_on_idle_cbs, _on_next_event_cbs);
+            //indicate completion, so new idle list won't be called
+            return true;
         }
-        return true;
     }
     ///
     /**
@@ -733,6 +783,7 @@ private:
     std::unordered_map<InstSubPair, CallbackList<MarketEvent>,InstSubPairHasher> _update_market_cbs;
     std::unordered_map<Order, CallbackList<Fills>,Order::Hasher> _order_report;
     CallbackList<void>  _on_idle_cbs;
+    CallbackList<void>  _on_next_event_cbs;
     CallbackList<std::pair<Instrument,MarketEvent> > _receive_market_event_cbs;
 
     template<typename CBList, typename Result>

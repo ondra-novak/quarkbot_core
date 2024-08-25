@@ -14,8 +14,6 @@ public:
             const Order::Setup &, std::string_view ) override {return {};}
     virtual void unsubscribe(MarketEventType ,
             const Instrument &) override {}
-    virtual void order_apply_fill(const Order &,
-            const Fill &) override {}
     virtual void update_account(const Account &) override {}
     virtual Order create_order_replace(
             const Order &,
@@ -28,7 +26,7 @@ public:
     virtual void subscribe(MarketEventType,const Instrument &) override {};
     virtual void batch_place(std::span<Order> ) override {};
     virtual void batch_cancel(std::span<Order> ) override {};
-    virtual void restore_orders(const Account &, std::span<SerializedOrder> , IRestoredOrderCollector &collector) override {collector.ok();}
+    virtual void restore_orders(const Account &, std::span<SerializedOrder> , RestoreOrdersCallback cb) override {cb({});}
 
 
     virtual trading_api::ConfigSchema get_api_key_config_schema() const

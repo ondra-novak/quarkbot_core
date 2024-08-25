@@ -1,8 +1,8 @@
 #pragma once
 
-#include "instrument.h"
-#include "account.h"
-#include "order.h"
+#include "../trading_ifc/instrument.h"
+#include "../trading_ifc/account.h"
+#include "../trading_ifc/order.h"
 
 namespace trading_api {
 
@@ -28,26 +28,24 @@ protected:
 
 class ErrorOrder: public AssociatedOrder {
 public:
-    ErrorOrder(Instrument instrument, Account account, std::string_view label, Reason r, std::string message)
+    ErrorOrder(Instrument instrument, Account account, std::string_view label, Reason r)
         :AssociatedOrder(std::move(instrument),std::move(account), label)
-        ,_r(r),_message(std::move(message)) {}
+        ,_r(r) {}
 
     virtual State get_state() const override {return State::discarded;}
     virtual Reason get_reason() const override {return _r;}
-    virtual std::string_view get_message() const override {return _message;}
     virtual Origin get_origin() const override {return Origin::strategy;}
 protected:
     Reason _r;
-    std::string _message;
 };
 
 ///Create error order (create_order cannot throw exception)
-inline Order order_error(Instrument instrument, Account account, std::string_view label, Order::Reason r, std::string msg) {
+inline Order order_error(Instrument instrument, Account account, std::string_view label, Order::Reason r) {
     return Order(std::make_shared<ErrorOrder>(
             std::move(instrument),
             std::move(account),
             label,
-            r,std::move(msg)));
+            r));
 }
 
 class BasicOrder: public IOrder {
@@ -56,11 +54,16 @@ public:
     struct Status {
         std::string id = {};
         Decimal filled = 0;
-        Decimal last_price = 0;
-        Order::Report last_report = {State::sent, Reason::no_reason, {}};
+        Decimal avg_price = 0;
+        State state = State::sent;
+        Reason reason = {};
 
-        void add_fill(Decimal price, Decimal amount);
-        void update_report(Order::Report report);
+        void apply_report(const Order::Report &report) {
+            if (report.new_state) state = *report.new_state;
+            if (report.reason) reason = *report.reason;
+            if (report.filled_amount) filled = *report.filled_amount;
+            if (report.avg_price) avg_price = *report.avg_price;
+        }
     };
 
 
@@ -78,13 +81,10 @@ public:
         ,_replaced(replaced.get_handle())
         ,_label(label) {}
     virtual State get_state() const override {
-        return _status.last_report.new_state;
+        return _status.state;
     }
-    virtual Decimal get_last_price() const override {
-        return _status.last_price;
-    }
-    virtual std::string_view get_message() const override {
-        return _status.last_report.message;
+    virtual Decimal get_avg_price() const override {
+        return _status.avg_price;
     }
     virtual Decimal get_filled() const override {
         return _status.filled;
@@ -93,12 +93,13 @@ public:
         return _setup;
     }
     virtual Reason get_reason() const override {
-        return _status.last_report.reason;
+        return _status.reason;
     }
     virtual Instrument get_instrument() const override {
         return _instrument;
     }
-    virtual SerializedOrder to_binary() const override {return {_status.id,{} };}
+    ///Default serialization stores just order ID and order's label as exchange is responsible to recreate order from its records
+    virtual SerializedOrder to_binary() const override {return {_status.id,_label};}
     virtual Origin get_origin() const override  {return _origin;}
     virtual Account get_account() const override {return _account;}
     virtual std::string get_id() const override {return _status.id;}
@@ -118,6 +119,11 @@ public:
     }
 
     virtual std::string get_label() const {return _label;}
+
+    static void apply_report(const Order &ord, const Order::Report &rep) {
+        from_order(ord).get_status().apply_report(rep);
+    }
+
 
 protected:
 

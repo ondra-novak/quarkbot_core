@@ -1,6 +1,7 @@
+#include <../common/basic_order.h>
+
 #include "../simulator_old/sim_exchange_info.h"
 
-#include "../trading_ifc/basic_order.h"
 namespace trading_api {
 
 ConfigSchema SimExchange::get_exchange_config_schema() const {

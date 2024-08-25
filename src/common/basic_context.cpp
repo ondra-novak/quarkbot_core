@@ -1,5 +1,6 @@
+#include "basic_order.h"
+
 #include "basic_context.h"
-#include "../trading_ifc/basic_order.h"
 #include <list>
 #include <future>
 #include <vector>
@@ -42,6 +43,42 @@ public:
 };
 
 
+std::vector<std::pair<Order, Order::Report> > BasicContext::restore_orders() {
+    std::mutex mx;
+    std::condition_variable cond;
+    unsigned int counter = 1;
+
+    std::vector<std::pair<Order, Order::Report> > result;
+    std::exception_ptr e = {};
+    for (const auto &a: _accounts) {
+        auto &ctx = BasicExchangeContext::from_exchange(a.get_exchange());
+        auto orders = _storage->load_open_orders(a);
+        if (!orders.empty()) {
+            ctx.restore_orders(a, orders, [&](AsyncResult<IExchange::RestoredOrders> arg){
+
+                //runs async
+                std::lock_guard _(mx);
+                try {
+                    auto arr = arg.get();
+                    result.insert(result.end(), arr.begin(), arr.end());
+                } catch (...) {
+                    e = std::current_exception();
+                }
+                if (--counter == 0) cond.notify_all(); //notify last operation
+
+            });
+        }
+    }
+    std::unique_lock lk(mx);
+    --counter;
+
+    //wait for completion
+    cond.wait(lk,[&]{return counter == 0;});
+    if (e) std::rethrow_exception(e);
+    return result;
+
+}
+
 void BasicContext::init(std::unique_ptr<IStrategy> strategy,
         std::vector<Account> accounts,
         std::vector<Instrument> instruments,
@@ -58,105 +95,71 @@ void BasicContext::init(std::unique_ptr<IStrategy> strategy,
         _exchanges.emplace(i.get_exchange(),Batches{});
     }
     _strategy->on_init(this);
-    std::list<OrderCollector> collected_orders;
-    std::list<std::future<void> > collected_futures;
-    for (const auto &a: _accounts) {
-        auto ex = a.get_exchange();
-        auto &ctx = BasicExchangeContext::from_exchange(ex);
-        auto orders = _storage->load_open_orders(a);
-        if (!orders.empty()) {
-            auto &c = collected_orders.emplace_back();
-            ctx.restore_orders(a, orders, c);
+    auto restored = restore_orders();
+    EvRestoreOrders ev_restored{this,{}};
+    ev_restored.orders.reserve(restored.size());
+    for (auto &x: restored) {ev_restored.orders.push_back(x.first);}
+    if (!ev_restored.orders.empty()) {
+        _queue.post(std::move(ev_restored));
+    }
+    _queue.post(EvStart{this});
+    for (auto &x: restored) {
+        if (!IOrder::is_done(*x.second.new_state)) {
+            auto &ex = BasicExchangeContext::from_exchange(x.first.get_account().get_exchange());
+            ex.subscribe_order(this, x.first);
         }
-    }
-    std::transform(collected_orders.begin(), collected_orders.end(),
-            std::back_inserter(collected_futures), [](OrderCollector &x) {
-       return x.promise.get_future();
-    });
-    for (auto &x: collected_futures) x.wait();
-    for (auto &x: collected_futures) x.get();
-
-    EvRestoreOrders restored_orders{this,{}};
-    for (auto &x: collected_orders) {
-        for (auto &[k,v]: x.orders) restored_orders.orders.push_back(k);
-    }
-    if (!restored_orders.orders.empty()) {
-        _queue.push(std::move(restored_orders));
-    }
-    _queue.push(EvStart{this});
-    for (auto &x: collected_orders) {
-        for (auto &[k,v]: x.orders) {
-            _queue.push(EvOrderReport{this,k, std::move(v.report), std::move(v.fills)});
-        }
+        _queue.post(EvOrderReport{this, std::move(x.first), std::move(x.second)});
     }
     notify_queue();
 }
 
+void BasicContext::post(QueueItem &&q) {
+    if (_queue.post(std::move(q))) notify_queue();
+}
+void BasicContext::post_collapse(QueueItem &&q) {
+    if (_queue.post_collapse(std::move(q))) notify_queue();
+}
 
-void BasicContext::on_event(const Instrument &i, const MarketEvent &event) {
+
+void BasicContext::on_subscription_event(Instrument i, MarketEvent event) {
     std::lock_guard _(_queue_mx);
     if (can_collapse(event.get_type())) {
-        MarketEventItem itm{i, event};
-        auto iter = std::find(_mequeue.begin(), _mequeue.end(), itm);
-        if (iter == _mequeue.end()) {
-            _mequeue.push_back(itm);
-            notify_queue();
-        } else {
-            iter->event = std::move(itm.event);
-        }
+        post_collapse(EvMarketEventItem{this,std::move(i), std::move(event)});
     } else {
-        _queue.push(EvMarketEventItem{this,i,event});
-        notify_queue();
+        post(EvMarketEventItem{this,std::move(i), std::move(event)});
     }
 }
 
-void BasicContext::on_event(const Order &order,Order::Report report, Fills fills) {
+void BasicContext::on_order_report(Order order,Order::Report report) {
     std::lock_guard _(_queue_mx);
-    _queue.push(EvOrderReport{this, order, std::move(report), std::move(fills)});
-    notify_queue();
-}
-
-
-
-
-void BasicContext::on_event(const Instrument &i, AsyncResult<void> st) {
-    std::lock_guard _(_queue_mx);
-    _queue.push(EvUpdateInstrument{this, i, std::move(st)});
-    notify_queue();
+    post(EvOrderReport{this, std::move(order), std::move(report)});
 
 }
 
 
-
-void BasicContext::on_event(const Account &a, AsyncResult<void> st ) {
+void BasicContext::on_update(Instrument i, AsyncResult<void> st) {
     std::lock_guard _(_queue_mx);
-    _queue.push(EvUpdateAccount{this, a, std::move(st)});
-    notify_queue();
+    post(EvUpdateInstrument{this, std::move(i), std::move(st)});
+
 }
 
-void BasicContext::on_event(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> event) {
+
+
+void BasicContext::on_update(Account a, AsyncResult<void> st ) {
     std::lock_guard _(_queue_mx);
-    _queue.push(EvUpdateMarket{this, i, type, std::move(event)});
-     notify_queue();
+    post(EvUpdateAccount{this, std::move(a), std::move(st)});
+}
+
+void BasicContext::on_update(Instrument i, MarketEventType type, AsyncResult<MarketEvent> event) {
+    std::lock_guard _(_queue_mx);
+    post(EvUpdateMarket{this, i, type, std::move(event)});
 }
 
 
 
 void BasicContext::notify_queue() {
-    Timestamp tp = Timestamp::max();
-    if (_queue.empty()) {
-        if (_timed_queue.empty()) {
-            return;
-        }
-        tp = _timed_queue.front().tp;
-    } else {
-        tp = Timestamp::min();
-    }
-    if (_scheduled_time > tp) {
-        _scheduled_time = tp;
-        _scheduler(tp,[this](auto tp){on_scheduler(tp);}, this);
-    }
-
+    Timestamp tp = _queue.get_nearest_schedule();
+    _scheduler(tp,[this](auto tp){on_scheduler(tp);}, this);
 }
 
 
@@ -207,8 +210,9 @@ void BasicContext::cancel(const Order &order) {
 void BasicContext::set_timer(Timestamp at, TimerEventCB fnptr, TimerID id) {
 
     std::lock_guard _(_queue_mx);
-    _timed_queue.push(TimerItem{at, id, std::move(fnptr)});
-    notify_queue();
+    if (_queue.post_timed(id, at, std::move(fnptr))) {
+        notify_queue();
+    }
 }
 
 
@@ -241,14 +245,7 @@ void BasicContext::allocate(const Account &, double ) {
 
 bool BasicContext::clear_timer(TimerID id) {
     std::lock_guard _(_queue_mx);
-    auto iter = std::find_if(_timed_queue.begin(), _timed_queue.end(), [&](const TimerItem &item){
-       return item.id == id;
-    });
-    if (iter != _timed_queue.end()) {
-        _timed_queue.erase(iter);
-        return true;
-    }
-    return false;
+    return _queue.cancel(reinterpret_cast<const void *>(id));
 }
 
 
@@ -354,64 +351,34 @@ void BasicContext::call_strategy(Fn &&strategy_fn) {
         }
     }
     commit();
-
-
 }
-
-void BasicContext::reschedule(Timestamp tp) {
-    _scheduled_time = tp;
-    _scheduler(tp, [this](auto tp){on_scheduler(tp);}, this);
-}
-
 
 void BasicContext::on_scheduler(Timestamp tp) noexcept {
     _event_time = tp;
     auto next_ev = tp;
     std::unique_lock lk(_queue_mx);
-    //scheduler processes one action at time, then it is rescheduled
-    //in case that action has been processed, it reschedules to immediately execution
-    //otherwise, it reschedules to next scheduled time
-    //or to infinite time
 
-    //queue is processed first (high priority)
-    if (!_queue.empty()) {
-        auto f = std::move(_queue.front());
-        _queue.pop();
+    auto executor = [&](auto &&ev){
         lk.unlock();
-        std::visit([&](auto &item){call_strategy(item);}, f);
+        std::visit([&](auto &&fn) {
+            call_strategy(std::move(fn));
+        }, ev);
+        lk.lock();
+        return true;
+    };
 
-    //timed events have middle priority
-    } else if (!_timed_queue.empty() && _timed_queue.front().tp <= tp) {
-        auto fn = std::move(_timed_queue.front().r);
-        _timed_queue.pop();
-        lk.unlock();
-        call_strategy(fn);
-
-     //market event queue has low priority
-    } else if (!_mequeue.empty()) {
-        auto item = std::move(_mequeue.front());
-        _mequeue.pop_front();
-        lk.unlock();
-        call_strategy([&]{
-               this->_strategy->on_market_event(item.i, item.event);
-        });
-     //idle events have very low priority
-    } else {
+    if (!_queue.process_message(tp, executor)) {
         bool r = true;
         lk.unlock();
         call_strategy([this, &r]{
             r = _strategy->on_context_idle();
         });
-        if (r) {
-            if (_timed_queue.empty()) {
-                next_ev = Timestamp::max();
-            } else {
-                next_ev = _timed_queue.front().tp;
-            }
+        lk.lock();
+        if (!r) {
+            next_ev = _queue.get_nearest_schedule();
         }
     }
-    lk.lock();
-    reschedule(next_ev);
+    _scheduler(tp, [this](auto tp){on_scheduler(tp);}, this);
 }
 
 
@@ -420,7 +387,7 @@ void BasicContext::EvMQ::operator()() {
 }
 void BasicContext::on_message(MQClient::Message message) {
     std::lock_guard _(_queue_mx);
-    _queue.push(EvMQ{this, std::move(message)});
+    post(EvMQ{this, std::move(message)});
 }
 
 bool BasicContext::get_service(const std::type_info &tinfo, std::shared_ptr<void> &ptr) {
@@ -459,8 +426,39 @@ void BasicContext::EvRestoreOrders::operator ()() {
     me->_strategy->on_active_orders(std::move(orders));
 }
 void BasicContext::EvOrderReport::operator ()() {
-    me->_strategy->on_order_report(std::move(order), std::move(fills));
+    auto &ex = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
+    ex.order_apply_report(order, report);
+    me->_storage->put_order(order);
+    { //remove duplicate fills, store unique fills to the DB
+        auto iter = std::remove_if(report.fills.begin(), report.fills.end(), [&](const Fill &f){
+            bool dup = me->_storage->is_duplicate_fill(f);
+            if (!dup) me->_storage->put_fill(f);
+            return dup;
+        });
+        report.fills.erase(iter, report.fills.end());
+    }
+    me->_strategy->on_order_report(std::move(order), std::move(report.fills));
 }
+
+std::size_t BasicContext::QueueItemHasher::operator ()(const QueueItem &x) const {
+    if (std::holds_alternative<EvMarketEventItem>(x)) {
+        auto ev = std::get<EvMarketEventItem>(x);
+        Instrument::Hasher hasher;
+        return hasher(ev.i) + static_cast<std::size_t>(ev.event.get_type());
+    } else {
+        throw std::runtime_error("Internal: Attempt to collapse noncollapsable event");
+    }
+}
+
+bool BasicContext::QueueItemCompare::operator ()(const QueueItem &a, const QueueItem &b) const {
+    if (std::holds_alternative<EvMarketEventItem>(a) && std::holds_alternative<EvMarketEventItem>(b)) {
+        auto ev_a = std::get<EvMarketEventItem>(a);
+        auto ev_b = std::get<EvMarketEventItem>(b);
+        return ev_a.i == ev_b.i && ev_a.event.get_type() == ev_b.event.get_type();
+    } else {
+        throw std::runtime_error("Internal: Attempt to collapse noncollapsable event");
+    }
 
 }
 
+}

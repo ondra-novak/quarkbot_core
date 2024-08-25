@@ -36,7 +36,7 @@ public:
      * @param reason optional reason (for the state)
      * @param message optional string message if error
      */
-    virtual void order_report(const Order &order, Order::Report report, Fills fills) = 0;
+    virtual void order_report(const Order &order, Order::Report report) = 0;
 
     virtual const Config &get_config() const = 0;
 

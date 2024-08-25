@@ -33,15 +33,6 @@ public:
          * fills and statuses as final.
          */
         virtual void order(Order ord, Order::Report report) = 0;
-        ///called for each fill recorded for the order
-        /**
-         * @param ord order
-         * @param fill fill
-         * @note the exchange should call the function order() for every new order
-         * and then the function fill() for all its fills (regardless on, whether
-         * already was reported or not).
-         */
-        virtual void fill(Order ord, Fills fill) = 0;
         ///called when exchange finished the operation successfully
         virtual void ok() = 0;
         ///called when an exception / error. The exception is available as current_exception()
@@ -221,6 +212,9 @@ public:
      */
     virtual Order create_order_replace(const Order &replace, const Order::Setup &setup, std::string_view label) = 0;
 
+    using RestoredOrders = std::span<std::pair<Order, Order::Report> >;
+    using RestoreOrdersCallback = Function<void(AsyncResult<RestoredOrders>)>;
+
     ///restore orders
     /**
      * Each order is stored in the database as its binary form. The serialization to
@@ -230,24 +224,29 @@ public:
      *
      * The strategy should at least remember an unique identifier of the order.
      *
-     * This function can be asynchronous. Multiple pending requests are possible at the time
-     * (so it is allowed to call this function even if previous call is not done yet)
-     *
      * @param acc account specifies account which should own these orders.
      * @param orders list of orders in binary form
-     * @param collector reference to instance which receives orders and all fills
+     * @param callbalback, this callback is called with orders and their repost, which
+     * can contains restored fills. The order instance must be in "restored"state and
+     * the report could contain its actuall state. The strategy will call order_apply_report
+     * for each this state
      *
      * @note function can be asynchronous but it is allowed to execute it synchronously.
      */
-    virtual void restore_orders(const Account &acc, std::span<SerializedOrder> orders, IRestoredOrderCollector &collector) = 0;
+    virtual void restore_orders(const Account &acc,
+            std::span<SerializedOrder> orders,
+            RestoreOrdersCallback callback) = 0;
 
     ///Applies report to order object
     /**
      * Order object is owned by strategy and can be accessed anytime during processing,
      * because there is no locking scheme. This means, that new order state must
-     * be applied synchronously with the strategy. This function is called in
-     * strategy thread before the order is passed to the strategy and allows to
-     * apply report to the order's internal state.
+     * be applied synchronously with the strategy. This function is called in the
+     * strategy thread before the order is passed to the strategy event handler
+     * and it is used to apply report to the order's internal state, so the report
+     * becomes visible in order state. The exchange should avoid to change
+     * order state in different place (or thread). This reason, why Order::Report exists
+     *
      *
      * @param order subject
      * @param report report to apply
@@ -256,19 +255,6 @@ public:
      */
     virtual void order_apply_report(const Order &order, const Order::Report &report)  =0;
 
-
-    ///Applies fill to order object
-    /**
-     * Because order object can be modified only synchronously with the strategy,
-     * this function must be called in strategy thread.
-     *
-     * @param order order
-     * @param fill fill
-     *
-     * @note the order must be created by this exchange, otherwise function can throw exception
-     *
-     */
-    virtual void order_apply_fill(const Order &order, const Fill &fill) = 0;
 
 
 };

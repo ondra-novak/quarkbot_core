@@ -1,7 +1,8 @@
 #include "exchange_main.h"
 #include "instrument.h"
 #include "identity.h"
-#include "../../trading_ifc/basic_order.h"
+
+#include <../../common/basic_order.h>
 
 
 using namespace trading_api;

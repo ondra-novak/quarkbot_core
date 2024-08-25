@@ -1,6 +1,7 @@
 #pragma once
 
 #include "event_target.h"
+#include "dispatcher.h"
 
 #include "../trading_ifc/strategy.h"
 #include "context_scheduler.h"
@@ -60,11 +61,11 @@ public:
             std::vector<Instrument> instruments,
             Config config);
 
-    virtual void on_event(const Instrument &i, AsyncResult<void> st) override;
-    virtual void on_event(const Account &a, AsyncResult<void> st)  override;
-    virtual void on_event(const Instrument &i, const MarketEvent &subscription_type)  override;
-    virtual void on_event(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev)  override;
-    virtual void on_event(const Order &order,Order::Report report, Fills fills)  override;
+    virtual void on_update(Instrument i, AsyncResult<void> st) override;
+    virtual void on_update(Account a, AsyncResult<void> st)  override;
+    virtual void on_subscription_event(Instrument i, MarketEvent ev)  override;
+    virtual void on_update(Instrument i, MarketEventType type, AsyncResult<MarketEvent> ev)  override;
+    virtual void on_order_report(Order order,Order::Report report)  override;
     virtual void subscribe(MarketEventType type, const Instrument &i)override;
     virtual void unsubscribe(MarketEventType type, const Instrument &i) override;
     virtual Order replace(const Order &order, const Order::Setup &setup, std::string_view label) override;
@@ -109,7 +110,6 @@ protected:
     std::vector<Instrument> _instruments;
     Config _config;
     Timestamp _event_time = Timestamp::min();
-    Timestamp _scheduled_time = Timestamp::max();
 
     struct MarketEventItem {
         Instrument i;
@@ -134,6 +134,8 @@ protected:
         Instrument i;
         MarketEvent event;
         void operator()();
+        bool operator==(const EvStart &) const ;
+        std::size_t get_hash() const;
     };
 
     struct EvUpdateInstrument {
@@ -162,7 +164,6 @@ protected:
         BasicContext *me;
         Order order;
         Order::Report report;
-        std::vector<Fill> fills;
         void operator()();
     };
 
@@ -173,6 +174,8 @@ protected:
         void operator()();
     };
 
+    using EvCall = Function<void()>;
+
     using QueueItem = std::variant<
             EvStart,
             EvUpdateAccount,
@@ -181,18 +184,15 @@ protected:
             EvOrderReport,
             EvMQ,
             EvRestoreOrders,
-            EvUpdateMarket
+            EvUpdateMarket,
+            TimerEventCB
             >;
 
-    struct TimerItem {
-        Timestamp tp;
-        TimerID id;
-        TimerEventCB r;
-        struct ordering {
-            bool operator()(const TimerItem &a, const TimerItem &b) const {
-                return a.tp > b.tp;
-            }
-        };
+    struct QueueItemHasher {
+        std::size_t operator()(const QueueItem &x) const;
+    };
+    struct QueueItemCompare {
+        bool operator()(const QueueItem &a, const QueueItem &b) const;
     };
 
     struct Batches {
@@ -202,9 +202,7 @@ protected:
 
 
     std::mutex _queue_mx;
-    std::queue<QueueItem> _queue;
-    std::deque<MarketEventItem> _mequeue;
-    PriorityQueue<TimerItem, typename TimerItem::ordering> _timed_queue;
+    DispatcherCore<QueueItem, QueueItemHasher, QueueItemCompare> _queue;
 
     std::map<ExchangeInfo, Batches> _exchanges;
     unsigned int _start_counter = 0;
@@ -217,8 +215,10 @@ protected:
     void on_scheduler(Timestamp tp) noexcept;
     template<std::invocable<> Fn>
     void call_strategy(Fn &&strategy_fn);
-    void reschedule(Timestamp tp);
-    void reschedule_now();
+
+    void post(QueueItem &&);
+    void post_collapse(QueueItem &&);
+    std::vector<std::pair<Order, Order::Report> > restore_orders();
 };
 
 

@@ -57,9 +57,9 @@ public:
      * You need to subscribe to given market event. See Context::subscribe
      *
      * @param i instrument
-     * @param tk ticker
+     * @param event market event
      */
-    virtual void on_market_event(const Instrument &i, const MarketEvent &event) = 0;
+    virtual void on_market_event(Instrument i, MarketEvent event) = 0;
 
     ///called when order state is updated or when fill detected
     /**
@@ -72,7 +72,7 @@ public:
      * fills, which means, that order status changed, but no fills has been made
      *
      */
-    virtual void on_order_report(const Order &ord, std::vector<Fill> fills) = 0;
+    virtual void on_order_report(Order ord, std::vector<Fill> fills) = 0;
 
     ///called when MQ message is received
     /**

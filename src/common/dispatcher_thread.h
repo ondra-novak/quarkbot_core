@@ -54,17 +54,31 @@ public:
         }
     }
 
-    bool cancel(Ident ident) {
+    ///Cancel scheduled event
+    /**
+     * @param ident identification of scheduled event
+     * @param sync set to true if you need to synchronize with the scheduled event. This
+     * is in effect, when cancel cannot be performed because current event is already
+     * in execution. This option causes synchronization and cancelation of futher
+     * reschedule attempt.
+     * @retval false event is not scheduled, or is currently execution and sync is false,
+     * or currently executing event is trying to cancel itself (which could create a deadlock)
+     * @retval true event has been canceled.
+     */
+    bool cancel(Ident ident, bool sync = false) {
         std::unique_lock lk(_mx);
         bool r = Super::cancel(ident);
-        if (r == false) {
-            if (this->_executing_ident == ident) {
+        bool ret = r;
+        while (r == false && sync &&_current != this) {
+
+            while (this->_executing_ident == ident) {
                 _awaiting = true;
-                _cond.wait(lk, [this, ident]{return this->_executing_ident != ident;});
-                return true;
+                _cond.wait(lk);
             }
+            r = Super::cancel(ident);
+            ret = true;
         }
-        return r;
+        return ret;
     }
 
 protected:

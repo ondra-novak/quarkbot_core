@@ -56,48 +56,103 @@ public:
                 && st != State::restoring;
     }
 
-    enum class Reason {
-        ///no error reported
-        no_reason,
-        ///order to replace not found, or already filled
-        not_found,
-        ///discarded because position would be out of limit
-        position_limit,
-        ///discarded because max leverage would be reached
-        max_leverage,
-        ///rejected during replace because there is unprocessed fill on way
-        unprocessed_fill,
-        ///discarded because invalid params
-        invalid_params,
-        ///discarded because order used in call is not compatible (dynamic cast failed)
-        incompatible_order,
-        ///discarded because invalid usage of amend
-        invalid_amend,
-        ///discarded because unsuppored by service provider
-        unsupported,
-        ///no funds on exchange
-        no_funds,
-        ///post only order would cross
-        crossing,
-        ///error reported on exchange
-        exchange_error,
-        ///any other internal error
-        internal_error,
-        ///trading is not possible, because low liquidity - (trading was stopped)
-        low_liquidity,
-        ///order rejected because exchange is overloaded
-        exchange_overload,
-        ///order amount is too small
-        too_small
+    class Reason {
+    public:
+        enum E {
+            ///no error reported
+            no_reason,
+            ///order to replace not found, or already filled
+            not_found,
+            ///discarded because position would be out of limit
+            position_limit,
+            ///discarded because max leverage would be reached
+            max_leverage,
+            ///rejected during replace because there is unprocessed fill on way
+            unprocessed_fill,
+            ///discarded because invalid params
+            invalid_params,
+            ///discarded because order used in call is not compatible (dynamic cast failed)
+            incompatible_order,
+            ///discarded because invalid usage of amend
+            invalid_amend,
+            ///discarded because unsuppored by service provider
+            unsupported,
+            ///no funds on exchange
+            no_funds,
+            ///post only order would cross
+            crossing,
+            ///error reported on exchange
+            exchange_error,
+            ///any other internal error
+            internal_error,
+            ///trading is not possible, because low liquidity - (trading was stopped)
+            low_liquidity,
+            ///order rejected because exchange is overloaded
+            exchange_overload,
+            ///order amount is too small
+            too_small,
+            ///unknown reason
+            unknown
+        };
+        ///default initialize with no reason
+        Reason():_reason(no_reason) {}
+        ///initialize with reason
+        Reason(E val):_reason(val) {}
+        ///initialize with reason, attach message
+        Reason(E val, std::string_view msg)
+            :_reason(val)
+            ,_message(msg) {}
+        ///compare
+        bool operator==(const Reason &r) const {return _reason == r._reason;}
+        ///retrieve reason code
+        E code() const {return _reason;}
+        ///retrieve attached message
+        std::string_view message() const {return _message;}
+        ///retrieve reason in string
+        std::string_view get_reason_as_string() const {
+            switch (_reason) {
+                case no_reason: return "no reason given";
+                case not_found: return "not found";
+                case position_limit: return "position limit";
+                case max_leverage: return "max leverage";
+                case unprocessed_fill:return "unprocessed fill";
+                case invalid_params: return "invalid params";
+                case incompatible_order: return "incompatible order";
+                case invalid_amend: return "invalid amend";
+                case unsupported: return "unsupported order type";
+                case no_funds: return "no funds";
+                case crossing: return "crossing";
+                case exchange_error: return "exchange error";
+                case internal_error: return "internal error";
+                case low_liquidity: return "low liquidity";
+                case exchange_overload: return "exchange overload";
+                case too_small: return "too small amount";
+                case unknown:
+                default: return "unkown reason";
+            }
+        }
+
+
+    protected:
+        E _reason;
+        std::string _message;
 
     };
 
 
+
     ///carries report of an order (excepct fill)
     struct Report {
-        State new_state;
-        Reason reason;
-        std::string message;
+        ///new state
+        std::optional<State> new_state;
+        ///error reason
+        std::optional<Reason> reason;
+        ///contains updated filled amount
+        std::optional<Decimal> filled_amount;
+        ///contains average fill price
+        std::optional<Decimal> avg_price;
+        ///order fills
+        Fills fills;
     };
 
     enum class Behavior {
@@ -176,7 +231,7 @@ public:
             :Market(s, amount, opt), limit_price(limit_price) {}
     };
 
-    ///Limit post only - rejected if would immediately match
+    ///Limit post only - rejlastected if would immediately match
     struct LimitPostOnly: Limit {
         using Limit::Limit;
     };
@@ -261,14 +316,11 @@ public:
     ///get reason for current state
     virtual Reason get_reason() const = 0;
 
-    ///get message associated with the reason
-    virtual std::string_view get_message() const = 0;
-
     ///get filled amount
     virtual Decimal get_filled() const = 0;
 
-    ///get last executed price
-    virtual Decimal get_last_price() const = 0;
+    ///get average execution price
+    virtual Decimal get_avg_price() const = 0;
 
     ///retrieve associated instrument instance
     virtual Instrument get_instrument() const = 0;
@@ -289,6 +341,7 @@ public:
 
     ///Retrieve label
     virtual std::string get_label() const = 0;
+
 
 
     class Null;
@@ -315,8 +368,7 @@ concept order_has_options= (is_order<T> && requires(T order) {
 class IOrder::Null: public IOrder {
 public:
     virtual State get_state() const override {return State::undefined;}
-    virtual Decimal get_last_price() const override {return 0.0;}
-    virtual std::string_view get_message() const override {return {};}
+    virtual Decimal get_avg_price() const override {return 0.0;}
     virtual Decimal get_filled() const override {return 0.0;}
     virtual Reason get_reason() const override {return Reason::no_reason;}
     virtual Instrument get_instrument() const override {return {};}
@@ -365,11 +417,6 @@ public:
         return _ptr->get_reason();
     }
 
-    ///get message associated with the reason
-    std::string_view get_message() const {
-        return _ptr->get_message();
-    }
-
     ///get filled amount
     Decimal get_filled() const {
         return _ptr->get_filled();
@@ -401,8 +448,8 @@ public:
     }
 
     ///get last executed price
-    Decimal get_last_price() const {
-        return _ptr->get_last_price();
+    Decimal get_avg_price() const {
+        return _ptr->get_avg_price();
     }
 
     ///associated instrument

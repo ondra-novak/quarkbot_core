@@ -39,7 +39,7 @@ void BasicExchangeContext::income_data(const Instrument &i, const MarketEvent &e
     auto iter = _subscriptions.find({ev.get_type(),i});
     if (iter != _subscriptions.end()) {
         for (auto t: iter->second) {
-            t->on_event(i, ev);
+            t->on_subscription_event(i, ev);
         }
     }
 }
@@ -71,10 +71,6 @@ void BasicExchangeContext::order_apply_report(const Order &order,
     _ptr->order_apply_report(order, report);
 }
 
-void BasicExchangeContext::order_apply_fill(const Order &order,
-        const Fill &fill) {
-    _ptr->order_apply_fill(order, fill);
-}
 
 
 
@@ -102,7 +98,7 @@ void BasicExchangeContext::object_updated(const Account &account, AsyncResult<vo
     std::lock_guard _(_mx);
     auto &lst = _account_update_waiting[account];
     for (auto x: lst) {
-        x->on_event(account, st);
+        x->on_update(account, st);
     }
     lst.clear();
 }
@@ -111,7 +107,7 @@ void BasicExchangeContext::object_updated(const Instrument &instrument, AsyncRes
     std::lock_guard _(_mx);
     auto &lst = _instrument_update_waiting[instrument];
     for (auto x: lst) {
-        x->on_event(instrument, st);
+        x->on_update(instrument, st);
     }
     lst.clear();
 }
@@ -130,6 +126,11 @@ void BasicExchangeContext::disconnect(const IEventTarget *target) {
     }
 }
 
+void BasicExchangeContext::subscribe_order(IEventTarget *target, const Order &order) {
+    std::lock_guard _(_mx);
+    _orders.emplace(order, target);
+}
+
 void BasicExchangeContext::batch_place(IEventTarget *target, std::span<Order> orders) {
     std::lock_guard _(_mx);
     for (const auto &ord: orders) {
@@ -141,16 +142,16 @@ void BasicExchangeContext::batch_place(IEventTarget *target, std::span<Order> or
 void BasicExchangeContext::batch_cancel(std::span<Order> orders) {
     _ptr->batch_cancel(orders);
 }
-void BasicExchangeContext::restore_orders(const Account &acc, std::span<SerializedOrder> orders, IRestoredOrderCollector &collector) {
-    _ptr->restore_orders(acc, orders, collector);
+void BasicExchangeContext::restore_orders(const Account &acc, std::span<SerializedOrder> orders, IExchange::RestoreOrdersCallback collector) {
+    _ptr->restore_orders(acc, orders, std::move(collector));
 }
 
-void BasicExchangeContext::order_report(const Order &order, Order::Report report, Fills fills) {
+void BasicExchangeContext::order_report(const Order &order, Order::Report report) {
     std::lock_guard _(_mx);
     auto iter= _orders.find(order);
     if (iter != _orders.end()) {
-        bool is_done = IOrder::is_done(report.new_state);
-        iter->second->on_event(iter->first, std::move(report), std::move(fills));
+        bool is_done = report.new_state && IOrder::is_done(*report.new_state);
+        iter->second->on_order_report(iter->first, std::move(report));
         if (is_done) {
             _orders.erase(iter);
         }
@@ -191,7 +192,7 @@ void BasicExchangeContext::object_updated(const Instrument &i, MarketEventType t
     if (iter != _market_updates.end()) {
         auto lst = std::move(iter->second);
         _market_updates.erase(iter);
-        for (auto x: lst) x->on_event(i, type, ev);
+        for (auto x: lst) x->on_update(i, type, ev);
     }
 }
 

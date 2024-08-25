@@ -1,5 +1,6 @@
 #pragma once
 #include "iexchange.h"
+#include "../common/basic_order.h"
 namespace trading_api {
 
 
@@ -28,8 +29,8 @@ public:
     void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) const {
         _ctx->object_updated(i, std::move(type), std::move(ev));
     }
-    void order_report(const Order &order, Order::Report report, Fills fills) const {
-        _ctx->order_report(order, std::move(report), std::move(fills));
+    void order_report(const Order &order, Order::Report report) const {
+        _ctx->order_report(order, std::move(report));
     }
 
     ///allows to convert this to ExchangeInfo (required by instruments and accounts)
@@ -52,6 +53,24 @@ public:
 
     const Config &get_config() const {
         return _ctx->get_config();
+    }
+
+    ///Default implementation for order managment, when BasicOrder is used
+    virtual Order create_order(const Instrument &instrument, const Account &account, const Order::Setup &setup, std::string_view label) override {
+        return Order(std::make_unique<BasicOrder>(instrument, account, setup, label, Order::Origin::strategy));
+    }
+    ///Default implementation for order managment, when BasicOrder is used
+    virtual Order create_order_replace(const Order &replace, const Order::Setup &setup, std::string_view label) override {
+        return Order(std::make_unique<BasicOrder>(replace, setup, label, Order::Origin::strategy));
+    }
+    ///Default implementation for order managment, when BasicOrder is used
+    virtual void order_apply_report(const Order &order, const Order::Report &report) {
+        BasicOrder::apply_report(order, report);
+    }
+    Order restore_basic_order(const Instrument &instrument, const Account &account, const Order::Setup &setup, std::string_view label) {
+        std::shared_ptr<BasicOrder> x = std::make_unique<BasicOrder>(instrument, account, setup, label, Order::Origin::restored);
+        x->get_status().state = Order::State::restoring;
+        return Order(x);
     }
 
 
