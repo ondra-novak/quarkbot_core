@@ -34,7 +34,11 @@ public:
     virtual std::optional<IExchangeInfo::Icon> get_icon() const override;
     virtual Order create_order(const Instrument &instrument, const Account &account, const Order::Setup &setup, std::string_view label) override;
     virtual Order create_order_replace(const Order &replace, const Order::Setup &setup, std::string_view label) override;
-#if 0
+    virtual void restore_orders(const Account &acc,
+            std::span<SerializedOrder> orders,
+            RestoreOrdersCallback callback) ;
+
+    #if 0
     virtual void restore_orders(void *context, std::span<SerializedOrder> orders) override;
     virtual void order_apply_report(const Order &order, const Order::Report &report)  =0;
     virtual void order_apply_fill(const Order &order, const Fill &fill) override;

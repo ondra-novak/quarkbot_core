@@ -194,6 +194,8 @@ void SimExchange::match_order(simulator::Matching &m, const Order &ord) {
         execute_order(ExecuteInfo{m, ord, filled, rpt}, s);
     }, ord.get_setup());
 
+    order_report(std::move(ord), std::move(rpt));
+
 }
 
 void SimExchange::batch_cancel(std::span<Order> orders) {
@@ -317,8 +319,44 @@ bool SimExchange::validate_order(const Order::Setup &setup) {
             || std::holds_alternative<IOrder::Undefined>(setup));
 }
 
+void SimExchange::restore_orders(const Account &acc, std::span<SerializedOrder> orders,
+        RestoreOrdersCallback callback) {
+    std::vector<std::pair<Order, Order::Report> > out_orders;
+    for (const SerializedOrder &x: orders) {
+        try {
+            auto ordpair = SimOrder::from_binary(acc, x, [this](std::string_view id){
+                auto instr = _instruments.find(id);
+                if (instr) return Instrument(instr);
+                throw std::runtime_error("Unknown instrument");
+            });
+            if (ordpair.first) {
+                Order order(ordpair.first);
+
+                Order::Report rpt = ordpair.second;
+                Decimal filled = *rpt.filled_amount;
+                auto m = SimInstrument::get_matching(order.get_instrument());
+                auto mlk = m.lock();
+                simulator::Matching &mref = *mlk;
+
+                std::visit([&](const auto &s){
+                    execute_order(ExecuteInfo{mref, order, filled, rpt}, s);
+                }, order.get_setup());
+
+                out_orders.emplace_back(order, rpt);
+            }
+        } catch (...) {
+            //ignore
+        }
+    }
+    callback(RestoredOrders(out_orders.data(), out_orders.size()));
+}
+
+
 void SimExchange::process_execution(const simulator::Matching::Execution &ex) {
 
 }
+
+
+
 
 }
