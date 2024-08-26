@@ -62,7 +62,7 @@ protected: //recommended overrides
      * @param active_orders active orders. All orders have restored state. They
      * actuall state is set through standard report which is send after on_start()
      */
-    virtual void on_active_orders(ActiveOrders active_orders) {
+    virtual void on_active_orders(ActiveOrders ) {
         log.warning("called pure virtual on_active_orders() - you should override");
     }
 

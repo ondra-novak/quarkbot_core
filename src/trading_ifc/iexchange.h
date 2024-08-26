@@ -14,30 +14,7 @@ public:
 
     using Query = Config;
 
-    ///Defines collector which accepts restored orders
-    /** @see restore_orders
-     * */
-    class IRestoredOrderCollector {
-    public:
-        ///mandatory dtor
-        virtual ~IRestoredOrderCollector() = default;
-        ///called when order has been restored
-        /**
-         * @param ord instance of order
-         * @param report last order's report
-         *
-         * @note initial state of the order must be State::restoring. The report
-         * contans last known state (captured during restoring)
-         *
-         * The strategy receives all orders as restored, then receives all
-         * fills and statuses as final.
-         */
-        virtual void order(Order ord, Order::Report report) = 0;
-        ///called when exchange finished the operation successfully
-        virtual void ok() = 0;
-        ///called when an exception / error. The exception is available as current_exception()
-        virtual void error() = 0;
-    };
+
 
     virtual ~IExchange() = default;
 

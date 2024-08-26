@@ -53,23 +53,14 @@ protected:
 
     void match_order(simulator::Matching &m, const Order &ord);
 
-    struct ExecuteInfo;
+    struct OrderExecutor;
 
-    void execute_order(ExecuteInfo ctx, const Order::Market &setup);
-    void execute_order(ExecuteInfo ctx, const Order::Limit &setup);
-    void execute_order(ExecuteInfo ctx, const Order::LimitPostOnly &setup);
-    void execute_order(ExecuteInfo ctx, const Order::ImmediateOrCancel &setup);
-    void execute_order(ExecuteInfo ctx, const Order::Stop &setup);
-    void execute_order(ExecuteInfo ctx, const Order::StopLimit &setup);
-    void execute_order(ExecuteInfo ctx, const Order::TrailingStop &setup);
-    void execute_order(ExecuteInfo ctx, const Order::TpSl &setup);
-    void execute_order(ExecuteInfo ctx, const Order::Transfer &setup);
-    void execute_order(ExecuteInfo ctx, const Order::ClosePosition &setup);
-    void execute_order(ExecuteInfo ctx, const IOrder::Undefined &setup);
 
     bool validate_order(const Order::Setup &setup);
 
-    void process_execution(const simulator::Matching::Execution &ex);
+    void process_execution(simulator::Matching &m, simulator::Matching::Execution ex);
+
+    void simulate_market(simulator::Matching &m);
 
 };
 

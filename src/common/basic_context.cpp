@@ -18,31 +18,6 @@ BasicContext::~BasicContext() {
 
 }
 
-class OrderCollector: public IExchange::IRestoredOrderCollector {
-public:
-    virtual void order(Order ord, Order::Report report) {
-        orders[ord].report = report;
-    }
-    virtual void fill(Order ord, Fills fill) {
-        auto &f = orders[ord].fills;
-        f.insert(f.end(), fill.begin(), fill.end());
-    }
-    virtual void ok() {
-        promise.set_value();
-    }
-    virtual void error(){
-        promise.set_exception(std::current_exception());
-    }
-
-    struct Status {
-        Order::Report report;
-        Fills fills;
-    };
-    std::unordered_map<Order, Status, Order::Hasher> orders;
-    std::promise<void> promise;
-};
-
-
 std::vector<std::pair<Order, Order::Report> > BasicContext::restore_orders() {
     std::mutex mx;
     std::condition_variable cond;

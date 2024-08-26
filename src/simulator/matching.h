@@ -25,6 +25,8 @@ public:
         Decimal price = {};
         ///executed price
         Decimal size = {};
+        ///remain size (you need to re-add order to continue execution)
+        Decimal remain = {};
     };
 
     struct Spread {
