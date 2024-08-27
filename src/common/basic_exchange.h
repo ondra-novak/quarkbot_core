@@ -14,7 +14,6 @@ class BasicExchangeContext: public IExchangeContext, public IExchangeInfo, publi
 public:
 
     using Query = IExchange::Query;
-    using IRestoredOrderCollector = IExchange::IRestoredOrderCollector;
 
 
     BasicExchangeContext(std::string label, Network ntw, Log log);

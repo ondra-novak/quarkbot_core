@@ -17,6 +17,7 @@ public:
     Fills create_fills(const Instrument &i, Side side, Decimal amount, Decimal price, Timestamp tm, std::string_view label);
     std::optional<Fill> close_position(const Instrument &i, std::string id, Decimal bid, Decimal ask, Timestamp tm, std::string_view label, Decimal remain = 0_dec);
     Fill open_position(const Instrument &i, Side side, Decimal price, Decimal size, Timestamp tm, std::string_view label);
+    Decimal get_max_reduce(const Instrument &i, Side side);
 
     static std::string generate_uid();
 

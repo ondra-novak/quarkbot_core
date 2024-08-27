@@ -92,7 +92,7 @@ std::vector<Matching::Execution> Matching::get_executions() {
                         )) {
                     auto to_exec = std::min(_last_size, item.amount);
                     exx.push_back({std::move(item.order),item.side,item.limit_price,
-                            to_exec});
+                            to_exec, item.amount - to_exec});
                     _last_size -= to_exec;
                     return true;
                 }

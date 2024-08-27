@@ -208,4 +208,19 @@ SimAccount &SimAccount::from_account(const Account &a) {
 }
 
 
+Decimal SimAccount::get_max_reduce(const Instrument &i, Side side) {
+    std::shared_lock _(_mx);
+    Decimal sum = {};
+    auto iter = _instrument_map.find(i);
+    if (iter != _instrument_map.end()) {
+        side = reverse(side);
+        for (const auto &x: iter->second) {
+            if (x.side == side) {
+                sum += x.amount;
+            }
+        }
+    }
+    return sum;
+}
+
 } /* namespace trading_api */

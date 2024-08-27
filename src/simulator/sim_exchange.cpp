@@ -5,6 +5,8 @@
 #include "sim_order.h"
 namespace trading_api {
 
+using namespace simulator;
+
 ConfigSchema SimExchange::get_exchange_config_schema() const {
     return {};
 }
@@ -128,11 +130,103 @@ void SimExchange::batch_place(std::span<Order> orders) {
 }
 
 
-struct SimExchange::ExecuteInfo { // @suppress("Miss copy constructor or assignment operator")
+struct SimExchange::OrderExecutor { // @suppress("Miss copy constructor or assignment operator")
+    SimExchange *me;
     simulator::Matching &m;
     const Order &ord;
     Decimal filled;
     Order::Report &rpt;
+
+    void operator()(const Order::Market &setup){
+        me->process_execution(m,
+                m.place_market_order(ord, setup.side, setup.amount - filled));
+    }
+    void operator()(const Order::Limit &setup) {
+
+        m.place_waiting_order(simulator::Matching::Limit{
+            ord,setup.side,setup.amount - filled,setup.limit_price
+        });
+        rpt.new_state = Order::State::active;
+
+    }
+    void operator()(const Order::LimitPostOnly &setup) {
+        auto spread= m.get_spread();
+        if ((setup.side == Side::buy && setup.limit_price > spread.ask) ||
+            (setup.side == Side::sell && setup.limit_price < spread.bid)) {
+            rpt.new_state = Order::State::rejected;
+            rpt.reason = Order::Reason::crossing;
+        } else {
+            m.place_waiting_order(simulator::Matching::Limit{
+                ord,setup.side,setup.amount - filled,setup.limit_price
+            });
+            rpt.new_state = Order::State::active;
+        }
+
+    }
+    void operator()(const Order::ImmediateOrCancel &setup) {
+        auto spread= m.get_spread();
+        if ((setup.side == Side::buy && setup.limit_price > spread.ask) ||
+            (setup.side == Side::sell && setup.limit_price < spread.bid)) {
+            me->process_execution(m,
+                    m.place_market_order(ord, setup.side, setup.amount-filled));
+        } else {
+            rpt.new_state = Order::State::canceled;
+        }
+
+    }
+    void operator()(const Order::Stop &setup) {
+        m.place_waiting_order(simulator::Matching::Stop{
+            ord, setup.side, setup.amount - filled, setup.stop_price
+        });
+        rpt.new_state = Order::State::active;
+    }
+    void operator()(const Order::StopLimit &setup) {
+        m.place_waiting_order(simulator::Matching::StopLimit{
+            ord, setup.side, setup.amount - filled, setup.stop_price, setup.limit_price
+        });
+        rpt.new_state = Order::State::active;
+
+    }
+    void operator()(const Order::TrailingStop &setup) {
+        m.place_waiting_order(simulator::Matching::TrailingStop{
+            ord, setup.side, setup.amount - filled, setup.stop_distance
+        });
+        rpt.new_state = Order::State::active;
+
+    }
+    void operator()(const Order::TpSl &setup) {
+        m.place_waiting_order(simulator::Matching::TpSl{
+            ord, setup.side, setup.amount - filled, setup.stop_price,setup.limit_price
+        });
+        rpt.new_state = Order::State::active;
+
+    }
+    void operator()(const Order::Transfer &setup) {
+        rpt.new_state = Order::State::rejected;
+        rpt.reason = {Order::Reason::internal_error, "Order::Transfer cannot execute"};
+    }
+    void operator()(const Order::ClosePosition &setup) {
+        SimAccount &acc = SimAccount::from_account(ord.get_account());
+        auto spread = m.get_spread();
+        auto fill = acc.close_position(ord.get_instrument(), setup.pos_id,
+                spread.bid, spread.ask,
+                me->_cur_sim_time, ord.get_label(), setup.remain);
+        if (fill) {
+            rpt.avg_price = fill->price;
+            rpt.filled_amount = fill->amount;
+            rpt.new_state = Order::State::filled;
+            rpt.fills.push_back(std::move(*fill));
+        } else {
+            rpt.new_state = Order::State::rejected;
+            rpt.reason = Order::Reason::not_found;
+        }
+    }
+    void operator()(const IOrder::Undefined &setup) {
+        rpt.new_state = Order::State::rejected;
+        rpt.reason = {Order::Reason::internal_error, "Order::Undefined cannot execute"};
+
+    }
+
 };
 
 
@@ -190,9 +284,7 @@ void SimExchange::match_order(simulator::Matching &m, const Order &ord) {
         }
     }
 
-    std::visit([&](const auto &s){
-        execute_order(ExecuteInfo{m, ord, filled, rpt}, s);
-    }, ord.get_setup());
+    std::visit(OrderExecutor{this, m, ord, filled, rpt}, ord.get_setup());
 
     order_report(std::move(ord), std::move(rpt));
 
@@ -216,100 +308,8 @@ void SimExchange::replay_accept(std::string_view symbol, const TickData &ticker)
         auto matching = instrument->get_matching();
         auto m = matching.lock();
         m->accept_ticker(ticker);
-        //m->get_executions() //TODO
+        simulate_market(*m);
     }
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::Market &setup) {
-
-    process_execution(
-            ctx.m.place_market_order(ctx.ord, setup.side, setup.amount - ctx.filled));
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::Limit &setup) {
-    ctx.m.place_waiting_order(simulator::Matching::Limit{
-        ctx.ord,setup.side,setup.amount - ctx.filled,setup.limit_price
-    });
-    ctx.rpt.new_state = Order::State::active;
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::LimitPostOnly &setup) {
-    auto spread= ctx.m.get_spread();
-    if ((setup.side == Side::buy && setup.limit_price > spread.ask) ||
-        (setup.side == Side::sell && setup.limit_price < spread.bid)) {
-        ctx.rpt.new_state = Order::State::rejected;
-        ctx.rpt.reason = Order::Reason::crossing;
-    } else {
-        ctx.m.place_waiting_order(simulator::Matching::Limit{
-            ctx.ord,setup.side,setup.amount - ctx.filled,setup.limit_price
-        });
-        ctx.rpt.new_state = Order::State::active;
-    }
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::ImmediateOrCancel &setup) {
-    auto spread= ctx.m.get_spread();
-    if ((setup.side == Side::buy && setup.limit_price > spread.ask) ||
-        (setup.side == Side::sell && setup.limit_price < spread.bid)) {
-        process_execution(
-                ctx.m.place_market_order(ctx.ord, setup.side, setup.amount-ctx.filled));
-    } else {
-        ctx.rpt.new_state = Order::State::canceled;
-    }
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::Stop &setup) {
-    ctx.m.place_waiting_order(simulator::Matching::Stop{
-        ctx.ord, setup.side, setup.amount - ctx.filled, setup.stop_price
-    });
-    ctx.rpt.new_state = Order::State::active;
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::StopLimit &setup) {
-    ctx.m.place_waiting_order(simulator::Matching::StopLimit{
-        ctx.ord, setup.side, setup.amount - ctx.filled, setup.stop_price, setup.limit_price
-    });
-    ctx.rpt.new_state = Order::State::active;
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::TrailingStop &setup) {
-    ctx.m.place_waiting_order(simulator::Matching::TrailingStop{
-        ctx.ord, setup.side, setup.amount - ctx.filled, setup.stop_distance
-    });
-    ctx.rpt.new_state = Order::State::active;
-
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::TpSl &setup) {
-    ctx.m.place_waiting_order(simulator::Matching::TpSl{
-        ctx.ord, setup.side, setup.amount - ctx.filled, setup.stop_price,setup.limit_price
-    });
-    ctx.rpt.new_state = Order::State::active;
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::Transfer &setup) {
-    throw ;//unreachable
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const Order::ClosePosition &setup) {
-    SimAccount &acc = SimAccount::from_account(ctx.ord.get_account());
-    auto spread = ctx.m.get_spread();
-    auto fill = acc.close_position(ctx.ord.get_instrument(), setup.pos_id,
-            spread.bid, spread.ask,
-            _cur_sim_time, ctx.ord.get_label(), setup.remain);
-    if (fill) {
-        ctx.rpt.avg_price = fill->price;
-        ctx.rpt.filled_amount = fill->amount;
-        ctx.rpt.new_state = Order::State::filled;
-        ctx.rpt.fills.push_back(std::move(*fill));
-    } else {
-        ctx.rpt.new_state = Order::State::rejected;
-        ctx.rpt.reason = Order::Reason::not_found;
-    }
-}
-
-void SimExchange::execute_order(ExecuteInfo ctx, const IOrder::Undefined &setup) {
-    throw ;//unreachable
 }
 
 bool SimExchange::validate_order(const Order::Setup &setup) {
@@ -336,11 +336,8 @@ void SimExchange::restore_orders(const Account &acc, std::span<SerializedOrder> 
                 Decimal filled = *rpt.filled_amount;
                 auto m = SimInstrument::get_matching(order.get_instrument());
                 auto mlk = m.lock();
-                simulator::Matching &mref = *mlk;
 
-                std::visit([&](const auto &s){
-                    execute_order(ExecuteInfo{mref, order, filled, rpt}, s);
-                }, order.get_setup());
+                std::visit(OrderExecutor{this,*mlk, order, filled, rpt}, order.get_setup());
 
                 out_orders.emplace_back(order, rpt);
             }
@@ -352,11 +349,36 @@ void SimExchange::restore_orders(const Account &acc, std::span<SerializedOrder> 
 }
 
 
-void SimExchange::process_execution(const simulator::Matching::Execution &ex) {
+void SimExchange::process_execution(simulator::Matching &m, simulator::Matching::Execution ex) {
 
+    Order ord = ex.order;
+    SimAccount &acc = SimAccount::from_account(ord.get_account());
+    Instrument inst = ord.get_instrument();
+    const Order::Options *opt = Order::get_options(ord.get_setup());
+    if (opt) {
+        if (opt->behavior == Order::Behavior::hedge) {
+            acc.open_position(inst, ex.side,ex.price,ex.size,_cur_sim_time, ord.get_label());
+            return;
+        } else if (opt->behavior == Order::Behavior::reduce) {
+            ex.size  = std::max(acc.get_max_reduce(inst, ex.side), ex.size);
+        }
+    }
+    Order::Report rep;
+    rep.fills = acc.create_fills(inst, ex.side, ex.side, ex.price, _cur_sim_time, ord.get_label());
+    if (ex.remain == 0) rep.new_state = Order::State::filled;
+    else {
+        Decimal filled = ord.get_total() - ex.remain;
+        std::visit(OrderExecutor{this, m, ord, filled, rep}, ord.get_setup());
+    }
+    order_report(ord, rep);
 }
 
 
-
+void SimExchange::simulate_market(simulator::Matching &m) {
+    auto exec = m.get_executions();
+    for (auto x : exec) {
+        process_execution(m, std::move(x));
+    }
+}
 
 }
