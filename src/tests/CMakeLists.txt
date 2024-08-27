@@ -11,6 +11,7 @@ set(testFiles
 	cluster_alloc.cpp
 	dispatcher.cpp
 	stream_merge.cpp
+	structured_ini.cpp
 )   
 
 link_libraries(
