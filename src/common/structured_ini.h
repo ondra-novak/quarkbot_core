@@ -6,6 +6,8 @@
 #include <fstream>
 #include <vector>
 #include <optional>
+#include <charconv>
+#include <limits>
 
 class StructuredIni {
 
@@ -63,36 +65,65 @@ public:
     };
 
 
-    class Value {
+
+    class ConvString: public std::string_view  {
+    public:
+        static constexpr std::string_view on_states[] = {
+            "true","on","1","-1","yes","t","active","allowed","allow","enabled","enable","granted","grant"
+        };
+        static constexpr bool get_state_from_text(std::string_view text) {
+            for (const auto &x: on_states) {
+                if (std::equal(text.begin(), text.end(), x.begin(),x.end(), [](char a, char b){
+                    return std::tolower(a) == b;
+                })) return true;
+            }
+            return false;
+        }
+
+        using std::string_view::string_view;
+        ConvString(const std::string_view &x):std::string_view(x) {}
+        operator std::string() const {return std::string(*this);}
+        operator bool() const {return get_state_from_text(*this);}
+        template<typename T> requires(requires(T v, const char *b, const char *e){
+            {std::from_chars(b,e,v)};
+        })
+        operator T() const {
+            T res = {};
+            std::from_chars(data(),data()+size(),res);
+            return res;
+        }
+    };
+
+
+    class Value: public ConvString {
     public:
 
-        std::size_t size() const {return _val.seps.size()+1;};
         std::size_t count() const {return size();}
-        std::string_view operator[](std::size_t idx) const {
+        ConvString operator[](std::size_t idx) const {
             std::size_t beg = idx?_val.seps[idx-1]:0;
-            std::size_t end = idx>=_val.seps.size()?_val.content.size():_val.seps[idx]-1;
-            return std::string_view(_val.content).substr(beg, end-beg);
+            std::size_t end = idx>=_val.seps.size()?this->size():_val.seps[idx]-1;
+            return std::string_view(*this).substr(beg, end-beg);
         }
 
-        operator std::string_view() const {return _val.content;}
-        operator std::string() const {return _val.content;}
         operator std::filesystem::path() const {
-            if (_val.path) return (*_val.path)/_val.content;
-            else return _val.content;
+            if (_val.path) return (*_val.path)/static_cast<std::string_view>(*this);
+            else return static_cast<std::string_view>(*this);
         }
+
+        
 
         class Iterator { // @suppress("Miss copy constructor or assignment operator")
         public:
             using iterator_category = std::random_access_iterator_tag;
-            using value_type = std::string_view;
+            using value_type = ConvString;
 
             Iterator(const Value &cont, std::size_t index):_cont(&cont),_index(index) {}
             bool operator==(const Iterator &) const = default;
             std::strong_ordering operator<=>(const Iterator &) const = default;
-            value_type operator *() const {return (*_cont)[_index];}
+            ConvString operator *() const {return (*_cont)[_index];}
             std::filesystem::path path() const {
-                if (_cont->_val.path) return (*_cont->_val.path)/(*_cont)[_index];
-                else return (*_cont)[_index];
+                if (_cont->_val.path) return (*_cont->_val.path)/static_cast<std::string_view>((*_cont)[_index]);
+                else return static_cast<std::string_view>((*_cont)[_index]);
             }
             friend Iterator operator+(const Iterator &a, std::ptrdiff_t ofs) {return Iterator(*a._cont, a._index+ofs);}
             friend Iterator operator-(const Iterator &a, std::ptrdiff_t ofs) {return Iterator(*a._cont, a._index-ofs);}
@@ -113,19 +144,23 @@ public:
         Iterator end() const {return Iterator(*this,size());}
 
 
-        Value(const ValueData &val):_val(val) {}
+        Value(const ValueData &val)
+            :ConvString(val.content), _val(val) {}
+        Value(std::string_view content, const ValueData &val)
+            :ConvString(content), _val(val) {}
     protected:
         const ValueData &_val;
     };
+
 
     class Section {
     public:
 
         Section(const SectionData *s, std::string_view prev, std::string_view name)
             :s(s),path(prev) {
-            path.push_back('[');
-            path.append(name);
-            path.push_back(']');
+                path.push_back('[');
+                path.append(name);
+                path.push_back(']');
         }
         Section(const SectionData *s)
             :s(s) {}
@@ -144,7 +179,7 @@ public:
         std::optional<Value> get_optional(std::string_view key) const {
             auto iter = s->key_value.find(key);
             if (iter == s->key_value.end()) {
-                throw std::nullopt;
+                return std::nullopt;
             }
             return Value(iter->second);
         }
@@ -165,7 +200,15 @@ public:
         }
 
 
-        Value operator[](std::string_view key) const {return get(key);}
+        Value operator()(std::string_view key) const {return get(key);}
+        Value operator()(std::string_view key, std::string_view defval) const {
+            static ValueData empty = {};
+            auto r = get_optional(key);
+            if (!r) r.emplace(Value(defval, empty));
+            return *r;
+        }
+        Section operator[](std::string_view key) const {return section(key);}
+
 
         const auto &sections() const {return s->sections;}
         auto begin() const {
@@ -315,6 +358,12 @@ public:
         parse_file(std::move(file), DefaultOpenFile(), max_ext_ref);
     }
 
+
+    Section operator[](std::string_view name) const {
+        Section r(&sect);
+        if (!name.empty()) r = r[name];
+        return r;
+    }
 
 protected:
 

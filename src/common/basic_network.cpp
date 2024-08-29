@@ -178,6 +178,7 @@ WebSocketClient BasicNetwork::create_websocket_client(
 RestClient BasicNetwork::create_rest_client(RestClient::IEvents &events,
                                  std::string_view base_url, unsigned int iotimeout_ms) const {
     auto c = std::make_shared<RestClientImpl>(_ctx, _sslctx, events, base_url, iotimeout_ms);
+    return RestClient(c);
 }
 
 

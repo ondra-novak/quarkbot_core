@@ -6,6 +6,12 @@ constexpr std::string_view test1_data = R"ini(
 
 key1=value1 
 key2=value2
+number=3.14
+bool_t1=true
+bool_t2=active
+bool_t3=yes
+bool_t4=on
+
 ;comment
 #comment 
 [sect1]  #comment
@@ -74,13 +80,13 @@ void test1() {
     std::istringstream fin((std::string(test1_data)));
     ini.parse(fin, std::move(extref));
     auto root = ini.root();
-    auto sec1 = root.section("sect1");
-    auto sec2 = root.section("sect2");
-    auto sec3 = sec2.section("sect3");
-    auto sec4 = sec3.section("sect4");
-    auto sec5 = sec2.section("sect5");
-    auto sec6 = root.section("sect6");
-    auto sec7 = root.section("sect7");
+    auto sec1 = root["sect1"];
+    auto sec2 = root["sect2"];
+    auto sec3 = sec2["sect3"];
+    auto sec4 = sec3["sect4"];
+    auto sec5 = sec2["sect5"];
+    auto sec6 = root["sect6"];
+    auto sec7 = root["sect7"];
     CHECK(sec1.defined());
     CHECK(sec2.defined());
     CHECK(sec3.defined());
@@ -94,24 +100,24 @@ void test1() {
     CHECK_EQUAL(std::string_view(sec1.get("multiline_q")), "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Mauris suscipit, ligula sit amet pharetra semper, nibh ante cursus purus, vel sagittis velit mauris vel metus. Cras pede libero, dapibus nec, pretium sit amet, tempor quis. Aenean fermentum risus id tortor. In dapibus augue non sapien. Fusce tellus. Maecenas lorem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Aliquam erat volutpat. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Vivamus porttitor turpis ac leo. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Fusce wisi. Duis risus.");
     CHECK_EXCEPTION(StructuredIni::NotFound, root.get("key3"));
     CHECK_EXCEPTION(StructuredIni::NotFound, root.get("key4"));
-    CHECK_EQUAL(std::string_view(sec1.get("key3")), "value3");
-    CHECK_EQUAL(std::string_view(sec1.get("key4")), "value4");
-    CHECK_EQUAL(std::string_view(sec2.get("key5")), "value5");
-    CHECK_EQUAL(std::string_view(sec3.get("key6")), "value6");
-    CHECK_EQUAL(std::string_view(sec4.get("key7")), "value7");
-    CHECK_EQUAL(std::string_view(sec5.get("key8")), "value8");
-    CHECK_EQUAL(std::string_view(sec2.get("key9")), "value9");
-    CHECK_EQUAL(std::string_view(sec2.get("key10")), "value10");
-    CHECK_EQUAL(std::string_view(sec6.get("q1")), " hello ");
-    CHECK_EQUAL(std::string_view(sec6.get("key=key")), "value\nvalue");
-    CHECK_EQUAL(std::string_view(sec6.get("key=keykey")), "value\"value\"value");
-    CHECK_EQUAL(std::string_view(sec6.get("key_bin")), "\x52\xC1\x8F");
-    CHECK_EQUAL(std::string_view(sec6.get("array")), "1,2,3,4,5,6,7,8,9,10,konec,zvonec");
+    CHECK_EQUAL(sec1.get("key3"), "value3");
+    CHECK_EQUAL(sec1.get("key4"), "value4");
+    CHECK_EQUAL(sec2.get("key5"), "value5");
+    CHECK_EQUAL(sec3.get("key6"), "value6");
+    CHECK_EQUAL(sec4.get("key7"), "value7");
+    CHECK_EQUAL(sec5.get("key8"), "value8");
+    CHECK_EQUAL(sec2.get("key9"), "value9");
+    CHECK_EQUAL(sec2.get("key10"), "value10");
+    CHECK_EQUAL(sec6.get("q1")," hello ");
+    CHECK_EQUAL(sec6.get("key=key"), "value\nvalue");
+    CHECK_EQUAL(sec6.get("key=keykey"), "value\"value\"value");
+    CHECK_EQUAL(sec6.get("key_bin"), "\x52\xC1\x8F");
+    CHECK_EQUAL(sec6.get("array"), "1,2,3,4,5,6,7,8,9,10,konec,zvonec");
     {
         std::string_view data[] = {"1","2","3","4","5","6","7","8","9","10","konec,zvonec"};
         auto srciter = std::begin(data);
         for (auto val: sec6["array"]) {
-            CHECK_EQUAL(std::string_view(val), *srciter);
+            CHECK_EQUAL(std::string_view(val.second.content), *srciter);
             ++srciter;
         }
     }
@@ -121,6 +127,14 @@ void test1() {
     CHECK_EQUAL(extref[1].root->key_value["key5"].content, "value5");
     CHECK_EQUAL(extref[2].root->key_value["q1"].content," hello ");
     CHECK_EQUAL(extref[3].root, extref[2].root);
+    CHECK_BETWEEN(root("number"),3.13,3.15);
+    CHECK(root("bool_t1"));
+    CHECK(root("bool_t2"));
+    CHECK(root("bool_t3"));
+    CHECK(root("bool_t4"));
+    CHECK(!root("not_exist","false"));
+    CHECK_EQUAL(root("not_exist","12345") , 12345);
+    
 }
 
 
@@ -148,7 +162,7 @@ void test2(){
 
     auto root = ini.root();
     auto sect1 = root.section("sect1");
-    CHECK_EQUAL(std::filesystem::path(sect1["key2"]), std::filesystem::path("/test/sub/value2"));
+    CHECK_EQUAL(std::filesystem::path(sect1("key2")), std::filesystem::path("/test/sub/value2"));
 
 }
 
