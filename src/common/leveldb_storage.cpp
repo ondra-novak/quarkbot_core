@@ -1,8 +1,8 @@
 #include "leveldb_storage.h"
-#include "../trading_ifc/mq.h"
+#include <quarkbot/mq.h>
 #include "position_info.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 
 void LvlDBStorage::begin_transaction()

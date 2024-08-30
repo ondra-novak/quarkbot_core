@@ -55,8 +55,8 @@ void InstrumentDefCache::process(const RestClient::Result &result, bool coinm) {
             BinanceInstrument::Config cfg;
             cfg.id = sd["symbol"].as<std::string>();
             cfg.can_short = true;
-            cfg.type = coinm?trading_api::Instrument::Type::inverted_contract:
-                             trading_api::Instrument::Type::contract;
+            cfg.type = coinm?quarkbot::Instrument::Type::inverted_contract:
+                             quarkbot::Instrument::Type::contract;
             cfg.tradable = sd["status"].as<std::string_view>() == "TRADING";
             for (auto f: sd["filters"]) {
                 std::string_view type = f["filterType"].get();

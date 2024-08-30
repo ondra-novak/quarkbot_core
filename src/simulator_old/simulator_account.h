@@ -3,10 +3,10 @@
 #include <../simulator_old/simulator_instrument.h>
 
 #include <mutex>
-#include "../trading_ifc/strategy_context.h"
+#include <quarkbot/strategy_context.h>
 
 
-namespace trading_api {
+namespace quarkbot {
 
 class SimulAccount: public IAccount {
 public:

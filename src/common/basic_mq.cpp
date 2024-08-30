@@ -11,7 +11,7 @@
 #endif
 
 
-namespace trading_api {
+namespace quarkbot {
 
 
 

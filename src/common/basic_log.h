@@ -1,13 +1,13 @@
 #pragma once
 
 
-#include "../trading_ifc/log.h"
+#include <quarkbot/log.h>
 
 #include <chrono>
 #include <iostream>
 #include <functional>
 
-namespace trading_api {
+namespace quarkbot {
 
 class BasicLog: public ILog {
 public:

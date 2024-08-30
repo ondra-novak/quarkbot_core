@@ -43,7 +43,7 @@ public:
         constexpr bool is_error() const {return status < 200 || status > 203;}
     };
 
-    using Log = trading_api::Log;
+    using Log = quarkbot::Log;
 
     ///construct the context
     RestClientContext(WebSocketContext &wsctx, Log log_obj = {}):_wsctx(wsctx),_log(log_obj) {}
@@ -99,7 +99,7 @@ public:
 protected:
     struct Info {
         HttpClientRequest req;
-        trading_api::Function<void(const Result res)> callback;
+        quarkbot::Function<void(const Result res)> callback;
         std::chrono::system_clock::duration timeout;
         Log log;
 

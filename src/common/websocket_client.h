@@ -1,11 +1,11 @@
-#include "../trading_ifc/network.h"
+#include <quarkbot/network.h>
 
 #include <coroserver/websocket_stream.h>
 #include <coroserver/https_client.h>
 
 
 
-namespace trading_api {
+namespace quarkbot {
 
 
 class WSClientImpl: public IWebSocketClient, public std::enable_shared_from_this<WSClientImpl> {

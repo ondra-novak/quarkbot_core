@@ -7,7 +7,7 @@
 
 #include "sim_instrument.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 SimInstrument::SimInstrument(ExchangeInfo &&ex, std::string &&id, Config &&config)
         :_ex(std::move(ex)), _id(std::move(id)), _config(std::move(config))
@@ -55,4 +55,4 @@ shared_lockable_ptr<simulator::Matching> SimInstrument::get_matching(const Instr
 
 }
 
-} /* namespace trading_api */
+} /* namespace quarkbot */

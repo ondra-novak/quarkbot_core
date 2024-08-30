@@ -2,7 +2,7 @@
 #include <atomic>
 #include <memory>
 
-namespace trading_api {
+namespace quarkbot {
 
 
 ///Contains future value which can be set (once) atomically

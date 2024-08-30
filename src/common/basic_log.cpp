@@ -1,6 +1,6 @@
 #include "basic_log.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 void BasicLog::output(Serverity level, std::string_view msg) const {
     std::lock_guard _(_mx);

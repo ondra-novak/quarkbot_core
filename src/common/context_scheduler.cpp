@@ -4,7 +4,7 @@
 #include <thread>
 #include <condition_variable>
 #include <iostream>
-namespace trading_api {
+namespace quarkbot {
 
 
 struct Item {

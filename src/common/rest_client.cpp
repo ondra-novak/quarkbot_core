@@ -3,7 +3,7 @@
 
 #include <coroserver/chunked_stream.h>
 
-namespace trading_api {
+namespace quarkbot {
 
 RestClientImpl::RestClientImpl(coroserver::Context &ctx, coroserver::ssl::Context &sslcontext, 
             IEvents &events, std::string_view url_base, unsigned int iotimeout_ms) 

@@ -1,6 +1,6 @@
 #include "stream_map.h"
 
-StreamMap::StreamMap(trading_api::Log log, unsigned int timeout_interval_sec)
+StreamMap::StreamMap(quarkbot::Log log, unsigned int timeout_interval_sec)
     :_timeout_interval_sec(timeout_interval_sec),_log(std::move(log)) {}
 
 StreamMap::~StreamMap() {

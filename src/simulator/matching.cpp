@@ -1,7 +1,7 @@
     #include "matching.h"
 #include "sim_instrument.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 
 

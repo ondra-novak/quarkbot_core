@@ -1,6 +1,6 @@
 #include "basic_config.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 BasicConfig::BasicConfig(std::shared_ptr<StructuredIni> whole_config)
 :BasicConfig(std::move(whole_config), whole_config->root()) {}
@@ -40,7 +40,7 @@ std::string_view BasicConfig::get_section_path() const {
     return _cur_section.get_section_path();
 }
 
-std::shared_ptr<const trading_api::IConfig> BasicConfig::open_section(std::string_view name) const {
+std::shared_ptr<const quarkbot::IConfig> BasicConfig::open_section(std::string_view name) const {
     return std::make_shared<BasicConfig>(_whole_config, _cur_section[name]);
 }
 

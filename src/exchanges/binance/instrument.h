@@ -5,10 +5,10 @@
 
 #include "rpc_client.h"
 
-class BinanceInstrument : public trading_api::IInstrument{
+class BinanceInstrument : public quarkbot::IInstrument{
 public:
 
-    struct Config: trading_api::Instrument::Config  {
+    struct Config: quarkbot::Instrument::Config  {
         int quantity_precision;
         int base_asset_precision;
         int quote_precision;
@@ -20,20 +20,20 @@ public:
 
     BinanceInstrument(std::string_view label,
             const Config &cfg,
-            trading_api::ExchangeInfo x);
+            quarkbot::ExchangeInfo x);
 
-    static const BinanceInstrument &from_instrument(const trading_api::Instrument &i);
+    static const BinanceInstrument &from_instrument(const quarkbot::Instrument &i);
 
-    void update_config(RPCClient &client, trading_api::Function<void()> done);
+    void update_config(RPCClient &client, quarkbot::Function<void()> done);
 
 
     std::string _label;
     Config _config;
-    trading_api::ExchangeInfo _x;
+    quarkbot::ExchangeInfo _x;
     mutable uMutex _mx;
 
-    using TickerEvent = trading_api::MarketEvent_TickData<std::mutex>;
-    using OrderbookEvent = trading_api::MarketEvent_OrderBook<std::mutex>;
+    using TickerEvent = quarkbot::MarketEvent_TickData<std::mutex>;
+    using OrderbookEvent = quarkbot::MarketEvent_OrderBook<std::mutex>;
 
     std::shared_ptr<TickerEvent> _last_ticker;
     std::shared_ptr<OrderbookEvent> _last_orderbook;
@@ -41,9 +41,9 @@ public:
 
     virtual std::string get_category() const override;
     virtual std::string get_label() const override;
-    virtual trading_api::ExchangeInfo get_exchange() const override;
+    virtual quarkbot::ExchangeInfo get_exchange() const override;
     virtual std::string get_id() const override;
-    const virtual trading_api::IInstrument::Config& get_config() const override;
+    const virtual quarkbot::IInstrument::Config& get_config() const override;
 
 };
 

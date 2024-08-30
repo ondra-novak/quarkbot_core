@@ -1,7 +1,7 @@
 #include "websocket_client.h"
 #include <coroserver/http_ws_client.h>
 
-namespace trading_api {
+namespace quarkbot {
 
 WSClientImpl::WSClientImpl(coroserver::Context &ctx,coroserver::http::Client httpc, 
                             IEvents &events, std::string url, WebSocketConfig cfg) 

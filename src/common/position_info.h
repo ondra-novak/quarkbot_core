@@ -3,7 +3,7 @@
 #include <unordered_map>
 
 
-namespace trading_api {
+namespace quarkbot {
 
 struct PositionInfo {
     Side side = Side::undefined;      //current side

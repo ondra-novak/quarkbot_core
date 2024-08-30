@@ -2,7 +2,7 @@
 
 #include <../simulator_old/simulator_account.h>
 
-namespace trading_api {
+namespace quarkbot {
 
 BaseSimuInstrument::BaseSimuInstrument(const Config &cfg, std::string id)
         :_cfg(cfg), _id(id) {}

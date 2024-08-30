@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../trading_ifc/strategy_context.h"
-#include "../trading_ifc/account.h"
+#include <quarkbot/strategy_context.h>
+#include <quarkbot/account.h>
 #include <unordered_set>
 #include <list>
 
-namespace trading_api {
+namespace quarkbot {
 
 class IStorage {
 public:

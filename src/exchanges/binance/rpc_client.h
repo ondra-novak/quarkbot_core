@@ -9,7 +9,7 @@
 #include <coroutine>
 
 
-using trading_api::Function;
+using quarkbot::Function;
 
 ///Asynchronous RPC client
 /**

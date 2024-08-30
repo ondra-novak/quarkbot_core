@@ -1,9 +1,9 @@
 #pragma once
 
-#include <trading_api/exchange_api.h>
+#include <quarkbot/exchange_api.h>
 
 
-namespace trading_api {
+namespace quarkbot {
 
 
 class SimOrder: public BasicOrder {

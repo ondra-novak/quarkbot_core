@@ -3,7 +3,7 @@
 #include <algorithm>
 #include "../common/acb.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 SimulAccount::SimulAccount(std::string label, std::string currency, double equity, double leverage)
         :_label(label), _currency(currency), _equity(equity), _leverage(leverage)

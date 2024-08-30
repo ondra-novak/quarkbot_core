@@ -1,12 +1,12 @@
 #pragma once
 
-#include "../trading_ifc/mq.h"
+#include <quarkbot/mq.h>
 
 #include <string>
 #include <mutex>
 #include <vector>
 #include <unordered_map>
-namespace trading_api {
+namespace quarkbot {
 
 
 

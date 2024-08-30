@@ -11,7 +11,7 @@
 #include <iostream>
 #include <fstream>
 
-namespace trading_api {
+namespace quarkbot {
 
 using PEvpPKey = std::unique_ptr<EVP_PKEY, decltype([](auto *x){EVP_PKEY_free(x);})>;
 using PBIO = std::unique_ptr<BIO, decltype([](auto x){BIO_free(x);})>;

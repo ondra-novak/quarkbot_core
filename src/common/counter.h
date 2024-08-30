@@ -1,6 +1,6 @@
 #pragma once
 
-namespace trading_api {
+namespace quarkbot {
 
 
 ///A counter with increased accuracy

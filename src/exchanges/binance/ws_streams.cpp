@@ -80,8 +80,8 @@ bool WSStreams::on_json_message(const json::value& v) {
     auto e = v["e"].as<std::string_view>();
     if (e == "bookTicker") {
 
-        trading_api::Timestamp ts =
-                trading_api::Timestamp(std::chrono::milliseconds(v["E"].as<std::uint64_t>()));
+        quarkbot::Timestamp ts =
+                quarkbot::Timestamp(std::chrono::milliseconds(v["E"].as<std::uint64_t>()));
         std::string_view s = v["s"].as<std::string_view>();
 
         InstrumentState &st = get_instrument(s);
@@ -97,8 +97,8 @@ bool WSStreams::on_json_message(const json::value& v) {
         _events.on_ticker(s, st.ticker);
         return true;
     } else if (e == "aggTrade") {
-        trading_api::Timestamp ts =
-                trading_api::Timestamp(std::chrono::milliseconds(v["T"].as<std::uint64_t>()));
+        quarkbot::Timestamp ts =
+                quarkbot::Timestamp(std::chrono::milliseconds(v["T"].as<std::uint64_t>()));
         std::string_view s = v["s"].as<std::string_view>();
         InstrumentState &st = get_instrument(s);
         st.ticker.tp = ts;
@@ -108,8 +108,8 @@ bool WSStreams::on_json_message(const json::value& v) {
         return true;
     } else if (e == "depthUpdate") {
 
-        trading_api::Timestamp ts =
-                trading_api::Timestamp(std::chrono::milliseconds(v["T"].as<std::uint64_t>()));
+        quarkbot::Timestamp ts =
+                quarkbot::Timestamp(std::chrono::milliseconds(v["T"].as<std::uint64_t>()));
 
         std::string_view s = v["s"].as<std::string_view>();
 

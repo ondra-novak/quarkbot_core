@@ -1,9 +1,0 @@
-#pragma once
-#ifndef _trading_api_src_trading_api_H_ThFjHTOiN8AHmo51sPeouKIqk6HDH8hQ_
-#define _trading_api_src_trading_api_H_ThFjHTOiN8AHmo51sPeouKIqk6HDH8hQ_
-
-namespace trading_api{
-
-}
-
-#endif /* _trading_api_src_trading_api_H_ThFjHTOiN8AHmo51sPeouKIqk6HDH8hQ_ */

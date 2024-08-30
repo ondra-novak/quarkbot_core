@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../trading_ifc/config.h"
+#include <quarkbot/config.h>
 
 #include "structured_ini.h"
-namespace trading_api {
+namespace quarkbot {
 
 class BasicConfig: public IConfig {
 public:
@@ -16,7 +16,7 @@ public:
     virtual std::optional<std::string_view> get_value(std::string_view name) const override;
     virtual std::optional<bool> get_value_bool(std::string_view name) const override;
     virtual std::string_view get_section_path() const override;
-    virtual std::shared_ptr<const trading_api::IConfig> open_section( std::string_view name) const override;
+    virtual std::shared_ptr<const quarkbot::IConfig> open_section( std::string_view name) const override;
 
 protected:
 

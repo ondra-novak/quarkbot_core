@@ -4,7 +4,7 @@
 
 int main() {
 
-    trading_api::Log log(std::make_shared<trading_api::BasicLog>(std::cerr, trading_api::ILog::Serverity::trace));
+    quarkbot::Log log(std::make_shared<quarkbot::BasicLog>(std::cerr, quarkbot::ILog::Serverity::trace));
     WebSocketContext wsctx;
     RestClientContext restctx(wsctx,log);
 

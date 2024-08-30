@@ -3,7 +3,7 @@
 #include "sim_instrument.h"
 
 #include "sim_order.h"
-namespace trading_api {
+namespace quarkbot {
 
 using namespace simulator;
 

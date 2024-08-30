@@ -3,8 +3,8 @@
 
 #include "../common/scheduler.h"
 
-template class trading_api::Scheduler<void (*)() >;
-template class trading_api::SchedulerRealTime<void (*)() >;
+template class quarkbot::Scheduler<void (*)() >;
+template class quarkbot::SchedulerRealTime<void (*)() >;
 
 int main(int argc, char **argv) {
     return 0;

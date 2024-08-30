@@ -1,9 +1,9 @@
 #pragma once
-#include <trading_api/exchange_api.h>
-#include <trading_api/weak_object_map.h>
+#include <quarkbot/exchange_api.h>
+#include <quarkbot/weak_object_map.h>
 #include "sim_instrument.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 class SimExchange: public Exchange {
 public:

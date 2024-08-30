@@ -1,12 +1,12 @@
 #pragma once
 
-#include "../trading_ifc/exchange_service.h"
-#include "../trading_ifc/tickdata.h"
-#include "../trading_ifc/orderbook.h"
+#include <quarkbot/exchange_service.h>
+#include <quarkbot/tickdata.h>
+#include <quarkbot/orderbook.h>
 #include "../common/priority_queue.h"
 
 #include <vector>
-namespace trading_api {
+namespace quarkbot {
 
 class SimExchange: public IExchange {
 public:

@@ -1,9 +1,9 @@
-#include "../trading_ifc/network.h"
+#include <quarkbot/network.h>
 
 #include <coroserver/context.h>
 #include <coroserver/https_client.h>
 
-namespace trading_api {
+namespace quarkbot {
 
 class BasicNetwork: public INetwork {
 public:

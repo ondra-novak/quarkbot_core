@@ -10,13 +10,13 @@
 class WSStreams: public RPCClient {
 public:
 
-    using MarketEventType = trading_api::MarketEventType;
+    using MarketEventType = quarkbot::MarketEventType;
 
     class IEvents {
     public:
 
-        virtual void on_ticker(std::string_view symbol,  const trading_api::TickData &ticker) = 0;
-        virtual void on_orderbook(std::string_view symbol,  const trading_api::OrderBook &update) = 0;
+        virtual void on_ticker(std::string_view symbol,  const quarkbot::TickData &ticker) = 0;
+        virtual void on_orderbook(std::string_view symbol,  const quarkbot::OrderBook &update) = 0;
         virtual void on_order(const json::value &json_data) = 0;
         virtual void on_stream_error(const RPCClient::Result &res) = 0;
         virtual ~IEvents() = default;
@@ -41,8 +41,8 @@ protected:
     using RPCClient::operator();
 
     struct InstrumentState {
-        trading_api::TickData ticker = {};
-        trading_api::OrderBook orderbook = {};
+        quarkbot::TickData ticker = {};
+        quarkbot::OrderBook orderbook = {};
     };
 
 

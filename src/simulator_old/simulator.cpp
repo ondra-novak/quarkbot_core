@@ -2,7 +2,7 @@
 #include "../simulator_old/simulator.h"
 
 #include <../simulator_old/simulator_instrument.h>
-namespace trading_api{
+namespace quarkbot{
 
 std::string SimulatorBackend::SimOrder::gen_id() {
     static std::atomic<std::uint64_t> idcnt = std::chrono::system_clock::now().time_since_epoch().count();

@@ -1,14 +1,14 @@
 #pragma once
 
-#include "../trading_ifc/istrategy.h"
-#include "../trading_ifc/iexchange.h"
-#include "../trading_ifc/module_decl.h"
+#include <quarkbot/istrategy.h>
+#include <quarkbot/iexchange.h>
+#include <quarkbot/module_decl.h>
 
 #include <string>
 #include <memory>
 
 #include <list>
-namespace trading_api {
+namespace quarkbot {
 
 
 class load_strategy_exception: public std::exception {

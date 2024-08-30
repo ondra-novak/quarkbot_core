@@ -16,19 +16,19 @@
 #include <shared_mutex>
 #include <unordered_map>
 
-class BinanceExchange : public trading_api::IExchange,
+class BinanceExchange : public quarkbot::IExchange,
                         public WSStreams::IEvents,
                         public RPCClient::IThreadMonitor
                         {
 public:
 
-    using Instrument = trading_api::Instrument;
-    using Account = trading_api::Account;
-    using Order = trading_api::Order;
-    using Ticker = trading_api::TickData;
-    using OrderBook = trading_api::OrderBook;
-    using ConfigSchema = trading_api::ConfigSchema;
-    using Config = trading_api::Config;
+    using Instrument = quarkbot::Instrument;
+    using Account = quarkbot::Account;
+    using Order = quarkbot::Order;
+    using Ticker = quarkbot::TickData;
+    using OrderBook = quarkbot::OrderBook;
+    using ConfigSchema = quarkbot::ConfigSchema;
+    using Config = quarkbot::Config;
 
     /*
      * '<instrument_name>' - query single instrument
@@ -48,39 +48,39 @@ public:
 
     virtual ConfigSchema get_exchange_config_schema() const
             override;
-    virtual void init(trading_api::ExchangeContext context, const Config &config) override;
+    virtual void init(quarkbot::ExchangeContext context, const Config &config) override;
 
-    virtual void subscribe(trading_api::MarketEventType type,
+    virtual void subscribe(quarkbot::MarketEventType type,
             const Instrument &i) override;
-    virtual void unsubscribe(trading_api::MarketEventType type,
+    virtual void unsubscribe(quarkbot::MarketEventType type,
             const Instrument &i) override;
 
     virtual Order create_order(
             const Instrument &instrument,
-            const trading_api::Account &account,
+            const quarkbot::Account &account,
             const Order::Setup &setup) override;
     virtual void batch_place(std::span<Order> orders) override;
     virtual void order_apply_fill(const Order &order,
-            const trading_api::Fill &fill) override;
-    virtual void update_account(const trading_api::Account &a) override;
+            const quarkbot::Fill &fill) override;
+    virtual void update_account(const quarkbot::Account &a) override;
     virtual Order create_order_replace(
             const Order &replace,
             const Order::Setup &setup, bool amend) override;
     virtual std::string get_id() const override;
 
-    virtual std::optional<trading_api::IExchangeInfo::Icon> get_icon() const override;
+    virtual std::optional<quarkbot::IExchangeInfo::Icon> get_icon() const override;
     virtual void batch_cancel(std::span<Order> orders) override;
     virtual void update_instrument(const Instrument &i) override;
     virtual void order_apply_report(const Order &order,
             const Order::Report &report) override;
     virtual std::string get_name() const override;
-    virtual void restore_orders(void *context, std::span<trading_api::SerializedOrder>  orders) override;
+    virtual void restore_orders(void *context, std::span<quarkbot::SerializedOrder>  orders) override;
     virtual ConfigSchema get_api_key_config_schema() const override;
     virtual void unset_api_key(std::string_view name) override;
     virtual void set_api_key(std::string_view name,
-            const trading_api::Config &api_key_config) override;
-    virtual void update_market(const Instrument &i, trading_api::MarketEventType ) {
-        _ctx.object_updated(i, trading_api::AsyncStatus::failed, trading_api::MarketEvent{});
+            const quarkbot::Config &api_key_config) override;
+    virtual void update_market(const Instrument &i, quarkbot::MarketEventType ) {
+        _ctx.object_updated(i, quarkbot::AsyncStatus::failed, quarkbot::MarketEvent{});
     }
 
 protected:
@@ -92,10 +92,10 @@ protected:
 
     using IdentityList = std::map<std::string, IdentityInfo, std::less<> >;
     using PIdentityList = shared_lockable_ptr<IdentityList>;
-    using InstrumentMap = trading_api::WeakObjectMapWithLock<BinanceInstrument>;
-    using AccountMap = trading_api::WeakObjectMapWithLock<BinanceAccount>;
+    using InstrumentMap = quarkbot::WeakObjectMapWithLock<BinanceInstrument>;
+    using AccountMap = quarkbot::WeakObjectMapWithLock<BinanceAccount>;
 
-    trading_api::ExchangeContext _ctx;
+    quarkbot::ExchangeContext _ctx;
     PIdentityList _identities = make_shared_lockable<IdentityList>();
 
 
@@ -105,7 +105,7 @@ protected:
     std::unique_ptr<RestClient> _frest;
     std::unique_ptr<StreamMap> _stream_map;
     std::jthread _stream_wrk;
-    trading_api::Log _log;
+    quarkbot::Log _log;
 
 
     InstrumentMap _instruments;

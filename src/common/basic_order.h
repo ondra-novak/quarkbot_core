@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../trading_ifc/instrument.h"
-#include "../trading_ifc/account.h"
-#include "../trading_ifc/order.h"
+#include <quarkbot/instrument.h>
+#include <quarkbot/account.h>
+#include <quarkbot/order.h>
 
-namespace trading_api {
+namespace quarkbot {
 
 ///For exchanges - associated order (no
 class AssociatedOrder: public IOrder::Null {

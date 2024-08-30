@@ -3,7 +3,7 @@
 
 BinanceInstrument::BinanceInstrument(std::string_view label,
         const Config &cfg,
-        trading_api::ExchangeInfo x)
+        quarkbot::ExchangeInfo x)
 :_label(std::move(label))
 ,_config(cfg)
 ,_x(std::move(x))
@@ -13,11 +13,11 @@ BinanceInstrument::BinanceInstrument(std::string_view label,
 
 }
 
-const BinanceInstrument& BinanceInstrument::from_instrument(const trading_api::Instrument &i) {
+const BinanceInstrument& BinanceInstrument::from_instrument(const quarkbot::Instrument &i) {
     return dynamic_cast<const BinanceInstrument &>(*i.get_handle());
 }
 
-void BinanceInstrument::update_config(RPCClient &client,trading_api::Function<void()> done) {
+void BinanceInstrument::update_config(RPCClient &client,quarkbot::Function<void()> done) {
 
 }
 
@@ -28,7 +28,7 @@ std::string BinanceInstrument::get_label() const {
     return _label;
 }
 
-trading_api::ExchangeInfo BinanceInstrument::get_exchange() const {
+quarkbot::ExchangeInfo BinanceInstrument::get_exchange() const {
     return _x;
 }
 
@@ -36,7 +36,7 @@ std::string BinanceInstrument::get_id() const {
     return _config.id;
 }
 
-const trading_api::IInstrument::Config& BinanceInstrument::get_config() const {
+const quarkbot::IInstrument::Config& BinanceInstrument::get_config() const {
     std::lock_guard _(_mx);
     return _config;
 }

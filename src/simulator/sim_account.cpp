@@ -9,7 +9,7 @@
 #include "sim_instrument.h"
 #include <mutex>
 
-namespace trading_api {
+namespace quarkbot {
 
 SimAccount::SimAccount(ExchangeInfo exch, std::string label, std::string currency, double balance, double fees)
         :_exch(std::move(exch))
@@ -223,4 +223,4 @@ Decimal SimAccount::get_max_reduce(const Instrument &i, Side side) {
     return sum;
 }
 
-} /* namespace trading_api */
+} /* namespace quarkbot */

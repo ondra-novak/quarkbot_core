@@ -5,7 +5,7 @@
 #include <../../common/basic_order.h>
 
 
-using namespace trading_api;
+using namespace quarkbot;
 
 
 
@@ -41,7 +41,7 @@ void BinanceExchange::init(ExchangeContext context, const Config &config) {
     }
     _public_fstream = std::make_unique<WSStreams>(*this, *_ws_context, fstreams);
     _frest = std::make_unique<::RestClient>(*_rest_context, frest);
-    _stream_map = std::make_unique<StreamMap>(trading_api::Log(_log, "STREAM"));
+    _stream_map = std::make_unique<StreamMap>(quarkbot::Log(_log, "STREAM"));
     _stream_map->add_stream(_public_fstream.get());
     _stream_wrk = std::jthread([this](std::stop_token stp){
         auto exp = std::chrono::system_clock::now()+std::chrono::minutes(30);
@@ -75,7 +75,7 @@ void BinanceExchange::on_ticker(std::string_view symbol,
     auto instr = _instruments.find(symbol);
     if (instr) {
         instr->_last_ticker->set(ticker);
-        _ctx.income_data(Instrument(instr), trading_api::MarketEvent(instr->_last_ticker));
+        _ctx.income_data(Instrument(instr), quarkbot::MarketEvent(instr->_last_ticker));
     } else {
         _public_fstream->unsubscribe(MarketEventType::tickdata, symbol);
     }
@@ -86,7 +86,7 @@ void BinanceExchange::on_orderbook(std::string_view symbol, const OrderBook &upd
     auto instr = _instruments.find(symbol);
     if (instr) {
         instr->_last_orderbook->set(update);
-        _ctx.income_data(Instrument(instr), trading_api::MarketEvent(instr->_last_orderbook));
+        _ctx.income_data(Instrument(instr), quarkbot::MarketEvent(instr->_last_orderbook));
     } else {
         _public_fstream->unsubscribe(MarketEventType::orderbook, symbol);
     }
@@ -144,7 +144,7 @@ void BinanceExchange::update_account(const std::shared_ptr<BinanceAccount> &acc,
         auto symbol = pos["symbol"].as<std::string_view>();
         auto instr = _instruments.find(symbol);
         if (instr) {
-            auto snfo = InstrumentFillInfo::from_instrument(trading_api::Instrument(instr));
+            auto snfo = InstrumentFillInfo::from_instrument(quarkbot::Instrument(instr));
             if (snfo.price_unit == nfo.currency) {
                 double amn = pos["positionAmt"].get();
                 Side side = amn<0?Side::sell:amn>0?Side::buy:Side::undefined;
@@ -169,9 +169,9 @@ void BinanceExchange::refresh_listenkeys()
 }
 
 BinanceExchange::Order BinanceExchange::create_order(
-        const Instrument &instrument, const trading_api::Account &account,
+        const Instrument &instrument, const quarkbot::Account &account,
         const Order::Setup &setup) {
-    return Order(std::make_shared<trading_api::BasicOrder>(instrument,
+    return Order(std::make_shared<quarkbot::BasicOrder>(instrument,
             account, setup, Order::Origin::strategy));
 }
 
@@ -180,10 +180,10 @@ void BinanceExchange::batch_place(std::span<Order> orders) {
 }
 
 void BinanceExchange::order_apply_fill(const Order &order,
-        const trading_api::Fill &fill) {
+        const quarkbot::Fill &fill) {
 }
 
-void BinanceExchange::update_account(const trading_api::Account &a) {
+void BinanceExchange::update_account(const quarkbot::Account &a) {
     const BinanceAccount &ba = dynamic_cast<const BinanceAccount &>(*a.get_handle());
     auto ident = find_identity(ba.get_ident());
     if (ident) {
@@ -226,7 +226,7 @@ std::string BinanceExchange::get_id() const {
     return "binance";
 }
 
-std::optional<trading_api::IExchangeInfo::Icon> BinanceExchange::get_icon() const {
+std::optional<quarkbot::IExchangeInfo::Icon> BinanceExchange::get_icon() const {
 }
 
 void BinanceExchange::batch_cancel(std::span<Order> orders) {
@@ -243,7 +243,7 @@ std::string BinanceExchange::get_name() const {
 }
 
 void BinanceExchange::restore_orders(void *context,
-        std::span<trading_api::SerializedOrder> orders) {
+        std::span<quarkbot::SerializedOrder> orders) {
 }
 
 
@@ -285,7 +285,7 @@ void BinanceExchange::on_ping() {
     _log.trace("Ping/Keep alive");
 }
 
-trading_api::ConfigSchema BinanceExchange::get_api_key_config_schema() const {
+quarkbot::ConfigSchema BinanceExchange::get_api_key_config_schema() const {
     return {
         params::TextInput("api_name", ""),
         params::TextArea("secret", 3, "", 1024)
@@ -301,7 +301,7 @@ void BinanceExchange::unset_api_key(std::string_view name) {
     }
 }
 
-void BinanceExchange::set_api_key(std::string_view name,const trading_api::Config &api_key_config) {
+void BinanceExchange::set_api_key(std::string_view name,const quarkbot::Config &api_key_config) {
     WSEventListener lsn;
     std::optional<::RestClient::Result> res;
 

@@ -5,37 +5,37 @@
 #include "../../common/basic_log.h"
 #include "../../trading_ifc/shared_state.h"
 
-class EventTarget: public trading_api::IEventTarget {
+class EventTarget: public quarkbot::IEventTarget {
 public:
-    virtual void on_event(const trading_api::Instrument &i,trading_api::AsyncStatus) {}
-    virtual void on_event(const trading_api::Account &a, trading_api::AsyncStatus) {}
-    virtual void on_event(const trading_api::Instrument &i, const trading_api::MarketEvent &event) {
+    virtual void on_event(const quarkbot::Instrument &i,quarkbot::AsyncStatus) {}
+    virtual void on_event(const quarkbot::Account &a, quarkbot::AsyncStatus) {}
+    virtual void on_event(const quarkbot::Instrument &i, const quarkbot::MarketEvent &event) {
         std::cout << i.get_id() << " ";
-        std::optional<trading_api::TickData> v = event;
+        std::optional<quarkbot::TickData> v = event;
         if (v) std::cout << *v << std::endl;
 
     }
-    virtual void on_event(const trading_api::Order &order,const trading_api::Order::Report &report) {}
-    virtual void on_event(const trading_api::Order &order, const trading_api::Fill &fill) {}
-    virtual void on_event(const trading_api::Instrument &i, trading_api::AsyncStatus st, trading_api::MarketEvent ev) {}
+    virtual void on_event(const quarkbot::Order &order,const quarkbot::Order::Report &report) {}
+    virtual void on_event(const quarkbot::Order &order, const quarkbot::Fill &fill) {}
+    virtual void on_event(const quarkbot::Instrument &i, quarkbot::AsyncStatus st, quarkbot::MarketEvent ev) {}
 
 };
 
 int main() {
 
-    trading_api::TickData dt;
-    trading_api::MarketEvent ev(trading_api::MarketEventHolder<
-                trading_api::MarketEventType::tickdata, trading_api::TickData>::create(dt));
+    quarkbot::TickData dt;
+    quarkbot::MarketEvent ev(quarkbot::MarketEventHolder<
+                quarkbot::MarketEventType::tickdata, quarkbot::TickData>::create(dt));
     std::cout << ev << std::endl;
 
-    trading_api::Log log(std::make_shared<trading_api::BasicLog>(std::cout, trading_api::Log::Serverity::trace));
-    auto context = std::make_shared<trading_api::BasicExchangeContext>("Binance",trading_api::Network(),log);
+    quarkbot::Log log(std::make_shared<quarkbot::BasicLog>(std::cout, quarkbot::Log::Serverity::trace));
+    auto context = std::make_shared<quarkbot::BasicExchangeContext>("Binance",quarkbot::Network(),log);
 
-    trading_api::Config exchange_config ( {
+    quarkbot::Config exchange_config ( {
             {"server", std::string("live")}
     });
 
-    trading_api::Config api_key ( {
+    quarkbot::Config api_key ( {
             {"api_name",std::string("kvuBDXalY0f35Myi0hdf66FZc6onDUH1ytKs2amCeAKdN3kcDZUBuHZD464YoJdC")},
             {"secret",std::string("mO5pqey9uE2tIetEIvYHXwpLcYnkVf6Zmz01tnB96ALcKNl72ciqVI12AMHy2q1d")},
     });
@@ -44,8 +44,8 @@ int main() {
     context->set_api_key("master", api_key);
 
 
-    trading_api::SharedState<std::vector<trading_api::Instrument> > state({},[](auto &res){
-        for (const trading_api::Instrument &instr: res) {
+    quarkbot::SharedState<std::vector<quarkbot::Instrument> > state({},[](auto &res){
+        for (const quarkbot::Instrument &instr: res) {
             std::cout<<"Instrument:" << instr.get_id() << std::endl;
             std::cout<<"Label:" << instr.get_label() << std::endl;
             std::cout<<"Exchange:" << instr.get_exchange().get_label() << std::endl;
@@ -56,19 +56,19 @@ int main() {
         }
     });
 
-    context->query_instruments("BTCUSDT", "bitcoin", [&,state](trading_api::Instrument instr){
+    context->query_instruments("BTCUSDT", "bitcoin", [&,state](quarkbot::Instrument instr){
         std::lock_guard _(state);
         state->push_back(instr);
     });
-    context->query_instruments("ETHUSDT", "ethereum", [&,state](trading_api::Instrument instr){
+    context->query_instruments("ETHUSDT", "ethereum", [&,state](quarkbot::Instrument instr){
         std::lock_guard _(state);
         state->push_back(instr);
     });
 
     state.wait();
 
-    trading_api::SharedState<std::vector<trading_api::Account> > astate({},[](auto &res){
-        for (const trading_api::Account &acc: res) {
+    quarkbot::SharedState<std::vector<quarkbot::Account> > astate({},[](auto &res){
+        for (const quarkbot::Account &acc: res) {
             std::cout<<"Account:" << acc.get_id() << std::endl;
             std::cout<<"Label:" << acc.get_label() << std::endl;
             std::cout<<"Exchange:" << acc.get_exchange().get_label() << std::endl;
@@ -80,7 +80,7 @@ int main() {
         }
     });
 
-    context->query_accounts("master", "*", "main", [&, astate](trading_api::Account acc){
+    context->query_accounts("master", "*", "main", [&, astate](quarkbot::Account acc){
         std::lock_guard _(astate);
         astate->push_back(acc);
     });
@@ -88,10 +88,10 @@ int main() {
     astate.wait();
 
 
-    trading_api::Instrument bitcoin;
+    quarkbot::Instrument bitcoin;
 
     {
-        trading_api::SharedState<trading_api::Instrument *> state(&bitcoin);
+        quarkbot::SharedState<quarkbot::Instrument *> state(&bitcoin);
         context->query_instruments("BTCUSDT", "btc", [state](const auto &i){
             **state = i;
         });
@@ -102,7 +102,7 @@ int main() {
 
     EventTarget evt;
 
-//    context->subscribe(&evt, trading_api::SubscriptionType::ticker, bitcoin);
+//    context->subscribe(&evt, quarkbot::SubscriptionType::ticker, bitcoin);
 
     std::cout << std::cin.get();
 

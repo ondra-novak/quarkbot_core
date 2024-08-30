@@ -14,5 +14,4 @@ add_executable (simulator
 )
 
 add_dependencies(simulator libjson20_single_header)
-add_dependencies(simulator trading_api_single_header)
 

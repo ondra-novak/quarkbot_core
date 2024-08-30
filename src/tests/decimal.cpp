@@ -1,7 +1,7 @@
-#include "../trading_ifc/decimal.h"
+#include <quarkbot/decimal.h>
 #include "check.h"
 
-using namespace trading_api;
+using namespace quarkbot;
 
 
 constexpr auto a = 1.23456_dec;

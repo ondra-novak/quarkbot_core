@@ -2,7 +2,7 @@
 
 #include "../simulator_old/sim_exchange_info.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 ConfigSchema SimExchange::get_exchange_config_schema() const {
     return {};

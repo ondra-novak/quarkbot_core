@@ -5,7 +5,7 @@
 
 
 #include <memory>
-namespace trading_api {
+namespace quarkbot {
 
 namespace simulator {
 

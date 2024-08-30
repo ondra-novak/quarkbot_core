@@ -3,7 +3,7 @@
 #include "event_target.h"
 #include "dispatcher.h"
 
-#include "../trading_ifc/strategy.h"
+#include <quarkbot/strategy.h>
 #include "context_scheduler.h"
 #include "storage.h"
 
@@ -13,7 +13,7 @@
 #include <map>
 #include <set>
 
-namespace trading_api {
+namespace quarkbot {
 
 
 
@@ -94,9 +94,9 @@ public:
     virtual void mq_send_message(std::string_view channel, std::string_view msg) override;
     virtual void update_market(const Instrument &i, MarketEventType type) override;
 
-    virtual trading_api::VarSet<> get_vars(
+    virtual quarkbot::VarSet<> get_vars(
             std::string_view prefix) const override;
-    virtual trading_api::VarSet<> get_vars(
+    virtual quarkbot::VarSet<> get_vars(
             std::string_view start, std::string_view end) const override;
 
 protected:

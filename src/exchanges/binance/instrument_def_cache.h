@@ -19,7 +19,7 @@ public:
     }
 
     void end_reload() {
-        std::vector<trading_api::Function<void()> > tmp;
+        std::vector<quarkbot::Function<void()> > tmp;
         {
             std::lock_guard _(_mx);
             if (--_pending_counter > 0) return;
@@ -46,7 +46,7 @@ protected:
     std::vector<BinanceInstrument::Config> _instruments;
     void process(const RestClient::Result &result, bool coinm);
     static bool sort_order(const BinanceInstrument::Config &a, const BinanceInstrument::Config &b);
-    std::vector<trading_api::Function<void()> > _cb_list;
+    std::vector<quarkbot::Function<void()> > _cb_list;
     unsigned int _pending_counter = 0;
     json::value_t _last_error;
 

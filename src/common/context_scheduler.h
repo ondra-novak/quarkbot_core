@@ -1,14 +1,14 @@
 #pragma once
 
-#include "../trading_ifc/function.h"
-#include "../trading_ifc/timer.h"
+#include <quarkbot/function.h>
+#include <quarkbot/timer.h>
 #include "priority_queue.h"
 
 #include <mutex>
 #include <functional>
 #include <condition_variable>
 
-namespace trading_api {
+namespace quarkbot {
 
 
 

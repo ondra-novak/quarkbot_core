@@ -1,8 +1,8 @@
-#include <trading_api/strategy_api.h>
-#include <trading_api/module.h>
+#include <quarkbot/strategy_api.h>
+#include <quarkbot/module.h>
 
 
-using namespace trading_api;
+using namespace quarkbot;
 
 class Example: public Strategy {
 public:
@@ -26,7 +26,7 @@ void Example::on_start() {
 
 
 ConfigSchema Example::get_config_schema() const {
-    using namespace trading_api::params;
+    using namespace quarkbot::params;
     return {
         Group("gr1",{
             Text("text_example"),

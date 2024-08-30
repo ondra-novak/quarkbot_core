@@ -5,7 +5,7 @@
 #include <future>
 #include <vector>
 
-namespace trading_api {
+namespace quarkbot {
 
 
 

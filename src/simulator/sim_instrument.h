@@ -1,9 +1,9 @@
 #pragma once
 
-#include <trading_api/exchange_api.h>
-#include <trading_api/shared_lockable_ptr.h>
+#include <quarkbot/exchange_api.h>
+#include <quarkbot/shared_lockable_ptr.h>
 #include "matching.h"
-namespace trading_api {
+namespace quarkbot {
 
 
 class SimInstrument: public IInstrument {
@@ -55,6 +55,6 @@ protected:
 
 };
 
-} /* namespace trading_api */
+} /* namespace quarkbot */
 
 

@@ -22,8 +22,7 @@ link_libraries(
 foreach (testFile ${testFiles})
 	string(REGEX MATCH "([^\/]+$)" filename ${testFile})
 	string(REGEX MATCH "[^.]*" executable_name tests_${filename})
-	add_executable(${executable_name} ${testFile})
-	add_dependencies(${executable_name} trading_api_single_header)
+	add_executable(${executable_name} ${testFile})	
 	target_compile_definitions(${executable_name} PRIVATE
 	   MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
 	 )	

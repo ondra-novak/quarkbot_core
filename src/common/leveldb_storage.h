@@ -3,7 +3,7 @@
 #include <leveldb/write_batch.h>
 
 
-namespace trading_api {
+namespace quarkbot {
 class LvlDBStorage: public IStorage {
 public:
 

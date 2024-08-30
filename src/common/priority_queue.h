@@ -3,7 +3,7 @@
 #include <vector>
 
 
-namespace trading_api {
+namespace quarkbot {
 
 template<typename T, typename Cmp = std::less<T>, typename Alloc = std::allocator<T> >
 class PriorityQueue: private std::vector<T> {

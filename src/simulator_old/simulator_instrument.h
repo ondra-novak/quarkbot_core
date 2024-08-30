@@ -1,11 +1,11 @@
 #pragma once
 
 #include <../simulator_old/simulator_account.h>
-#include "../trading_ifc/strategy_context.h"
-#include "../trading_ifc/orderbook.h"
+#include <quarkbot/strategy_context.h>
+#include <quarkbot/orderbook.h>
 
 
-namespace trading_api {
+namespace quarkbot {
 
 class SimulAccount;
 

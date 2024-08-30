@@ -1,18 +1,18 @@
 #pragma once
 #include <memory>
 
-#include "../trading_ifc/instrument.h"
-#include "../trading_ifc/account.h"
-#include "../trading_ifc/orderbook.h"
-#include "../trading_ifc/tickdata.h"
-#include "../trading_ifc/order.h"
-#include "../trading_ifc/fill.h"
-#include "../trading_ifc/function.h"
-#include "../trading_ifc/awaiter.h"
-#include "../trading_ifc/market_event.h"
+#include <quarkbot/instrument.h>
+#include <quarkbot/account.h>
+#include <quarkbot/orderbook.h>
+#include <quarkbot/tickdata.h>
+#include <quarkbot/order.h>
+#include <quarkbot/fill.h>
+#include <quarkbot/function.h>
+#include <quarkbot/awaiter.h>
+#include <quarkbot/market_event.h>
 
 
-namespace trading_api {
+namespace quarkbot {
 
 
 

@@ -1,6 +1,6 @@
 #include "config_desc.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 template<typename ... SkipTypes>
 json::value config_schema_to_json_t(const std::vector<params::Control> &controls, unsigned int level);

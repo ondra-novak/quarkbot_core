@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 
-namespace trading_api {
+namespace quarkbot {
 
 
 template<typename T>

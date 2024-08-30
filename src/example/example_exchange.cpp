@@ -1,8 +1,8 @@
-#include <trading_api/exchange_api.h>
-#include <trading_api/module.h>
+#include <quarkbot/exchange_api.h>
+#include <quarkbot/module.h>
 
 
-using namespace trading_api;
+using namespace quarkbot;
 
 class ExampleExchange: public Exchange {
 public:
@@ -29,7 +29,7 @@ public:
     virtual void restore_orders(const Account &, std::span<SerializedOrder> , RestoreOrdersCallback cb) override {cb({});}
 
 
-    virtual trading_api::ConfigSchema get_api_key_config_schema() const
+    virtual quarkbot::ConfigSchema get_api_key_config_schema() const
             override {return {};}
     virtual void update_market(const Instrument &, MarketEventType ) override{}
 

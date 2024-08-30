@@ -7,7 +7,7 @@
 #include <set>
 
 
-namespace trading_api {
+namespace quarkbot {
 
 
 class SimulInstrument;

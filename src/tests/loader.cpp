@@ -7,7 +7,7 @@ int main() {
     std::string strategy_path = path + "example_strategy.so";
     std::string exchange_path = path + "example_exchange.so";
 
-    trading_api::ModuleRepository repo;
+    quarkbot::ModuleRepository repo;
     repo.add_module(strategy_path);
     repo.add_module(exchange_path);
     auto strategy = repo.create_strategy("Example");

@@ -8,9 +8,9 @@ class StreamMap {
     std::vector<WSStreams *> _streams;
     std::mutex _mx;
     unsigned int _timeout_interval_sec;
-    trading_api::Log _log;
+    quarkbot::Log _log;
 public:
-    StreamMap(trading_api::Log log, unsigned int timeout_interval_sec=5);
+    StreamMap(quarkbot::Log log, unsigned int timeout_interval_sec=5);
     ~StreamMap();
     void add_stream(WSStreams *inst);
     void remove_stream(WSStreams *inst);

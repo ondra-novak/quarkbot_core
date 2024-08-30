@@ -4,7 +4,7 @@
 #include <memory>
 
 
-namespace trading_api {
+namespace quarkbot {
 
 
 std::string custom_to_binary(const Order::ClosePosition &c) {

@@ -6,11 +6,11 @@
 
 
 
-class BinanceAccount: public trading_api::IAccount {
+class BinanceAccount: public quarkbot::IAccount {
 public:
 
-    using Exchange = trading_api::ExchangeInfo;
-    using Instrument = trading_api::Instrument;
+    using Exchange = quarkbot::ExchangeInfo;
+    using Instrument = quarkbot::Instrument;
     using PositionMap = std::unordered_map<Instrument, Positions, Instrument::Hasher>;
 
 

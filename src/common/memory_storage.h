@@ -4,7 +4,7 @@
 #include <shared_mutex>
 #include <map>
 
-namespace trading_api {
+namespace quarkbot {
 class MemoryStorage: public IStorage {
 public:
 

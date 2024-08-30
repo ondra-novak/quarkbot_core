@@ -1,6 +1,6 @@
 #include "basic_exchange.h"
 
-namespace trading_api {
+namespace quarkbot {
 
 BasicExchangeContext::BasicExchangeContext(std::string label, Network ntw, Log log)
             :_label(std::move(label))

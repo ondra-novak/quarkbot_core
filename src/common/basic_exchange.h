@@ -1,14 +1,14 @@
 #pragma once
 
-#include "../trading_ifc/strategy_context.h"
-#include "../trading_ifc/iexchange.h"
+#include <quarkbot/strategy_context.h>
+#include <quarkbot/iexchange.h>
 
 #include "event_target.h"
 #include "small_set.h"
 #include <map>
 
 
-namespace trading_api {
+namespace quarkbot {
 
 class BasicExchangeContext: public IExchangeContext, public IExchangeInfo, public std::enable_shared_from_this<BasicExchangeContext> {
 public:

@@ -4,7 +4,7 @@
 #include <iostream>
 #include <dlfcn.h>
 
-namespace trading_api {
+namespace quarkbot {
 
 
 load_strategy_exception::load_strategy_exception(
@@ -24,7 +24,7 @@ void ModuleRepository::add_module(const std::string &module_pathname) {
         throw load_strategy_exception(module_pathname, dlerror());
     }
     auto entryfn = reinterpret_cast<EntryPointFn>(
-            dlsym(handle, "__trading_api_module_entry_point"));
+            dlsym(handle, "__quarkbot_module_entry_point"));
 
     if (!entryfn){
         throw load_strategy_exception(module_pathname, "Not a module file - missing entry point");

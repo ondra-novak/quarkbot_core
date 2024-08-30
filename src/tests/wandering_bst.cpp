@@ -1,4 +1,4 @@
-#include "../trading_ifc/wandering_bst.h"
+#include <quarkbot/wandering_bst.h>
 #include "check.h"
 
 
@@ -15,7 +15,7 @@ struct LessKey {
 int main() {
 
 
-    trading_api::WanderingTree<Key, int, LessKey> tree;
+    quarkbot::WanderingTree<Key, int, LessKey> tree;
     for (int i = 0; i < 50; ++i) {
         tree.insert(Key{i},i);
     }

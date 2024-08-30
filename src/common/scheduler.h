@@ -8,7 +8,7 @@
 #include <optional>
 #include <thread>
 
-namespace trading_api {
+namespace quarkbot {
 
 struct SchedulerDefaultTraits {
     using TimePoint = std::chrono::system_clock::time_point;

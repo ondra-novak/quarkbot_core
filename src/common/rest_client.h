@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../trading_ifc/network.h"
-#include "../trading_ifc/log.h"
+#include <quarkbot/network.h>
+#include <quarkbot/log.h>
 #include <coroserver/https_client.h>
 
-namespace trading_api {
+namespace quarkbot {
 
 class RestClientImpl: public IRestClient {
 public:

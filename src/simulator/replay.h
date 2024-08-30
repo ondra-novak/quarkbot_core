@@ -1,9 +1,9 @@
 #pragma once
 
-#include <trading_api/exchange_api.h>
-#include <trading_api/orderbook.h>
+#include <quarkbot/exchange_api.h>
+#include <quarkbot/orderbook.h>
 
-namespace trading_api {
+namespace quarkbot {
 
 namespace Replay {
 
