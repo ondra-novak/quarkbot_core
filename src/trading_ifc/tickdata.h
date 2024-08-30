@@ -1,11 +1,5 @@
 #pragma once
 
-#include "timer.h"
-#include "decimal.h"
-
-#include <chrono>
-#include <string>
-
 
 namespace trading_api {
 
@@ -40,6 +34,9 @@ public:
     }
 
 };
+
+template<typename Lock = NoLock>
+using MarketEvent_TickData = MarketEventHolder<MarketEventType::tickdata, TickData, Lock>;
 
 
 }

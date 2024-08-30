@@ -4,8 +4,8 @@ file(GLOB SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.h)
 
 file(MAKE_DIRECTORY ${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api)
 
-set(OUTPUT "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/strategy.h"
-           "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/exchange.h"
+set(OUTPUT "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/strategy_api.h"
+           "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/exchange_api.h"
 )
 
 set(FILES_TO_COPY
@@ -13,6 +13,10 @@ set(FILES_TO_COPY
         csv.h
         weak_object_map.h
         shared_lockable_ptr.h
+        wandering_bst.h
+        tickdata.h
+        auctiondata.h
+        orderbook.h
 )
 
 set(DESTINATION_DIR "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api")
@@ -23,8 +27,8 @@ foreach(FILE ${FILES_TO_COPY})
 endforeach()
 
 add_custom_command(
-    OUTPUT "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/strategy.h"
-    COMMAND to_single_header ARGS strategy_api.h ${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/strategy.h
+    OUTPUT "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/strategy_api.h"
+    COMMAND to_single_header ARGS strategy_api.h ${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/strategy_api.h
     DEPENDS ${SOURCES}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Generating strategy API"
@@ -32,8 +36,8 @@ add_custom_command(
 )
 
 add_custom_command(
-    OUTPUT "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/exchange.h"
-    COMMAND to_single_header ARGS exchange_api.h ${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/exchange.h
+    OUTPUT "${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/exchange_api.h"
+    COMMAND to_single_header ARGS exchange_api.h ${CMAKE_HEADER_OUTPUT_DIRECTORY}/trading_api/exchange_api.h
     DEPENDS ${SOURCES}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Generating exchange API"

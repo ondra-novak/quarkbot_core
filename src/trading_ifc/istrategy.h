@@ -1,7 +1,6 @@
 #pragma once
 #include "strategy_context.h"
 #include "config_desc.h"
-#include "orderbook.h"
 #include "awaiter.h"
 #include <queue>
 

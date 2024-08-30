@@ -3,8 +3,6 @@
 #include "coro_support.h"
 #include "fill.h"
 #include "order.h"
-#include "tickdata.h"
-#include "orderbook.h"
 #include "timer.h"
 #include "config.h"
 #include "log.h"

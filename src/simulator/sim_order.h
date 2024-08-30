@@ -1,6 +1,6 @@
 #pragma once
 
-#include <trading_api/exchange.h>
+#include <trading_api/exchange_api.h>
 
 
 namespace trading_api {

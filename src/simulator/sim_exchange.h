@@ -1,5 +1,5 @@
 #pragma once
-#include <trading_api/exchange.h>
+#include <trading_api/exchange_api.h>
 #include <trading_api/weak_object_map.h>
 #include "sim_instrument.h"
 

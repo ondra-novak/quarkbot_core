@@ -1,6 +1,4 @@
 #pragma once
-#include "common.h"
-#include "account.h"
 #include "tickdata.h"
 #include "wandering_bst.h"
 
@@ -162,6 +160,9 @@ protected:
     WanderingTree<Decimal, Decimal, CmpBid> _bid_side = {};    //<bid side
     WanderingTree<Decimal, Decimal, CmpAsk> _ask_side = {};    //<ask side
 };
+
+template<typename Lock = NoLock>
+using MarketEvent_OrderBook = MarketEventHolder<MarketEventType::orderbook, OrderBook, Lock>;
 
 
 }

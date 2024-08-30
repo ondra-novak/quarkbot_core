@@ -251,12 +251,5 @@ protected:
     T _val;
 };
 
-class TickData;
-class OrderBook;
-
-template<typename Lock = NoLock>
-using MarketEvent_TickData = MarketEventHolder<MarketEventType::tickdata, TickData, Lock>;
-template<typename Lock = NoLock>
-using MarketEvent_OrderBook = MarketEventHolder<MarketEventType::orderbook, OrderBook, Lock>;
 
 }

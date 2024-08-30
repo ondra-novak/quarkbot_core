@@ -1,4 +1,4 @@
-#include <trading_api/strategy.h>
+#include <trading_api/strategy_api.h>
 #include <trading_api/module.h>
 
 

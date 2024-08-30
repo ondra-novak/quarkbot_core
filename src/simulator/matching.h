@@ -1,7 +1,7 @@
 #pragma once
 
-#include <trading_api/exchange.h>
-
+#include <trading_api/exchange_api.h>
+#include <trading_api/orderbook.h>
 #include <optional>
 namespace trading_api {
 
