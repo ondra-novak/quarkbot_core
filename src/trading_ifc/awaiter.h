@@ -6,7 +6,7 @@
 #include <coroutine>
 #include <exception>
 #include <memory>
-using std::__exception_ptr::exception_ptr;
+
 
 namespace trading_api {
 
@@ -37,36 +37,36 @@ public:
         exception,
     };
 
-    constexpr AsyncResult():_result_type(nothing) {}
-    constexpr AsyncResult(const AsyncResult &other):_result_type(other._result_type) {
+    AsyncResult():_result_type(nothing) {}
+    AsyncResult(const AsyncResult &other):_result_type(other._result_type) {
         switch (_result_type) {
             case value: std::construct_at(&_val, other._val);break;
             case exception: std::construct_at(&_e, other._e);break;
             default: break;
         }
     }
-    constexpr AsyncResult(const AsyncResult &&other):_result_type(other._result_type) {
+    AsyncResult(const AsyncResult &&other):_result_type(other._result_type) {
         switch (_result_type) {
             case value: std::construct_at(&_val, std::move(other._val));break;
             case exception: std::construct_at(&_e, std::move(other._e));break;
             default: break;
         }
     }
-    constexpr ~AsyncResult() {
+    ~AsyncResult() {
         switch (_result_type) {
             case value: std::destroy_at(&_val);break;
             case exception: std::destroy_at(&_e);break;
             default: break;
         }
     }
-    constexpr AsyncResult &operator=(const AsyncResult &other) {
+    AsyncResult &operator=(const AsyncResult &other) {
         if (this != &other) {
             std::destroy_at(this);
             std::construct_at(this, other);
         }
         return *this;
     }
-    constexpr AsyncResult &operator=(AsyncResult &&other) {
+    AsyncResult &operator=(AsyncResult &&other) {
         if (this != &other) {
             std::destroy_at(this);
             std::construct_at(this, std::move(other));
@@ -76,16 +76,16 @@ public:
 
 
     template<typename ... Args> requires(std::is_constructible_v<StoreType, Args...>)
-    constexpr AsyncResult(Args && ... args)
+    AsyncResult(Args && ... args)
         :_result_type(value),_val(std::forward<Args>(args)...) {}
 
     template<typename ... Args> requires(std::is_constructible_v<StoreType, Args...>)
-    constexpr AsyncResult(std::in_place_t, Args && ... args):_result_type(value),_val() {}
+    AsyncResult(std::in_place_t, Args && ... args):_result_type(value),_val(std::forward<Args>(args)...) {}
 
-    constexpr AsyncResult(std::exception_ptr e)
+    AsyncResult(std::exception_ptr e)
         :_result_type(exception),_e(std::move(e)) {}
 
-    constexpr void clear() {
+    void clear() {
         switch(_result_type) {
             case value: std::destroy_at(&_val);_result_type =nothing;break;
             case exception: std::destroy_at(&_e);_result_type =nothing;break;
@@ -94,60 +94,60 @@ public:
 
     }
     template<typename ... Args> requires(std::is_constructible_v<StoreType, Args...>)
-    constexpr void set_value(Args && ...args) {
+    void set_value(Args && ...args) {
         clear();
         std::construct_at(&_val, std::forward<Args>(args)...);
         _result_type = value;
     }
-    constexpr void set_exception(std::exception_ptr e) {
+    void set_exception(std::exception_ptr e) {
         clear();
         std::construct_at(&_e, std::move(e));
         _result_type = exception;
     }
-    constexpr void set_value(const AsyncResult &p) {
+    void set_value(const AsyncResult &p) {
         (*this) = p;
     }
 
-    constexpr void set_value(AsyncResult &&p) {
+    void set_value(AsyncResult &&p) {
         (*this) = std::move(p);
     }
 
-    constexpr void set_exception() {
+    void set_exception() {
         set_exception(std::current_exception());
     }
 
     template<std::invocable<> Fn>
-    constexpr void set_by_fn(Fn &&fn) {
+    void set_by_fn(Fn &&fn) {
         static_assert(std::is_constructible_v<T, std::invoke_result_t<Fn> >);
         clear();
         new (&_val) T(fn());
         _result_type = value;
     }
 
-    constexpr decltype(auto) get() && {
+    decltype(auto) get() && {
         handle_exception();
         if constexpr(!std::is_void_v<T>) {return std::move(_val);}
     }
 
-    constexpr decltype(auto) get() & {
+    decltype(auto) get() & {
         handle_exception();
         if constexpr(!std::is_void_v<T>) {return _val;}
     }
 
-    constexpr decltype(auto) get() const & {
+    decltype(auto) get() const & {
         handle_exception();
         if constexpr(!std::is_void_v<T>) {return _val;}
     }
 
-    constexpr decltype(auto) get() const && {
+    decltype(auto) get() const && {
         handle_exception();
         if constexpr(!std::is_void_v<T>) {return _val;}
     }
 
-    constexpr bool has_value() const {return _result_type == value;}
-    constexpr bool has_exception() const {return _result_type == exception;}
-    constexpr explicit operator bool() const {return has_value();}
-    constexpr std::exception_ptr get_exception() const {
+    bool has_value() const {return _result_type == value;}
+    bool has_exception() const {return _result_type == exception;}
+    explicit operator bool() const {return has_value();}
+    std::exception_ptr get_exception() const {
         return _result_type == exception?_e:std::exception_ptr{};
     }
 
@@ -210,7 +210,7 @@ public:
     protected:
 
         struct Resumer {void operator()(Awaiter *x)const {
-            auto s = _state.exchange(resolved);
+            auto s = x->_state.exchange(resolved);
             if (s == awaiting) {
                 x->_h.resume();
             }

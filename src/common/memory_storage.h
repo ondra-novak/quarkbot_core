@@ -2,7 +2,7 @@
 #include <leveldb/db.h>
 #include <leveldb/write_batch.h>
 #include <shared_mutex>
-
+#include <map>
 
 namespace trading_api {
 class MemoryStorage: public IStorage {

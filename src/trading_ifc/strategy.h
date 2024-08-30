@@ -62,7 +62,7 @@ protected: //recommended overrides
      * @param active_orders active orders. All orders have restored state. They
      * actuall state is set through standard report which is send after on_start()
      */
-    virtual void on_active_orders(ActiveOrders ) {
+    virtual void on_active_orders(ActiveOrders ) override {
         log.warning("called pure virtual on_active_orders() - you should override");
     }
 
@@ -296,7 +296,7 @@ public:  //context API
         return [this, at, id](auto &&cb) {
             _ctx->set_timer(at, [cb = std::move(cb)]{
                 cb(AsyncResult<void>(std::in_place));
-            });
+            },id);
         };
     }
 

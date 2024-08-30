@@ -365,7 +365,7 @@ void BasicContext::on_message(MQClient::Message message) {
     post(EvMQ{this, std::move(message)});
 }
 
-bool BasicContext::get_service(const std::type_info &tinfo, std::shared_ptr<void> &ptr) {
+bool BasicContext::get_service(const std::type_info &, std::shared_ptr<void> &) {
     return false;
 }
 

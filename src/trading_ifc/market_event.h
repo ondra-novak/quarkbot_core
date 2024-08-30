@@ -228,7 +228,7 @@ public:
         return type == typeid(T);
     }
 
-    virtual MarketEventType type() const {return _type;}
+    virtual MarketEventType type() const override {return _type;}
 
     ///create instance
     template<typename ... Args> requires(std::is_constructible_v<T, Args...>)

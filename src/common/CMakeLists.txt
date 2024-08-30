@@ -14,6 +14,7 @@ add_library (trading_api_common
     rest_client.cpp
     leveldb_storage.cpp
     memory_storage.cpp
+    basic_config.cpp
 )
 
 add_dependencies(trading_api_common libjson20_single_header)

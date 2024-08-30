@@ -36,7 +36,7 @@ public:
     virtual Order create_order_replace(const Order &replace, const Order::Setup &setup, std::string_view label) override;
     virtual void restore_orders(const Account &acc,
             std::span<SerializedOrder> orders,
-            RestoreOrdersCallback callback) ;
+            RestoreOrdersCallback callback) override ;
 
     #if 0
     virtual void restore_orders(void *context, std::span<SerializedOrder> orders) override;

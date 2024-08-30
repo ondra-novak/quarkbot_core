@@ -36,7 +36,7 @@ public:
             if (what_msg.empty()) {
                 std::ostringstream buff;
                 buff << "Ini key not found: "<< path << " : " <<  key;
-                what_msg = std::move(buff.str());
+                what_msg = buff.str();
             }
             return what_msg.c_str();
         }
@@ -55,7 +55,7 @@ public:
             if (what_msg.empty()) {
                 std::ostringstream buff;
                 buff << "Failed to open INI config: " << _f << std::endl;
-                what_msg = std::move(buff.str());
+                what_msg = buff.str();
             }
             return what_msg.c_str();
         }
@@ -110,7 +110,7 @@ public:
             else return static_cast<std::string_view>(*this);
         }
 
-        
+
 
         class Iterator { // @suppress("Miss copy constructor or assignment operator")
         public:
@@ -216,6 +216,11 @@ public:
         }
         auto end() const {
             return s->key_value.end();
+        }
+        const std::string &get_section_path() const {return path;}
+
+        bool is_key_defined(std::string_view key) const {
+            return s->key_value.find(key) != s->key_value.end();
         }
 
     protected:

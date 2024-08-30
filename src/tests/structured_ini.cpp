@@ -127,14 +127,14 @@ void test1() {
     CHECK_EQUAL(extref[1].root->key_value["key5"].content, "value5");
     CHECK_EQUAL(extref[2].root->key_value["q1"].content," hello ");
     CHECK_EQUAL(extref[3].root, extref[2].root);
-    CHECK_BETWEEN(root("number"),3.13,3.15);
+    CHECK_BETWEEN(static_cast<double>(root("number")),3.13,3.15);
     CHECK(root("bool_t1"));
     CHECK(root("bool_t2"));
     CHECK(root("bool_t3"));
     CHECK(root("bool_t4"));
     CHECK(!root("not_exist","false"));
-    CHECK_EQUAL(root("not_exist","12345") , 12345);
-    
+    CHECK_EQUAL(static_cast<int>(root("not_exist","12345")) , 12345);
+
 }
 
 

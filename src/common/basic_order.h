@@ -18,7 +18,7 @@ public:
     virtual State get_state() const override {return State::associated;}
     virtual SerializedOrder to_binary() const override {return {};}
     virtual Origin get_origin() const override {return Origin::strategy;}
-    virtual std::string get_label() const {return label;}
+    virtual std::string get_label() const override {return label;}
 
 protected:
     Instrument _instrument;
@@ -120,7 +120,7 @@ public:
         return dynamic_cast<const BasicOrder &>(*ord.get_handle());
     }
 
-    virtual std::string get_label() const {return _label;}
+    virtual std::string get_label() const  override {return _label;}
 
     static void apply_report(const Order &ord, const Order::Report &rep) {
         from_order(ord).get_status().apply_report(rep);
