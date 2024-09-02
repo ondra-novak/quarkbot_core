@@ -35,8 +35,5 @@ public:
 
 };
 
-template<typename Lock = NoLock>
-using MarketEvent_TickData = MarketEventHolder<MarketEventType::tickdata, TickData, Lock>;
-
 
 }

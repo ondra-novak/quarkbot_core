@@ -1,34 +1,35 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <json20.h>
+#include <common/structured_ini.h>
+#include <common/basic_exchange.h>
+#include <common/basic_config.h>
+#include <common/basic_log.h>
+#include "sim_exchange.h"
 
 
-std::string readStreamToString(std::istream& inputStream) {
-    // Vytvoření stringstreamu pro načtení dat ze vstupního proudu
-    std::stringstream stringStream;
-    stringStream << inputStream.rdbuf(); // Načtení dat ze vstupního proudu do stringstreamu
-    return stringStream.str(); // Vrácení obsahu stringstreamu jako std::string
+using namespace quarkbot;
+
+std::shared_ptr<StructuredIni> load_config(const std::string &fname) {
+    auto ini = std::make_shared<StructuredIni>();
+    ini->parse_file(std::filesystem::path(fname));
+    return ini;
 }
 
-
-static json::value_t load_config(const std::string &fname) {
-    std::ifstream f(fname);
-    if (!f) throw std::runtime_error("Failed to open config file");
-    auto str = readStreamToString(f);
-    return json::value_t::from_json(str);
-}
 
 
 int main(int argc, char **argv) {
     if (argc != 2) {
-        std::cerr << "usage: " << argv[0] << " <config.json>" << std::endl;
+        std::cerr << "usage: " << argv[0] << " <config.conf>" << std::endl;
         return 1;
     }
     try {
-
         std::string cfgfname = argv[1];
         auto cfg = load_config(cfgfname);
+
+        auto logservice = std::make_shared<BasicLog>(std::cerr, ILog::Serverity::debug);
+        auto context = std::make_shared<BasicExchangeContext>("simulator", Network(), Log(logservice));
+        context->init(std::make_unique<SimExchange>(), Config(std::make_shared<BasicConfig>(cfg,(*cfg)["simulator"])));
 
 
     } catch (const std::exception &e) {

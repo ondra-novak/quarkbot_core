@@ -10,6 +10,7 @@
 #include <memory>
 #include <tuple>
 
+
 namespace quarkbot {
 
 template<typename T>

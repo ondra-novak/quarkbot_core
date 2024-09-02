@@ -266,6 +266,8 @@ public:
         std::string line;
         std::string extra_line;
         std::string_view lineview;
+        std::string key;
+        std::string value;
         ValueData *vd = nullptr;
         while (!in.eof()) {
             std::getline(in, line);
@@ -285,13 +287,18 @@ public:
             }
             char first_char = lineview.front();
             char last_char = lineview.back();
+            key.clear();
+            value.clear();
             if (first_char == '[' && last_char == ']') {
                 vd = nullptr;
-                while (padding_table.back().first >= padding) padding_table.pop_back();
-                SectionData *cur = padding_table.back().second;
                 std::string_view section_name = lineview.substr(1, lineview.size()-2);
-                SectionData *new_sect = &cur->sections[std::string(section_name)];
-                padding_table.push_back({padding, new_sect});
+                append_section(padding_table, padding, section_name);
+            } else if (last_char == ':'
+                    && read_key_or_value<true>(lineview.begin(), lineview.end(), std::back_inserter(key)).first == lineview.end()) {
+                vd = nullptr;
+                std::string_view section_name = key;
+                section_name = section_name.substr(0, section_name.size()-1);
+                append_section(padding_table, padding+1, section_name);
             } else if (first_char == '{' && last_char == '}') {
                 vd = nullptr;
                 while (padding_table.back().first > padding) padding_table.pop_back();
@@ -301,8 +308,6 @@ public:
             } else {
                 while (padding_table.back().first > padding) padding_table.pop_back();
                 SectionData *cur = padding_table.back().second;
-                std::string key;
-                std::string value;
                 auto st = read_key_or_value<true>(lineview.begin(), lineview.end(), std::back_inserter(key));
                 if (st.first != lineview.end()) {
                     if (*st.first == '=') {
@@ -477,7 +482,14 @@ protected:
         return {iter, out};
     }
 
+    template<typename A>
+    static void append_section(A &padding_table, int padding, std::string_view section_name) {
+        while (padding_table.back().first >= padding) padding_table.pop_back();
+        SectionData *cur = padding_table.back().second;
+        SectionData *new_sect = &cur->sections[std::string(section_name)];
+        padding_table.push_back({padding, new_sect});
 
+    }
 
     static void append(const std::string &value, ValueData *vd) {
         vd->content.push_back(',');

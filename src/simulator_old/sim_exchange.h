@@ -8,7 +8,7 @@
 #include <vector>
 namespace quarkbot {
 
-class SimExchange: public IExchange {
+class SimExchange: public Exchange {
 public:
 
     struct SimConfig {

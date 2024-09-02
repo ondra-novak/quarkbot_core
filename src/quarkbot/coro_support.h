@@ -13,11 +13,11 @@ namespace _details {
     struct CoroutineResult { // @suppress("Miss copy constructor or assignment operator")
         AsyncResult<T> _result = {};
         template<std::convertible_to<T> X>
-        constexpr void return_value(X &&x) {
+        void return_value(X &&x) {
             _result.set_value(std::forward<X>(x));
         }
         template<std::invocable<> X>
-        constexpr void return_value(X &&x) {
+        void return_value(X &&x) {
             _result.set_by_fn(std::forward<X>(x));
         }
     };
@@ -25,7 +25,7 @@ namespace _details {
     template<>
     struct CoroutineResult<void> { // @suppress("Miss copy constructor or assignment operator")
         AsyncResult<void> _result = {};
-        constexpr void return_void() {
+        void return_void() {
             _result.set_value();
         }
     };

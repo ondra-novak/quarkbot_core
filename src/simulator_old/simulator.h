@@ -1,8 +1,9 @@
 #pragma once
 
+#include <../quarkbot/basic_order.h>
+
 #include "../common/exchange_info.h"
 
-#include "../common/basic_order.h"
 #include <map>
 #include <set>
 

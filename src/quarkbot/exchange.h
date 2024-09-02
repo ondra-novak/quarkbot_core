@@ -1,6 +1,6 @@
 #pragma once
+#include "basic_order.h"
 #include "iexchange.h"
-#include "../common/basic_order.h"
 namespace quarkbot {
 
 
@@ -64,7 +64,7 @@ public:
         return Order(std::make_unique<BasicOrder>(replace, setup, label, Order::Origin::strategy));
     }
     ///Default implementation for order managment, when BasicOrder is used
-    virtual void order_apply_report(const Order &order, const Order::Report &report) {
+    virtual void order_apply_report(const Order &order, const Order::Report &report) override {
         BasicOrder::apply_report(order, report);
     }
     Order restore_basic_order(const Instrument &instrument, const Account &account, const Order::Setup &setup, std::string_view label) {
@@ -78,7 +78,7 @@ public:
 protected:
     IExchangeContext *_ctx = {};
 
-    virtual void init(IExchangeContext *ctx) {
+    virtual void init(IExchangeContext *ctx) override {
         _ctx = ctx;
         on_start();
     }

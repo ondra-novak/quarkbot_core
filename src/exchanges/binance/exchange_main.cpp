@@ -2,7 +2,7 @@
 #include "instrument.h"
 #include "identity.h"
 
-#include <../../common/basic_order.h>
+#include <../../quarkbot/basic_order.h>
 
 
 using namespace quarkbot;

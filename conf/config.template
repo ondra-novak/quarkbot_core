@@ -1,0 +1,67 @@
+[exchanges]
+    ex1: 
+        module=module.so
+    
+        [settings]
+        key=value #settings
+        
+    ex2:
+        module=module.so
+    
+        [settings]
+        key=value #settings
+
+[profiles]
+    p1:
+        exchange=ex1
+    
+        [credentials]
+        api_name=<apikey-name> #credentials
+        api_secret=<apikey-secret> #credentials 
+    
+    p2:
+        exchange=ex2
+    
+        {ex2_credents.ini} # load credentials from external file
+        # [credentials]
+        # api_name=<apikey-name> #credentials
+        # api_secret=<apikey-secret> #credentials
+
+[accounts]
+    acc1: 
+        profile=p1
+        
+        [query]
+        market=spot
+        currency=USD
+    
+    acc2:
+        profile=p2
+        
+        [query]
+        market=futures
+        currency=USDT
+        
+[instruments]
+    Bitcoin:
+        exchanges=ex1
+        
+        [query]
+        symbol=BTCUSD
+    
+    Special:
+        profile=p1
+        
+        [query]
+        symbol=SPEC
+
+[strategies]
+    Name:
+        module=module.so
+        instruments= Bitcoin,Special
+        accounts= acc1,acc2
+        
+        [configuration]
+        key=value
+            
+         

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <quarkbot/exchange_api.h>
+#include <quarkbot/market_event_factory.h>
 #include <quarkbot/orderbook.h>
 #include <optional>
 namespace quarkbot {
@@ -12,8 +13,6 @@ namespace simulator {
 ///Market matching engine (for simulation)
 class Matching {
 public:
-
-    Matching();
 
     ///Contains information about execution
     struct Execution {
@@ -191,7 +190,7 @@ protected:
     Decimal _last_size = 0;
     double _prev_volume;
 
-    std::shared_ptr<MarketEvent_TickData<> > _me_tick;
+    mutable MarketEventFactory<MarketEventType::tickdata, TickData> _me_tick;
     void update_spread();
 
 };

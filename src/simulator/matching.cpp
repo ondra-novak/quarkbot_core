@@ -7,10 +7,6 @@ namespace quarkbot {
 
 namespace simulator {
 
-Matching::Matching()
-    :_me_tick(std::make_shared<MarketEvent_TickData<> >()) {}
-
-
 
 
 void Matching::set_spread(const Spread &spread) {
@@ -173,11 +169,11 @@ Decimal Matching::get_effective_price() const {
 }
 
 MarketEvent Matching::get_ticker(Timestamp curTime) const {
-    _me_tick->set(TickData{
+    auto ev = _me_tick.create(TickData{
         curTime,_spread.bid,_spread.ask,_last, _index,
         _spread.bid_size,_spread.ask_size, static_cast<double>(_last_size), _trades
     });
-    return MarketEvent(_me_tick);
+    return MarketEvent(ev);
 
 }
 
@@ -191,5 +187,7 @@ void Matching::accept_ticker(const TickData &tk) {
 }
 
 }
+
+
 
 }

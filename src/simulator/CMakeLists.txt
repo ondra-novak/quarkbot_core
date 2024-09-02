@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
 
+link_libraries(
+     trading_api_common
+    ${STANDARD_LIBRARIES}
+)
 
 
 add_executable (simulator
@@ -12,6 +16,7 @@ add_executable (simulator
     sim_exchange.cpp
     sim_order.cpp
 )
+
 
 add_dependencies(simulator libjson20_single_header)
 

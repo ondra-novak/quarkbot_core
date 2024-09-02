@@ -11,12 +11,19 @@ namespace Replay {
 class CSVReplaySource {
 public:
 
-    CSVReplaySource(std::istream &infile):_csv(Src(check_file(infile))) {
+    CSVReplaySource(std::istream &infile,
+            std::chrono::system_clock::time_point initial_time,
+            double speed,
+            double offset)
+    :_csv(Src(check_file(infile)))
+    ,_initial_time_point(initial_time)
+    ,_speed(speed)
+    ,_offset(offset) {
         open_csv();
     }
 
     struct CSVLayout {
-        std::string time;
+        double time;
         std::string symbol;
         std::string bid_price;
         double bid_size;
@@ -27,7 +34,7 @@ public:
         std::string index_price;
     };
 
-    std::optional<Data> operator()();
+    const Data * operator()();
 
 protected:
 
@@ -38,8 +45,13 @@ protected:
     };
 
     CSVReader<Src> _csv;
+    std::chrono::system_clock::time_point _initial_time_point;
+    double _speed;
+    double _offset;
     CSVFieldIndexMapping<CSVLayout> _mapping;
     CSVLayout _data;
+
+    std::unordered_map<std::string,Data> _result_map = {};
     std::chrono::system_clock::time_point _prevtp = std::chrono::system_clock::time_point::min();
     void open_csv();
 
@@ -49,9 +61,12 @@ protected:
 
 class CSVReplaySourceFile {
 public:
-    CSVReplaySourceFile(const std::string &f)
-        :fin(f),src(fin) {}
-    std::optional<Data> operator()() {
+    CSVReplaySourceFile(const std::string &f,
+            std::chrono::system_clock::time_point initial_time,
+            double speed,
+            double offset)
+        :fin(f),src(fin, initial_time, speed, offset) {}
+    const Data * operator()() {
         return src();
     }
 protected:
@@ -59,11 +74,15 @@ protected:
     CSVReplaySource src;
 };
 
-Source create(const std::string &fname) {
-    return CSVReplaySourceFile(fname);
+Source create(const std::string &fname,
+        std::chrono::system_clock::time_point initial_time,
+        double speed, double offset) {
+    return CSVReplaySourceFile(fname, initial_time, speed, offset);
 }
-Source create(std::istream &infile) {
-    return CSVReplaySource(infile);
+Source create(std::istream &infile,
+        std::chrono::system_clock::time_point initial_time,
+        double speed, double offset) {
+    return CSVReplaySource(infile, initial_time, speed, offset);
 }
 
 void CSVReplaySource::open_csv() {
@@ -110,70 +129,40 @@ std::chrono::system_clock::time_point parseTimestamp(const std::string& timestam
     return time_point;
 }
 
-inline std::optional<Data> CSVReplaySource::operator ()() {
+inline const Data * CSVReplaySource::operator ()() {
     while (true) {
         if (!_csv.readRow(_mapping, _data)) return {};
-        auto tp = parseTimestamp(_data.time);
+        constexpr auto cast_multiplier = std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::seconds(1)).count();
+        std::chrono::system_clock::duration tprel( static_cast<std::uint64_t>((_data.time+_offset)*_speed * cast_multiplier));
+        auto tp = _initial_time_point + tprel;
 
         if (tp == std::chrono::system_clock::time_point::min() || tp < _prevtp)
             continue;
 
         _prevtp = tp;
-        Data ret{
-            {
-                tp,
-                Decimal(_data.bid_price),
-                Decimal(_data.ask_price),
-                Decimal(_data.trade_price),
-                Decimal(_data.index_price),
-                _data.bid_size,
-                _data.ask_size,
-                _data.trade_size,
-            },
-            _data.symbol
-        };
-        return ret;
+        auto &result = _result_map[_data.symbol];
+        result.tp = tp;
+        result.ask = Decimal(_data.ask_price);
+        result.bid = Decimal(_data.bid_price);
+        if (!_data.trade_price.empty()) {
+            auto d = Decimal(_data.trade_price);
+            if (d) {
+                result.last = d;
+                ++result.cum_trades;
+            }
+        }
+        result.index = Decimal(_data.index_price);
+        result.ask_volume = _data.ask_size;
+        result.bid_volume = _data.bid_size;
+        result.cum_volume += _data.trade_size;
+        result.symbol_id = _data.symbol;
+        return &result;
     }
 }
 
 std::istream& CSVReplaySource::check_file(std::istream &f) {
     if (!f) throw std::runtime_error("Replay file open failed");
     return f;
-}
-
-class Aggregator {
-public:
-
-    Aggregator (std::vector<Source> sources)
-        :sources(std::move(sources)) {
-        std::transform(sources.begin(), sources.end(), std::back_inserter(next),
-                [](Source &s){return s();});
-    }
-    std::optional<Data> operator()() {
-        auto iter = std::min_element(next.begin(), next.end(),
-                [](const std::optional<Data> &a,const std::optional<Data> &b) {
-            auto ta = a.has_value()?std::chrono::system_clock::time_point::max():a->tp;
-            auto tb = b.has_value()?std::chrono::system_clock::time_point::max():b->tp;
-            return ta < tb;
-        });
-        auto idx = std::distance(next.begin(), iter);
-        std::optional<Data> r = std::move(next[idx]);
-        next[idx] = sources[idx]();
-        return r;
-    }
-
-protected:
-    std::vector<Source> sources;
-    std::vector<std::optional<Data> > next;
-
-
-};
-
-Source aggregate(std::vector<Source> sources) {
-    if (sources.empty()) return []{return std::optional<Data>();};
-    return Aggregator(std::move(sources));
-
-
 }
 
 }

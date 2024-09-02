@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 #include "wrapper.h"
+#include "shared/cluster_alloc.h"
 #include <typeinfo>
 #include <sstream>
 
@@ -250,6 +251,5 @@ protected:
     [[no_unique_address]] mutable Lock _mx;
     T _val;
 };
-
 
 }

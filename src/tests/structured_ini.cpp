@@ -68,7 +68,19 @@ array=1,2,3, 4, "5"
       9
       10
       "konec,zvonec"
-
+[level1]
+    level2:
+        l1=1
+    level3:
+        l2=2
+        [sub]
+        l3=3
+    [level4]
+        l4=4
+    level5=5: #not a section 
+        l6=6 
+    "level7=7": #is section 
+        l8=8 
 
 )ini";
 
@@ -127,13 +139,25 @@ void test1() {
     CHECK_EQUAL(extref[1].root->key_value["key5"].content, "value5");
     CHECK_EQUAL(extref[2].root->key_value["q1"].content," hello ");
     CHECK_EQUAL(extref[3].root, extref[2].root);
-    CHECK_BETWEEN(static_cast<double>(root("number")),3.13,3.15);
+    CHECK_BETWEEN(3.13,static_cast<double>(root("number")),3.15);
     CHECK(root("bool_t1"));
     CHECK(root("bool_t2"));
     CHECK(root("bool_t3"));
     CHECK(root("bool_t4"));
     CHECK(!root("not_exist","false"));
     CHECK_EQUAL(static_cast<int>(root("not_exist","12345")) , 12345);
+    auto level1 = ini["level1"];
+    CHECK(level1.defined());
+    auto level2 = level1["level2"];
+    CHECK(level2.defined());
+    auto level3 = level1["level3"];
+    CHECK(level3.defined());
+    auto level4 = level1["level4"];
+    CHECK(level4.defined());
+    auto level5 = level4["level5=5"];
+    CHECK(!level5.defined());
+    auto level7 = level4["level7=7"];
+    CHECK(level7.defined());
 
 }
 
