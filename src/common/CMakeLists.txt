@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 
-add_library (trading_api_common
+add_library (quarkbot_runtime
     loader.cpp
     config_desc.cpp
     basic_context.cpp
@@ -17,5 +17,5 @@ add_library (trading_api_common
     basic_config.cpp
 )
 
-add_dependencies(trading_api_common libjson20_single_header)
+add_dependencies(quarkbot_runtime libjson20_single_header)
 

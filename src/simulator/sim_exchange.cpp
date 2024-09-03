@@ -381,4 +381,9 @@ void SimExchange::simulate_market(simulator::Matching &m) {
     }
 }
 
+void SimExchange::on_start() {
+     Config cfg = get_config();
+     _realtime = cfg["realtime"] || false;
+}
+
 }

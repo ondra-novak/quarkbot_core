@@ -1,9 +1,8 @@
 #pragma once
 #include "common.h"
 #include "wrapper.h"
-#include "shared/cluster_alloc.h"
+#include <optional>
 #include <typeinfo>
-#include <sstream>
 
 namespace quarkbot {
 

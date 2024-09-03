@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 link_libraries(
-     trading_api_common
+     quarkbot_runtime
     ${STANDARD_LIBRARIES}
 )
 

@@ -5,11 +5,10 @@
 #include <iostream>
 #include <string_view>
 #include <source_location>
-#include <optional>
 #include <variant>
 #include <memory>
 #include <tuple>
-
+    
 
 namespace quarkbot {
 

@@ -1,6 +1,4 @@
 #include <iostream>
-#include <fstream>
-#include <sstream>
 #include <common/structured_ini.h>
 #include <common/basic_exchange.h>
 #include <common/basic_config.h>
@@ -30,6 +28,8 @@ int main(int argc, char **argv) {
         auto logservice = std::make_shared<BasicLog>(std::cerr, ILog::Serverity::debug);
         auto context = std::make_shared<BasicExchangeContext>("simulator", Network(), Log(logservice));
         context->init(std::make_unique<SimExchange>(), Config(std::make_shared<BasicConfig>(cfg,(*cfg)["simulator"])));
+
+
 
 
     } catch (const std::exception &e) {

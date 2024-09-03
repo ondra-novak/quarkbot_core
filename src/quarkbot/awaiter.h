@@ -10,9 +10,9 @@
 
 namespace quarkbot {
 
-///asynchornous operation has been canceled with no futher details
+///Asynchronous operation has been canceled with no further details
 /**
- *  This can happen, everytime the associated callback is dropped
+ *  This can happen, every-time the associated callback is dropped
  */
 class CanceledException: public std::exception {
 public:

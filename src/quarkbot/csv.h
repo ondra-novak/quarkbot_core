@@ -1,13 +1,13 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <iostream>
 #include <vector>
-#include <optional>
 #include <algorithm>
 #include <variant>
 
 
-
+ 
 ///Describes mapping of column to a string field in the target structure
 /**
  * @tparam T type of target structure

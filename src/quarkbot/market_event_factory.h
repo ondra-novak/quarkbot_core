@@ -1,6 +1,7 @@
 #pragma once
 
 #include "market_event.h"
+#include "shared/cluster_alloc.h"
 #include <any>
 
 namespace quarkbot {
@@ -15,23 +16,23 @@ public:
     using Allocator = ClusterAlloc<T,8,true>;
 
     MarketEventAllocator() = delete;
-    MarketEventAllocator(std::any *instance):instance(instance) {}
+    MarketEventAllocator(std::any *instance):_instance(instance) {}
 
     template<typename Q>
     MarketEventAllocator(const MarketEventAllocator<Q> &other)
-        :instance(other.trg) {}
+        :_instance(other._instance) {}
 
 
     T *allocate(int n) {
-        if (!instance->has_value())  {
-            instance->emplace<Allocator>();
+        if (!_instance->has_value())  {
+            _instance->emplace<Allocator>();
         }
-        auto &a = std::any_cast<Allocator &>(*instance);
+        auto &a = std::any_cast<Allocator &>(*_instance);
         return a.allocate(n);
     }
 
     void deallocate(T *ptr, int n) {
-        auto &a = std::any_cast<Allocator &>(*instance);
+        auto &a = std::any_cast<Allocator &>(*_instance);
         return a.deallocate(ptr,n);
     }
 
@@ -40,7 +41,7 @@ protected:
     template<typename Q>
     friend class MarketEventAllocator ;
 
-    std::any *instance;
+    std::any *_instance;
 };
 
 

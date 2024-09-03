@@ -40,8 +40,25 @@ std::string_view BasicConfig::get_section_path() const {
     return _cur_section.get_section_path();
 }
 
-std::shared_ptr<const quarkbot::IConfig> BasicConfig::open_section(std::string_view name) const {
+std::shared_ptr<const IConfig> BasicConfig::open_section(std::string_view name) const {
     return std::make_shared<BasicConfig>(_whole_config, _cur_section[name]);
+}
+
+std::vector<std::string_view> BasicConfig::list_sections() const {
+    std::vector<std::string_view> out;
+    out.reserve(_cur_section.sections().size());
+    for (const auto &x: _cur_section.sections()) {
+        out.push_back(x.first);
+    }
+    return out;
+}
+
+std::vector<std::string_view> BasicConfig::list_keys() const {
+    std::vector<std::string_view> out;
+    for (const auto &x: _cur_section) {
+        out.push_back(x.first);
+    }
+    return out;
 }
 
 }

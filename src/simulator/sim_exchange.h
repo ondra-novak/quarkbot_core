@@ -50,11 +50,13 @@ protected:
 
     Timestamp _cur_sim_time;
     WeakObjectMap<SimInstrument> _instruments;
+    bool _realtime = false;
 
     void match_order(simulator::Matching &m, const Order &ord);
 
     struct OrderExecutor;
 
+    virtual void on_start() override;
 
     bool validate_order(const Order::Setup &setup);
 

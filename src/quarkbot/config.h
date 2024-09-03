@@ -56,6 +56,8 @@ public:
     virtual std::optional<std::filesystem::path> get_path(std::string_view name) const = 0;
     virtual bool is_defined(std::string_view name) const = 0;
     virtual std::string_view get_section_path() const = 0;
+    virtual std::vector<std::string_view> list_sections() const = 0;
+    virtual std::vector<std::string_view> list_keys() const = 0;
 class Null;
 };
 
@@ -68,6 +70,8 @@ public:
     virtual std::optional<std::filesystem::path> get_path(std::string_view ) const override {return {};}
     virtual bool is_defined(std::string_view ) const override {return false;}
     virtual std::string_view get_section_path() const override {return "<empty configuration file>";}
+    virtual std::vector<std::string_view> list_sections() const override {return {};}
+    virtual std::vector<std::string_view> list_keys() const override {return {};}
 };
 
 
@@ -194,6 +198,15 @@ public:
     struct ValueProxy;
     ValueProxy operator[](std::string_view s) const;
 
+    ///Retrieve list of sections
+    std::vector<std::string_view> list_sections() const {
+        return _ptr->list_sections();
+    }
+    ///Retrieve list of keys
+    std::vector<std::string_view> list_keys() const {
+        return _ptr->list_keys();
+    }
+
 protected:
 
 
@@ -205,6 +218,10 @@ struct Config::ValueProxy {
     template<typename T>
     operator T() const {
         return cfg.get<T>(name);
+    }
+
+    operator Config() const {
+        return cfg.get_section(name);
     }
     ValueProxy operator[](std::string_view s) const {
         return {cfg.get_section(name), s};
@@ -229,6 +246,7 @@ struct Config::ValueProxy {
             }
         }
     }
+
 };
 
 
