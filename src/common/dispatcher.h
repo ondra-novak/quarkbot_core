@@ -4,7 +4,33 @@
 #include <unordered_set>
 #include <chrono>
 
-template<typename T, typename Hasher = std::hash<T>, typename Compare = std::equal_to<T> >
+struct DispatcherDefaultCollapse {
+
+    template<typename T>
+    std::size_t operator()(const T &v) const {
+        if constexpr(std::invocable<std::hash<T>, T>) {
+            std::hash<T> hasher;
+            return hasher(v);
+        } else if constexpr(std::is_polymorphic_v<T> && sizeof(T) >= sizeof(void *)+sizeof(std::size_t)) {
+            return *reinterpret_cast<const std::size_t *>(reinterpret_cast<const void **>(&v)+1);
+        } else {
+            return *reinterpret_cast<const std::size_t *>(&v);
+        }
+    }
+
+    template<typename T>
+    bool operator()(const T &a1, const T &a2) const {
+        if constexpr(std::equality_comparable<T>) {
+            return a1 == a2;
+        } else {
+            return (*this)(a1) == (*this)(a2);
+        }
+    }
+
+};
+
+
+template<typename T, typename Hasher = DispatcherDefaultCollapse, typename Compare = DispatcherDefaultCollapse >
 class DispatcherCore {
 public:
 
@@ -125,6 +151,8 @@ public:
     }
 
     TimePoint get_nearest_schedule() const {return _near_tp;}
+
+    bool empty() const {return _queue.empty() && _tqueue.empty();}
 
 protected:
 

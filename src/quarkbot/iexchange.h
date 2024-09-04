@@ -64,7 +64,7 @@ public:
      * retrieves list of accounts matching the query
      */
     virtual void query_accounts(const ExchangeCredentials &creds,
-            std::string_view label, const Query &query,
+            const Query &query, std::string_view label,
             Function<void(std::span<Account>)> result) = 0;
 
     ///Query for exclusive instruments

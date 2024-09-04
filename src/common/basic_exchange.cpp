@@ -2,8 +2,11 @@
 
 namespace quarkbot {
 
-BasicExchangeContext::BasicExchangeContext(std::string label, Network ntw, Log log)
+BasicExchangeContext::BasicExchangeContext(std::string label,
+        GlobalScheduler gscheduler,
+        Network ntw, Log log)
             :_label(std::move(label))
+            ,_scheduler(std::move(gscheduler))
             ,_ntw(std::move(ntw))
             ,_log(std::move(log),"ex/{}",_label) {}
 
@@ -70,8 +73,6 @@ void BasicExchangeContext::order_apply_report(const Order &order,
         const Order::Report &report) {
     _ptr->order_apply_report(order, report);
 }
-
-
 
 
 std::string BasicExchangeContext::get_label() const {
@@ -203,9 +204,9 @@ void BasicExchangeContext::load_credentials(const Config &credential_config,
 }
 
 void BasicExchangeContext::query_accounts(const ExchangeCredentials &creds,
-        std::string_view label, const Query &query,
+        const Query &query, std::string_view label,
         Function<void(std::span<Account>)> result) {
-    _ptr->query_accounts(creds, label, query, std::move(result));
+    _ptr->query_accounts(creds, query, label, std::move(result));
 }
 
 void BasicExchangeContext::query_instruments(const ExchangeCredentials &creds,
@@ -221,6 +222,33 @@ void BasicExchangeContext::query_instruments(const Query &query,
 
 const Config &BasicExchangeContext::get_config() const {
     return _cfg;
+}
+
+void BasicExchangeContext::set_timer(Timestamp at, TimerCallback fnptr, TimerID id) {
+    std::lock_guard _(_queue_mx);
+    if (_queue.post_timed(id, at, std::move(fnptr)))
+        notify_queue();
+}
+
+void BasicExchangeContext::notify_queue() {
+    Timestamp tp = _queue.get_nearest_schedule();
+    _scheduler(tp,[this](auto tp){on_scheduler(tp);}, this);
+}
+
+bool BasicExchangeContext::clear_timer(quarkbot::TimerID id) {
+    std::lock_guard _(_queue_mx);
+    return _queue.cancel(id);
+}
+
+void BasicExchangeContext::on_scheduler(Timestamp tp) {
+    std::unique_lock lk(_queue_mx);
+    while (_queue.process_message(tp, [&](TimerCallback &&cb){
+        lk.unlock();
+        cb(tp);
+        lk.lock();
+        return true;
+    }));
+    notify_queue();
 }
 
 }

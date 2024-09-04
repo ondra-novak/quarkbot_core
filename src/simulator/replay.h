@@ -1,6 +1,6 @@
 #pragma once
 
-#include <quarkbot/exchange_api.h>
+#include <quarkbot/exchange.h>
 #include <quarkbot/orderbook.h>
 
 namespace quarkbot {

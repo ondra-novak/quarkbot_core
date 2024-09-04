@@ -11,6 +11,9 @@ public:
     Exchange(const Exchange &) = delete;
     Exchange &operator=(const Exchange &) = delete;
 
+    template<typename T>
+    using Awaitable = AwaitableResult<T,  Function<void(Function<void(AsyncResult<T>)>)> >;
+
 
     virtual void on_start() {}
 
@@ -73,6 +76,27 @@ public:
         return Order(x);
     }
 
+    ///Sets timer to call specific event
+    /**
+     * Schedules function call at given time point.
+     * @param at time point, it doesn't need to be real time (especially in simulation)
+     * @param cb callback function. It receives current time. This is important
+     * argument in case, that environment is simulated (in which case, simulated
+     * time is different than real time)
+     * @param id id of timer (optional)
+     */
+    template<std::invocable<Timestamp> CB>
+    void set_timer(Timestamp at, CB &&cb, TimerID id = 0) {
+        _ctx->set_timer(std::move(at), std::forward<CB>(cb), std::move(id));
+    }
+    ///clear specified timer
+    /**
+     * @param id identifier of timer
+     *
+     */
+    void clear_timer(TimerID id) {
+        _ctx->clear_timer(id);
+    }
 
 
 protected:

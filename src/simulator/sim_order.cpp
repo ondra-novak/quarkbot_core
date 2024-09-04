@@ -1,5 +1,6 @@
 
 #include "sim_order.h"
+#include <quarkbot/serialize.h>
 
 #include <memory>
 

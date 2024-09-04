@@ -3,7 +3,7 @@
 #ifndef TRADING_API_MODULE_ENTRY_POINT
 #define TRADING_API_MODULE_ENTRY_POINT
 
-
+#include "module_decl.h"
 
 namespace quarkbot {
 

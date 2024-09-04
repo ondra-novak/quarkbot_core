@@ -1,10 +1,10 @@
 #pragma once
 
+#include "common.h"
 #include "event_target.h"
 #include "dispatcher.h"
 
 #include <quarkbot/strategy.h>
-#include "context_scheduler.h"
 #include "storage.h"
 
 #include "basic_exchange.h"
@@ -18,25 +18,13 @@ namespace quarkbot {
 
 
 
-/*scheduler object acts as invocable, which receives timestamp, function to call,
- * and pointer which serves as identification.
- *
- * If function is called, and there is already scheduled action, it
- * reschedules the action to new time point
- *
- */
-
-template<typename Scheduler>
-concept SchedulerType = (std::is_invocable_v<Scheduler, Timestamp, Function<void(Timestamp)>, const void *>);
-
-
 
 class BasicContext: public IContext,
                     public IEventTarget,
                     public IMQBroker::IListener{
 public:
 
-    using GlobalScheduler = std::function<void(Timestamp,std::function<void(Timestamp)>, const void *)>;
+    using GlobalScheduler = Function<void(Timestamp,Function<void(Timestamp)>, const void *)>;
 
     BasicContext(std::unique_ptr<IStorage> storage,
             GlobalScheduler gscheduler,

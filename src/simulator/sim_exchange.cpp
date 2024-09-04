@@ -1,6 +1,7 @@
 #include "sim_exchange.h"
 #include "sim_account.h"
 #include "sim_instrument.h"
+#include "replay.h"
 
 #include "sim_order.h"
 namespace quarkbot {
@@ -14,13 +15,17 @@ ConfigSchema SimExchange::get_exchange_config_schema() const {
 ConfigSchema SimExchange::get_api_key_config_schema() const {
     return {};
 }
+
+SimExchange::SimExchange(Function<void()> done_cb)
+    :_done_cb(std::move(done_cb)) {}
+
 void SimExchange::load_credentials(const Config &, std::string_view , Function<void(ExchangeCredentials)> result) {
     ExchangeCredentials cred(std::make_shared<IExchangeCredentials::Null>());
     result(cred);
 }
 
 void SimExchange::query_accounts(const ExchangeCredentials &,
-        std::string_view label, const Query &query,
+        const Query &query, std::string_view label,
         Function<void(std::span<Account>)> result) {
     std::string currency = query["currency"];
     double balance = query["balance"];
@@ -301,8 +306,8 @@ void SimExchange::batch_cancel(std::span<Order> orders) {
     }
 }
 
-void SimExchange::replay_accept(std::string_view symbol, const TickData &ticker) {
-    _cur_sim_time = ticker.tp;
+void SimExchange::replay_accept(std::string_view symbol, const TickData &ticker, Timestamp recvtime) {
+    _cur_sim_time = recvtime;
     auto instrument = _instruments.find(symbol);
     if (instrument) {
         auto matching = instrument->get_matching();
@@ -381,9 +386,54 @@ void SimExchange::simulate_market(simulator::Matching &m) {
     }
 }
 
+template<typename R>
+void SimExchange::run_replay(R replay) {
+    const Replay::Data * item = (*replay)();
+    if (item == nullptr) {
+        --_replay_count;
+        if (_replay_count == 0) _done_cb();
+    }
+
+    set_timer(item->tp, [this, item, replay = std::move(replay)](Timestamp tm) mutable {
+        replay_accept(item->symbol_id, *item, tm);
+        run_replay(std::move(replay));
+    });
+}
+
+
+void SimExchange::start_replay(Config replay_def, Timestamp start_time) {
+
+    std::string file = replay_def["file"];
+    double speed = replay_def["speed"] || 1.0;
+    double offset = replay_def["offset"] || 0.0;
+    try {
+        auto replay = std::make_unique<Replay::Source>(Replay::create(file, start_time, speed, offset));
+        ++_replay_count;
+        run_replay(std::move(replay));
+
+    } catch (...) {
+        std::throw_with_nested(std::runtime_error("Replay failed to initialize: "+file));
+        throw;
+    }
+
+}
+
 void SimExchange::on_start() {
      Config cfg = get_config();
-     _realtime = cfg["realtime"] || false;
+     Timestamp now = std::chrono::system_clock::now();
+
+     Config replay = cfg["replay"];
+     auto list_replays = replay.list_sections();
+     _replay_count = 1;
+
+     for (const auto &n: list_replays) {
+         Config r = replay[n];
+         start_replay(r,now);
+     }
+
+     --_replay_count;
+
+     if (_replay_count == 0) _done_cb();
 }
 
 }

@@ -47,6 +47,13 @@ public:
     ///Create Network object
     virtual Network get_network() const = 0;
 
+    using TimerCallback = Function<void(Timestamp)>;
+
+    virtual void set_timer(Timestamp at, TimerCallback fnptr, TimerID id = 0) = 0;
+
+    virtual bool clear_timer(TimerID id) = 0;
+
+
 
 };
 

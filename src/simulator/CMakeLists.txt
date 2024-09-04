@@ -9,12 +9,13 @@ link_libraries(
 add_executable (simulator
     main.cpp
     sim_account.cpp
-    sim_instrument.cpp     
+    sim_instrument.cpp
     matching.cpp
     replay.cpp
     controller.cpp
     sim_exchange.cpp
     sim_order.cpp
+    sim_scheduler.cpp
 )
 
 

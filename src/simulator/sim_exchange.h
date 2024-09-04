@@ -1,5 +1,5 @@
 #pragma once
-#include <quarkbot/exchange_api.h>
+#include <quarkbot/exchange.h>
 #include <quarkbot/weak_object_map.h>
 #include "sim_instrument.h"
 
@@ -7,11 +7,14 @@ namespace quarkbot {
 
 class SimExchange: public Exchange {
 public:
+
+    SimExchange(Function<void()> done_cb = []{});
+
     virtual ConfigSchema get_exchange_config_schema() const override;
     virtual ConfigSchema get_api_key_config_schema() const override;
     virtual void load_credentials(const Config &credential_config, std::string_view label, Function<void(ExchangeCredentials)> result) override;
     virtual void query_accounts(const ExchangeCredentials &creds,
-            std::string_view label, const Query &query,
+            const Query &query,std::string_view label,
             Function<void(std::span<Account>)> result) override;
 
     virtual void query_instruments(const ExchangeCredentials &creds,
@@ -38,19 +41,16 @@ public:
             std::span<SerializedOrder> orders,
             RestoreOrdersCallback callback) override ;
 
-    #if 0
-    virtual void restore_orders(void *context, std::span<SerializedOrder> orders) override;
-    virtual void order_apply_report(const Order &order, const Order::Report &report)  =0;
-    virtual void order_apply_fill(const Order &order, const Fill &fill) override;
-#endif
-    void replay_accept(std::string_view symbol, const TickData &ticker);
+    void replay_accept(std::string_view symbol, const TickData &ticker, Timestamp recvtime);
 
 protected:
 
 
     Timestamp _cur_sim_time;
     WeakObjectMap<SimInstrument> _instruments;
-    bool _realtime = false;
+    Function<void()> _done_cb;
+    unsigned int _replay_count = 0;
+
 
     void match_order(simulator::Matching &m, const Order &ord);
 
@@ -64,6 +64,11 @@ protected:
 
     void simulate_market(simulator::Matching &m);
 
+
+    void start_replay(Config replay_def, Timestamp start_time);
+
+    template<typename R>
+    void run_replay(R replay);
 };
 
 }

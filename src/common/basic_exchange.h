@@ -5,6 +5,7 @@
 
 #include "event_target.h"
 #include "small_set.h"
+#include "dispatcher.h"
 #include <map>
 
 
@@ -13,10 +14,16 @@ namespace quarkbot {
 class BasicExchangeContext: public IExchangeContext, public IExchangeInfo, public std::enable_shared_from_this<BasicExchangeContext> {
 public:
 
+    using GlobalScheduler = Function<void(Timestamp,Function<void(Timestamp)>, const void *)>;
+
+
     using Query = IExchange::Query;
 
 
-    BasicExchangeContext(std::string label, Network ntw, Log log);
+    BasicExchangeContext(std::string label,
+            GlobalScheduler gscheduler,
+            Network ntw,
+            Log log);
 
 
     void init(std::unique_ptr<IExchange> svc, Config configuration);
@@ -182,7 +189,7 @@ public:
 
 
     void load_credentials(const Config &credential_config, std::string_view label, Function<void(ExchangeCredentials)> result);
-    void query_accounts(const ExchangeCredentials &creds,std::string_view label, const Query &query,Function<void(std::span<Account>)> result);
+    void query_accounts(const ExchangeCredentials &creds, const Query &query,std::string_view label,Function<void(std::span<Account>)> result);
     void query_instruments(const ExchangeCredentials &creds,const Query &query, std::string_view label,Function<void(std::span<Instrument>)> result);
     void query_instruments(const Query &query,std::string_view label,Function<void(std::span<Instrument>)> result);
 
@@ -194,17 +201,10 @@ public:
     void update_market(IEventTarget *, const Instrument &i, MarketEventType type);
 
     virtual const Config &get_config() const override;
+    virtual void set_timer(Timestamp at, TimerCallback fnptr, TimerID id = 0) override;
+    virtual bool clear_timer(TimerID id) override;
 
 protected:
-
-    ///Object's lock, derived class must use this lock to lock internals
-    mutable std::recursive_mutex _mx;
-
-    std::string _label;
-    Network _ntw;
-    Log _log;
-    Config _cfg;
-
 
     struct Subscription {
         MarketEventType type;
@@ -224,12 +224,27 @@ protected:
 
 
 
+    ///Object's lock, derived class must use this lock to lock internals
+    mutable std::recursive_mutex _mx;
+
+    std::string _label;
+    GlobalScheduler _scheduler;
+    Network _ntw;
+    Log _log;
+    Config _cfg;
+
+
+
+
     std::unordered_map<Order, IEventTarget *, Order::Hasher> _orders;
 
     std::unordered_map<Subscription, SmallSet<IEventTarget *> , SubscriptionHasher> _subscriptions;
     std::unordered_map<Subscription, SmallSet<IEventTarget *> , SubscriptionHasher> _market_updates;
     std::unordered_map<Instrument, SmallSet<IEventTarget *> , Instrument::Hasher> _instrument_update_waiting;
     std::unordered_map<Account, SmallSet<IEventTarget *> , Account::Hasher> _account_update_waiting;
+
+    std::mutex _queue_mx;
+    DispatcherCore<TimerCallback> _queue;
 
 
     virtual void income_data(const Instrument &i, const MarketEvent &t) override;
@@ -249,6 +264,10 @@ protected:
 private:
 
     std::unique_ptr<IExchange> _ptr;
+
+    void on_scheduler(Timestamp tp);
+    void notify_queue();
+
 
 };
 
