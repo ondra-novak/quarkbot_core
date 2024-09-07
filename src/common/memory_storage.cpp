@@ -11,20 +11,20 @@ void MemoryStorage::begin_transaction()
     _txlevel++;
 }
 
-void MemoryStorage::put_var(std::string_view name, std::string_view value)
+void MemoryStorage::put_var(Timestamp,std::string_view name, std::string_view value)
 {
     _tx.push_back(TxVar{std::string(name), std::string(value)});
     auto_commit();
 }
 
 
-void MemoryStorage::erase_var(std::string_view name)
+void MemoryStorage::erase_var(Timestamp,std::string_view name)
 {
     _tx.push_back(TxVar{std::string(name), std::nullopt});
     auto_commit();
 }
 
-void MemoryStorage::put_order(const Order &ord)
+void MemoryStorage::put_order(Timestamp,const Order &ord)
 {
     auto b = ord.to_binary();
     _tx.push_back(TxOrder{ord.get_account(),std::move(b), ord.done()});
@@ -33,7 +33,7 @@ void MemoryStorage::put_order(const Order &ord)
 
 
 
-void MemoryStorage::put_fill(const Fill &fill)
+void MemoryStorage::put_fill(Timestamp,const Fill &fill)
 {
     _tx.push_back(fill);
     auto_commit();

@@ -369,5 +369,16 @@ inline Decimal price_instrument_to_strategy(const Instrument::Config &cfg, Decim
     }
 }
 
+inline std::string_view to_string(Instrument::Type type) {
+    switch (type) {
+        case Instrument::Type::cfd: return "cfd";
+        case Instrument::Type::contract: return "contract";
+        case Instrument::Type::inverted_contract: return "inverted";
+        case Instrument::Type::quanto_contract: return "quanto";
+        case Instrument::Type::spot: return "spot";
+        default: return "unknown";
+    }
+}
+
 }
 

@@ -56,6 +56,8 @@ public:
                 && st != State::restoring;
     }
 
+
+
     class Reason {
     public:
         enum E {
@@ -586,6 +588,39 @@ public:
 
 };
 
-
+inline std::string_view to_string(Order::State st) {
+    switch(st) {
+        case Order::State::active: return "active";
+        case Order::State::associated: return "associated";
+        case Order::State::canceled: return "canceled";
+        case Order::State::discarded: return "discarded";
+        case Order::State::filled: return "filled";
+        case Order::State::rejected: return "rejected";
+        case Order::State::restoring: return "restoring";
+        case Order::State::sent: return "sent";
+        case Order::State::undefined: return "undefined";
+        case Order::State::waiting: return "waiting";
+        default: return "unknown";
+    }
 }
 
+inline std::string_view to_string(Order::Origin org) {
+    switch(org) {
+        case Order::Origin::liquidation: return "liquidation";
+        case Order::Origin::manual: return "manual";
+        case Order::Origin::restored: return "restored";
+        case Order::Origin::strategy: return "strategy";
+        default: return "unknown";
+    }
+}
+
+inline std::string_view to_string(Order::Behavior b) {
+    switch (b) {
+        case Order::Behavior::hedge: return "hedge";
+        case Order::Behavior::reduce: return "reduce";
+        default: return "standard";
+    }
+}
+
+
+}

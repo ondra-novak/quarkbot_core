@@ -10,7 +10,7 @@ void LvlDBStorage::begin_transaction()
     _txlevel++;
 }
 
-void LvlDBStorage::put_var(std::string_view name, std::string_view value)
+void LvlDBStorage::put_var(Timestamp,std::string_view name, std::string_view value)
 {
     _batch.Put(build_key(RecordType::variable, name), {value.data(), value.size()});
     auto_commit();
@@ -49,7 +49,7 @@ const std::string &LvlDBStorage::build_fill_key(std::string &buffer, Timestamp t
     return buffer;
 }
 
-void LvlDBStorage::erase_var(std::string_view name)
+void LvlDBStorage::erase_var(Timestamp,std::string_view name)
 {
     _batch.Delete(build_key(RecordType::variable, name));
 }
@@ -57,7 +57,7 @@ void LvlDBStorage::erase_var(std::string_view name)
 using OrderKey = TupleBin<std::string_view, std::string_view>;
 using OrderKeyPrefix = TupleBin<std::string_view>;
 
-void LvlDBStorage::put_order(const Order &ord)
+void LvlDBStorage::put_order(Timestamp,const Order &ord)
 {
     auto b = ord.to_binary();
     std::string account_id = ord.get_account().get_id();
@@ -86,7 +86,7 @@ using FillRecord = TupleBin<
     double// fees
 >;
 
-void LvlDBStorage::put_fill(const Fill &fill)
+void LvlDBStorage::put_fill(Timestamp,const Fill &fill)
 {
     std::string v = FillRecord::compose(fill.time, fill.id, fill.label, fill.pos_id,
                     fill.instrument.type, fill.instrument.multiplier,

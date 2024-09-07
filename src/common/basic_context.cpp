@@ -266,12 +266,12 @@ void BasicContext::rollback() {
 }
 
 void BasicContext::unset_var(std::string_view var_name) {
-    _storage->erase_var(var_name);
+    _storage->erase_var(_event_time, var_name);
 }
 
 
 void BasicContext::set_var(std::string_view var_name, std::string_view value) {
-    _storage->put_var(var_name, value);
+    _storage->put_var(_event_time, var_name, value);
 }
 
 
@@ -405,11 +405,11 @@ void BasicContext::EvRestoreOrders::operator ()() {
 void BasicContext::EvOrderReport::operator ()() {
     auto &ex = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
     ex.order_apply_report(order, report);
-    me->_storage->put_order(order);
+    me->_storage->put_order(me->_event_time, order);
     { //remove duplicate fills, store unique fills to the DB
         auto iter = std::remove_if(report.fills.begin(), report.fills.end(), [&](const Fill &f){
             bool dup = me->_storage->is_duplicate_fill(f);
-            if (!dup) me->_storage->put_fill(f);
+            if (!dup) me->_storage->put_fill(me->_event_time, f);
             return dup;
         });
         report.fills.erase(iter, report.fills.end());

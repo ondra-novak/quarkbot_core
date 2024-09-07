@@ -15,13 +15,34 @@ public:
     ///begin transaction - all put or erase are now stored into single transaction
     virtual void begin_transaction() = 0;
     ///put strategy custom variable
-    virtual void put_var(std::string_view name, std::string_view value) = 0;
+    /**
+     * @param event_time current event time, associated with update. Some database
+     * provider may want to store this information
+     * @param name name of variable (expect a binary content)
+     * @param value content of variable (expect a binary content)
+     */
+    virtual void put_var(Timestamp event_time, std::string_view name, std::string_view value) = 0;
     ///erase strategy custom variable
-    virtual void erase_var(std::string_view name) = 0;
+    /**
+     * @param event_time current event time associated with the update. Some database
+     * provider may want to store this information
+     * @param name name of variable (expect a binary content)
+     */
+    virtual void erase_var(Timestamp event_time, std::string_view name) = 0;
     ///put order (called on every order update)
-    virtual void put_order(const Order &ord) = 0;
+    /**
+     * @param event_time current event time associated with the update. Some database
+     * provider may want to store this information
+     * @param ord order
+     */
+    virtual void put_order(Timestamp event_time, const Order &ord) = 0;
     ///put fill (called on fill)
-    virtual void put_fill(const Fill &fill) = 0;
+    /**
+     * @param event_time current event time associated with the update. Some database
+     * provider may want to store this information
+     * @param fill fill to store
+     */
+    virtual void put_fill(Timestamp event_time, const Fill &fill) = 0;
     ///commit all writes
     virtual void commit() = 0;
     ///discard writes
@@ -98,12 +119,12 @@ class IStorage::Null: public IStorage {
 public:
     virtual void rollback() override {}
     virtual void begin_transaction() override {}
-    virtual void put_order(const Order &) override {}
-    virtual void erase_var(std::string_view ) override {}
-    virtual void put_fill(const Fill &) override {}
+    virtual void put_order(Timestamp,const Order &) override {}
+    virtual void erase_var(Timestamp,std::string_view ) override {}
+    virtual void put_fill(Timestamp,const Fill &) override {}
+    virtual void put_var(Timestamp, std::string_view , std::string_view ) override {}
     virtual void commit() override {}
     virtual bool is_duplicate_fill(const Fill &) const override {return false;} ;
-    virtual void put_var(std::string_view , std::string_view ) override {}
     virtual std::vector<SerializedOrder> load_open_orders(const Account &) const override {return {};}
     virtual Fills load_fills(std::size_t, std::string_view) const override{return {};}
     virtual Fills load_fills(Timestamp ,std::string_view) const  override{return {};}

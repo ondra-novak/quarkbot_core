@@ -25,10 +25,10 @@ public:
 
 
     virtual void begin_transaction() override;
-    virtual void put_var(std::string_view name, std::string_view value) override;
-    virtual void erase_var(std::string_view name) override;
-    virtual void put_order(const Order &ord) override;
-    virtual void put_fill(const Fill &fill) override;
+    virtual void put_var(Timestamp event_time, std::string_view name, std::string_view value) override;
+    virtual void erase_var(Timestamp event_time, std::string_view name) override;
+    virtual void put_order(Timestamp event_time, const Order &ord) override;
+    virtual void put_fill(Timestamp event_time, const Fill &fill) override;
     virtual void commit() override;
     virtual void rollback() override;
     virtual bool is_duplicate_fill(const Fill &fill) const override;

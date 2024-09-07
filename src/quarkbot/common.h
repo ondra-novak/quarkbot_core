@@ -134,6 +134,14 @@ inline Side reverse(Side side) {
     }
 }
 
+inline std::string_view to_string(Side side) {
+    switch (side) {
+        case Side::buy: return "BUY";
+        case Side::sell: return "SELL";
+        default: return "n/a";
+    }
+}
+
 template<typename T>
 using optional_ref = std::unique_ptr<T, decltype([](T *){})>;
 
