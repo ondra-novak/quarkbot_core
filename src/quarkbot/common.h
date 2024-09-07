@@ -8,7 +8,7 @@
 #include <variant>
 #include <memory>
 #include <tuple>
-    
+
 
 namespace quarkbot {
 
@@ -77,7 +77,7 @@ namespace _details {
     struct DetectFnFirstArg<Ret (*)(X, Args...)> {using type = X;};
     template<typename Ret, typename X, typename ... Args>
     struct DetectFnFirstArg<Ret (*)(X, Args...) noexcept> {using type = X;};
-    template<typename T> requires requires {{detect_arg(&T::operator())};}
+    template<typename T> requires (requires {{detect_arg(&T::operator())};})
     struct DetectFnFirstArg<T> {using type = decltype(detect_arg(&T::operator()));};
 
 }

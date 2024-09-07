@@ -2,8 +2,9 @@
 #include "sim_account.h"
 #include "sim_instrument.h"
 #include "replay.h"
-
+#include "mmbot_replay_source.h"
 #include "sim_order.h"
+#include <quarkbot/shared/saved_span.h>
 namespace quarkbot {
 
 using namespace simulator;
@@ -127,6 +128,17 @@ Order SimExchange::create_order_replace(const Order &replace,
 }
 
 void SimExchange::batch_place(std::span<Order> orders) {
+    if (_sim_latency == std::chrono::nanoseconds{}) {
+        batch_place_2(orders);
+    } else {
+        set_timer(_cur_sim_time+_sim_latency,
+                [this,ords = SavedSpan<Order>(std::move(orders))](auto) mutable {
+                    batch_place_2(ords);
+        });
+    }
+}
+
+void SimExchange:: batch_place_2(std::span<Order> orders) {
     for (const Order &o: orders) {
         auto m = SimInstrument::get_matching(o.get_instrument());
         auto mlk = m.lock();
@@ -295,7 +307,7 @@ void SimExchange::match_order(simulator::Matching &m, const Order &ord) {
 
 }
 
-void SimExchange::batch_cancel(std::span<Order> orders) {
+void SimExchange::batch_cancel_2(std::span<Order> orders) {
     for (auto &o: orders) {
         const BasicOrder &ord = BasicOrder::from_order(o);
         auto m = SimInstrument::get_matching(ord.get_instrument());
@@ -306,14 +318,34 @@ void SimExchange::batch_cancel(std::span<Order> orders) {
     }
 }
 
-void SimExchange::replay_accept(std::string_view symbol, const TickData &ticker, Timestamp recvtime) {
+void SimExchange::batch_cancel(std::span<Order> orders) {
+    if (_sim_latency == std::chrono::nanoseconds{}) {
+        batch_cancel_2(orders);
+    } else {
+        set_timer(_cur_sim_time+_sim_latency, [this, ords=SavedSpan(std::move(orders))](auto tp) mutable {
+            _cur_sim_time = tp;
+            batch_cancel_2(ords);
+        });
+    }
+}
+
+
+void SimExchange::replay_accept(std::string_view symbol, TickData &&ticker, Timestamp recvtime) {
     _cur_sim_time = recvtime;
     auto instrument = _instruments.find(symbol);
     if (instrument) {
+        const auto &cfg = instrument->get_config();
+        ticker.last = Instrument::adjust_price(cfg, ticker.last);
+        ticker.bid = Instrument::adjust_price(cfg, ticker.bid);
+        ticker.ask = Instrument::adjust_price(cfg, ticker.ask);
+        if (ticker.ask <= ticker.bid) {
+            ticker.ask = ticker.bid + cfg.tick_size;
+        }
         auto matching = instrument->get_matching();
         auto m = matching.lock();
         m->accept_ticker(ticker);
         simulate_market(*m);
+        this->send_market_event(Instrument(instrument), MarketEventType::tickdata, m->get_ticker(_cur_sim_time));
     }
 }
 
@@ -392,10 +424,11 @@ void SimExchange::run_replay(R replay) {
     if (item == nullptr) {
         --_replay_count;
         if (_replay_count == 0) _done_cb();
+        return;
     }
 
     set_timer(item->tp, [this, item, replay = std::move(replay)](Timestamp tm) mutable {
-        replay_accept(item->symbol_id, *item, tm);
+        replay_accept(item->symbol_id, TickData(*item), tm);
         run_replay(std::move(replay));
     });
 }
@@ -403,16 +436,36 @@ void SimExchange::run_replay(R replay) {
 
 void SimExchange::start_replay(Config replay_def, Timestamp start_time) {
 
-    std::string file = replay_def["file"];
+    std::filesystem::path file = replay_def["file"];
     double speed = replay_def["speed"] || 1.0;
     double offset = replay_def["offset"] || 0.0;
+
+
     try {
-        auto replay = std::make_unique<Replay::Source>(Replay::create(file, start_time, speed, offset));
+        std::unique_ptr<Replay::Source> replay;
+        bool else_flag = true;
+        replay_def["mmbot"] >> [&](const Config &cfg) {
+            else_flag = false;
+            Replay::MMBotSourceConfig mmcfg;
+            mmcfg.symbol = static_cast<std::string>(cfg["symbol"]);
+            mmcfg.max_volume = cfg["max_volume"] || 100.0;
+            mmcfg.min_volume = cfg["min_volume"] || 1.0;
+            mmcfg.offset = offset;
+            mmcfg.speed = speed;
+            mmcfg.seed = cfg["seed"] || std::size_t(0);
+            mmcfg.market_events_per_minute = cfg["events_per_minute"] || 10U;
+            mmcfg.spread_percent = cfg["spread_percent"] || 0.1;
+            replay = std::make_unique<Replay::Source>(Replay::create(file, start_time, mmcfg));
+
+        };
+        if (else_flag) {
+            replay = std::make_unique<Replay::Source>(Replay::create(file, start_time, speed, offset));
+        }
         ++_replay_count;
         run_replay(std::move(replay));
 
     } catch (...) {
-        std::throw_with_nested(std::runtime_error("Replay failed to initialize: "+file));
+        std::throw_with_nested(std::runtime_error("Replay failed to initialize: "+file.string()));
         throw;
     }
 
@@ -421,6 +474,10 @@ void SimExchange::start_replay(Config replay_def, Timestamp start_time) {
 void SimExchange::on_start() {
      Config cfg = get_config();
      Timestamp now = std::chrono::system_clock::now();
+
+     Config options = cfg["options"];
+     auto latency = options["order_latency"] || 0.0;
+     _sim_latency = std::chrono::nanoseconds(static_cast<std::uint64_t>(latency*1000000000.0));
 
      Config replay = cfg["replay"];
      auto list_replays = replay.list_sections();

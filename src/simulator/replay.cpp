@@ -65,12 +65,12 @@ public:
             std::chrono::system_clock::time_point initial_time,
             double speed,
             double offset)
-        :fin(f),src(fin, initial_time, speed, offset) {}
+        :fin(std::make_unique<std::ifstream>(f)),src(*fin, initial_time, speed, offset) {}
     const Data * operator()() {
         return src();
     }
 protected:
-    std::ifstream fin;
+    std::unique_ptr<std::ifstream> fin;
     CSVReplaySource src;
 };
 

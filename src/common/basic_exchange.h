@@ -1,12 +1,13 @@
 #pragma once
 
-#include <quarkbot/strategy_context.h>
-#include <quarkbot/iexchange.h>
-
 #include "event_target.h"
 #include "small_set.h"
 #include "dispatcher.h"
-#include <map>
+
+#include <quarkbot/strategy_context.h>
+#include <quarkbot/iexchange.h>
+#include <unordered_map>
+#include <mutex>
 
 
 namespace quarkbot {
@@ -245,9 +246,10 @@ protected:
 
     std::mutex _queue_mx;
     DispatcherCore<TimerCallback> _queue;
+    bool _processing_queue = false;
 
 
-    virtual void income_data(const Instrument &i, const MarketEvent &t) override;
+    virtual bool income_data(const Instrument &i, MarketEventType type, const MarketEvent &t) override;
     ///call this function when account is updated
     virtual void object_updated(const Account &i, AsyncResult<void> st) override;
     ///call this function when instrument is updated

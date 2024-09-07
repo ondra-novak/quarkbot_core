@@ -15,6 +15,8 @@ add_library (quarkbot_runtime
     leveldb_storage.cpp
     memory_storage.cpp
     basic_config.cpp
+    read_line.cpp
+    console.cpp
 )
 
 add_dependencies(quarkbot_runtime libjson20_single_header)

@@ -256,7 +256,7 @@ public:
      */
     template<std::invocable<AsyncResult<T> > Fn>
     void operator>>(Fn &&fn) {
-        _reg_fn(std::forward<Fn>(fn));
+        _regfn(std::forward<Fn>(fn));
     }
 
     ///Handles co_await operator.
@@ -266,7 +266,7 @@ public:
      */
     Awaiter operator co_await() {
         return [this](auto &&fn){
-            _reg_fn(std::move(fn));
+            _regfn(std::move(fn));
         };
     }
 protected:

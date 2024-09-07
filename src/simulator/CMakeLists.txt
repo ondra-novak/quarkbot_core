@@ -12,10 +12,11 @@ add_executable (simulator
     sim_instrument.cpp
     matching.cpp
     replay.cpp
-    controller.cpp
     sim_exchange.cpp
     sim_order.cpp
     sim_scheduler.cpp
+    mmbot_replay_source.cpp
+    report_csv.cpp
 )
 
 

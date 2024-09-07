@@ -37,14 +37,17 @@ void BasicExchangeContext::unsubscribe(IEventTarget *target, MarketEventType sbs
     }
 }
 
-void BasicExchangeContext::income_data(const Instrument &i, const MarketEvent &ev) {
+bool BasicExchangeContext::income_data(const Instrument &i, MarketEventType type, const MarketEvent &ev) {
     std::lock_guard _(_mx);
-    auto iter = _subscriptions.find({ev.get_type(),i});
+    bool ret = false;
+    auto iter = _subscriptions.find({type,i});
     if (iter != _subscriptions.end()) {
         for (auto t: iter->second) {
-            t->on_subscription_event(i, ev);
+            bool ok = t->on_subscription_event(i, type, ev);
+            ret = ret || ok;
         }
     }
+    return ret;
 }
 
 Order BasicExchangeContext::create_order(const Instrument &instrument,
@@ -231,6 +234,7 @@ void BasicExchangeContext::set_timer(Timestamp at, TimerCallback fnptr, TimerID 
 }
 
 void BasicExchangeContext::notify_queue() {
+    if (_processing_queue) return;
     Timestamp tp = _queue.get_nearest_schedule();
     _scheduler(tp,[this](auto tp){on_scheduler(tp);}, this);
 }
@@ -242,12 +246,14 @@ bool BasicExchangeContext::clear_timer(quarkbot::TimerID id) {
 
 void BasicExchangeContext::on_scheduler(Timestamp tp) {
     std::unique_lock lk(_queue_mx);
+    _processing_queue = true;
     while (_queue.process_message(tp, [&](TimerCallback &&cb){
         lk.unlock();
         cb(tp);
         lk.lock();
         return true;
     }));
+    _processing_queue = false;
     notify_queue();
 }
 

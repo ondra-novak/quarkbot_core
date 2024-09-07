@@ -188,9 +188,10 @@ protected:
     Decimal _index = 0_dec;
     unsigned long _trades = 0;
     Decimal _last_size = 0;
-    double _prev_volume;
+    double _prev_volume = 0;
+    double _cum_volume = 0;
 
-    mutable MarketEventFactory<MarketEventType::tickdata, TickData> _me_tick;
+    mutable MarketEventFactory<TickData> _me_tick;
     void update_spread();
 
 };

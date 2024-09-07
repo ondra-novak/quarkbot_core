@@ -79,8 +79,6 @@ public:
      * @retval false cannot be retrieved
      */
     virtual bool contains(const std::type_info &type) const = 0;
-    ///Retrieves associated MarketEventTyoe
-    virtual MarketEventType type() const = 0;
     ///Dump content
     /**
      * @param out output stream
@@ -95,7 +93,6 @@ public:
     virtual bool retrieve_value(const std::type_info &, void *, std::size_t ) const override {return false;};
     virtual void retrieve_optional(const std::type_info &, void *, std::size_t ) const override {};
     virtual bool contains(const std::type_info &) const override {return false;}
-    virtual MarketEventType type() const override {return MarketEventType::unknown;}
     virtual void dump(std::ostream &) const override {};
 };
 
@@ -150,16 +147,6 @@ public:
         return _ptr->contains(typeid(T));
     }
 
-    ///Retrieve associated MarketEventType
-    /**
-     * @return stored type.
-     * @note you should expect, that associated structure should match with returned type. For
-     * example if MarketEventType::tickdata is returned, then TickData can be retrieved from the
-     * object
-     */
-    MarketEventType get_type() const {
-        return _ptr->type();
-    }
 
     ///Dump content of the market event (for debugging purpose)
     friend std::ostream &operator<<(std::ostream &s, const MarketEvent &ev) {
@@ -184,7 +171,7 @@ public:
  * as it is excepted, that market data cannot change during broadcasting. For storage mode,
  * you should specify std::mutex
  */
-template<MarketEventType _type, typename T, typename Lock = NoLock>
+template<typename T, typename Lock = NoLock>
 class MarketEventHolder: public IMarketEvent {
 public:
     ///construct initial instance
@@ -227,8 +214,6 @@ public:
     virtual bool contains(const std::type_info &type) const override {
         return type == typeid(T);
     }
-
-    virtual MarketEventType type() const override {return _type;}
 
     ///create instance
     template<typename ... Args> requires(std::is_constructible_v<T, Args...>)

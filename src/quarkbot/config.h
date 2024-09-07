@@ -144,6 +144,16 @@ public:
         return defval;
     }
 
+    template<typename T> requires(std::is_arithmetic_v<T>)
+    T get(std::string_view name, T defval) const {
+        auto v = _ptr->get_value(name);
+        if (v) {
+            std::from_chars(v->begin(),v->end(), defval);
+        }
+        return defval;
+    }
+
+
     std::filesystem::path get(std::string_view name, std::filesystem::path defval) const {
         auto v = _ptr->get_path(name);
         if (v) return *v;

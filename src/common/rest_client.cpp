@@ -5,8 +5,8 @@
 
 namespace quarkbot {
 
-RestClientImpl::RestClientImpl(coroserver::Context &ctx, coroserver::ssl::Context &sslcontext, 
-            IEvents &events, std::string_view url_base, unsigned int iotimeout_ms) 
+RestClientImpl::RestClientImpl(coroserver::Context &ctx, coroserver::ssl::Context &sslcontext,
+            IEvents &events, std::string_view url_base, unsigned int iotimeout_ms)
 :_ctx(ctx),_sslctx(sslcontext),_events(events),_iotimeout(iotimeout_ms)
 ,_task(worker())
 {
@@ -57,7 +57,7 @@ namespace {
 
 constexpr std::string_view forbidden_headers[] = {
     "Host", "Connection", "Transfer-Encoding","Content-Length","Upgrade","Trailer","TE","Date","Expect","User-Agent"
-}; 
+};
 
 constexpr std::string_view trim(std::string_view s) {
     while (!s.empty() && std::isspace(s.back())) s = s.substr(0,s.size()-1);
@@ -79,7 +79,7 @@ constexpr bool check_header(std::string_view s) {
 void RestClientImpl::request(Method m, std::string_view path, const HeadersIList &hdrs, std::string_view body) {
 
     Request rq;
-    Log::vector_streambuf vbuff(rq);
+    OutpuFormatter::vector_streambuf vbuff(rq);
     std::ostream out(&vbuff);
 
     out << to_string(m) << " " << _base_path << path << " HTTP/1.1\r\n";
@@ -122,7 +122,7 @@ coro::future<void> RestClientImpl::worker() {
         } catch (const coro::await_canceled_exception &) {
             break;
         }
-       
+
         bool fresh = false;
         auto now = std::chrono::system_clock::now();
 rep:
@@ -134,7 +134,7 @@ rep:
                 if (iplist.empty()) {
                     _events.on_response({-1,"DNS Lookup failed"},{},{});
                 }
-                auto s = co_await _ctx.connect(iplist, std::chrono::milliseconds(_iotimeout), 
+                auto s = co_await _ctx.connect(iplist, std::chrono::milliseconds(_iotimeout),
                     coroserver::TimeoutSettings(std::chrono::milliseconds(_iotimeout)));
                 if (_ssl) {
                     s = coroserver::ssl::Stream::connect(s, _sslctx, _host);
@@ -206,10 +206,10 @@ rep:
                 auto chks = coroserver::ChunkedStream::read(stream);
                 std::string_view data = co_await chks.block_read(buffer2, -1);
                 if (chks.is_read_timeout()) {
-                    throw std::runtime_error("timeout");                    
+                    throw std::runtime_error("timeout");
                 }
                 _events.on_response({status_code, status_message},std::move(hdrmap),data);
-            }           
+            }
             last_activity = std::chrono::system_clock::now();
         } catch (coro::await_canceled_exception &e) {
             stream = {};
@@ -222,5 +222,5 @@ rep:
         }
    } while (true);
 }
-    
+
 }

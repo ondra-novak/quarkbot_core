@@ -99,6 +99,18 @@ protected: //recommended overrides
 
 public:  //context API
 
+
+    ///Retrieve strategy name
+    /** Strategy name is defined in configuration file. There can be
+     * multiple instances of same strategy class. Each strategy instance
+     * has an unique name. This function returns that name
+     *
+     * @return strategy name as defined in configuration
+     */
+    std::string_view get_strategy_name() const {
+        return _ctx->get_strategy_name();
+    }
+
     ///Retrieve available accounts
     /**
      * @return available (configired) accounts
@@ -570,6 +582,8 @@ public:  //context API
         };
     }
 
+
+
     ///Retrieve logger object (for logging and output)
     Log get_logger() {return _ctx->get_logger();}
 
@@ -602,8 +616,21 @@ public:  //context API
      *
      * @note there is no way how to find out whether the message was delivered
      */
-    void send_message(std::string_view channel, std::string_view msg) {
-        _ctx->mq_send_message(channel, msg);
+    void send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid = 0) {
+        _ctx->mq_send_message(channel, msg, cid);
+    }
+
+
+    ///Awaits on next MQ message.
+    /**
+     * There can be multiple awaiting coroutines.
+     *  All of them receives the very next message
+     * @return awaitable object
+     */
+    Awaitable<Message> receive_mq_message() {
+        return [this](auto &&cb) {
+            _receive_mq_msg.emplace_back(std::move(cb));
+        };
     }
 
 
@@ -702,7 +729,9 @@ protected: //optional overrides
      * @param msg MQ message
      * @note you need to call the original implementation in order to call all registered callbacks
      */
-    virtual void on_mq_message(const Message &) override {};
+    virtual void on_mq_message(const Message &msg) override {
+        invoke_callbacks(_receive_mq_msg, msg);
+    };
     ///Called when there are no events
     /**
      * @note you need to call the original implementation in order to call all registered callbacks
@@ -785,6 +814,7 @@ private:
     CallbackList<void>  _on_idle_cbs;
     CallbackList<void>  _on_next_event_cbs;
     CallbackList<std::pair<Instrument,MarketEvent> > _receive_market_event_cbs;
+    CallbackList<Message> _receive_mq_msg;
 
     template<typename CBList, typename Result>
     bool invoke_callbacks(CBList &lst, Result res) {

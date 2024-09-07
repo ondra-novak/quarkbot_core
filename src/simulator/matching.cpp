@@ -171,7 +171,7 @@ Decimal Matching::get_effective_price() const {
 MarketEvent Matching::get_ticker(Timestamp curTime) const {
     auto ev = _me_tick.create(TickData{
         curTime,_spread.bid,_spread.ask,_last, _index,
-        _spread.bid_size,_spread.ask_size, static_cast<double>(_last_size), _trades
+        _spread.bid_size,_spread.ask_size, _cum_volume, _trades
     });
     return MarketEvent(ev);
 
@@ -182,6 +182,7 @@ void Matching::accept_ticker(const TickData &tk) {
     double dff = tk.cum_volume < _prev_volume?tk.cum_volume:tk.cum_volume - _prev_volume;
     _prev_volume = tk.cum_volume;
     _last_size = dff;
+    _cum_volume = tk.cum_volume;
     _index = tk.index;
     _trades = tk.cum_trades;
 }

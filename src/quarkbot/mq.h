@@ -10,12 +10,14 @@ public:
 
     using ChannelID = std::string_view;
     using MessageContent = std::string_view;
+    using ConversationID = std::uint32_t;
 
     class IMessage {
     public:
         virtual std::string_view get_sender() const = 0;
         virtual std::string_view get_channel() const = 0;
         virtual MessageContent get_content() const = 0;
+        virtual ConversationID get_conversation() const = 0;
         virtual ~IMessage() = default;
     };
 
@@ -44,6 +46,21 @@ public:
          */
         MessageContent get_content() const {return _ptr->get_content();}
 
+        ///Retrieve conversation ID
+        /**
+         * Conversation ID is an arbitrary number which can help to manage multiple
+         * conversations especially in private messages. This number is
+         * often sent with message to help identify conversation where this message
+         * belongs. If used in channels, it is often used to provide a new
+         * conversation ID for following private conversation.
+         *
+         * However, in general, this is just a number carried with the message.
+         * Default value is zero.
+         *
+         * @return conversation ID of the message
+         */
+        ConversationID get_conversation() const {return _ptr->get_conversation();}
+
     protected:
         std::shared_ptr<const IMessage> _ptr;
     };
@@ -57,7 +74,7 @@ public:
     virtual void subscribe(IListener *listener, ChannelID channel) = 0;
     virtual void unsubscribe(IListener *listener, ChannelID channel) = 0;
     virtual void unsubscribe_all(IListener *listener) = 0;
-    virtual void send_message(IListener *listener, ChannelID channel, MessageContent msg) = 0;
+    virtual void send_message(IListener *listener, ChannelID channel, MessageContent msg, ConversationID cid) = 0;
     virtual ~IMQBroker() = default;
 
     class Null;
@@ -68,7 +85,7 @@ public:
     virtual void subscribe(IListener *, ChannelID ) override {}
     virtual void unsubscribe(IListener *, ChannelID ) override {}
     virtual void unsubscribe_all(IListener *) override {}
-    virtual void send_message(IListener *, ChannelID, MessageContent ) override {}
+    virtual void send_message(IListener *, ChannelID, MessageContent, ConversationID ) override {}
 };
 
 class MQBroker {
@@ -78,6 +95,7 @@ public:
     using Message = IMQBroker::Message;
     using MessageContent = IMQBroker::MessageContent;
     using IListener = IMQBroker::IListener;
+    using ConversationID = IMQBroker::ConversationID;
 
     static constexpr IMQBroker::Null null_broker = {};
 
@@ -124,6 +142,10 @@ public:
      * then message will be send without sender's id. (will be empty)
      * @param channel target channel
      * @param message message to send
+     * @param cid a conversation ID. This number helps to distinguish conversation
+     * on the same channel. Actual value has no specific meaning, only to identify
+     * topic or conversation in the channel.
+     *
      * @note sending message to an empty named channel always drops the message
      *
      * @note function subscribes local mailbox for the first time of call with new listener.
@@ -131,8 +153,8 @@ public:
      * want to manage a listener instance, you can pass nullptr as listener. In this
      * case, you cannot receive any response.
      */
-    void send_message(IListener *listener, ChannelID channel, MessageContent message) {
-        _ptr->send_message(listener, channel, message);
+    void send_message(IListener *listener, ChannelID channel, MessageContent message, ConversationID cid = 0) {
+        _ptr->send_message(listener, channel, message, cid);
     }
 
     auto get_handle() const {return _ptr;}
@@ -152,6 +174,7 @@ public:
     using ChannelID = MQBroker::ChannelID;
     using MessageContent = MQBroker::MessageContent;
     using Message = MQBroker::Message;
+    using ConversationID = MQBroker::ConversationID;
 
     MQClient(MQBroker broker, MQBroker::IListener *listener)
         :_broker(broker),_listener(listener) {   }
@@ -194,8 +217,8 @@ public:
      * @param message message to send
      * @note sending message to an empty named channel always drops the message
      */
-    void send_message(ChannelID channel, MessageContent message) {
-        _broker.send_message(_listener, channel, message);
+    void send_message(ChannelID channel, MessageContent message, ConversationID cid = 0) {
+        _broker.send_message(_listener, channel, message, cid);
     }
 
 protected:

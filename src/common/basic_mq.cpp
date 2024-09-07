@@ -5,7 +5,7 @@
 #include <atomic>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h> 
+#include <windows.h>
 #else
 #include <unistd.h>
 #endif
@@ -26,18 +26,18 @@ Iter to_base62(std::uint64_t x, Iter iter, int digits = 1) {
         return iter;
     }
     return iter;
-} 
+}
 
 static std::string generate_mailbox_id() {
     static std::atomic<std::uint64_t> counter = {0};
-    static constexpr std::string_view mbx_prefix = "mbx_"; 
+    static constexpr std::string_view mbx_prefix = "mbx_";
     char buff[64];
     std::random_device dev;
     auto rnd = dev();
     auto now = std::chrono::system_clock::now();
     char *iter = buff;
     #ifdef _WIN32
-        auto pid = GetCurrentProcessId(); 
+        auto pid = GetCurrentProcessId();
     #else
         auto pid= ::getpid();
     #endif
@@ -63,7 +63,7 @@ void BasicMQ::subscribe(IListener *listener, ChannelID channel)
     iter->second._items.push_back(listener);
 
     _listeners[listener].push_back(std::string(iter->first));
-    
+
 }
 
 void BasicMQ::unsubscribe(IListener *listener, ChannelID channel)
@@ -99,12 +99,12 @@ std::string_view BasicMQ::create_mailbox(IListener *listener)
 {
     auto iter = _mailboxes_by_ptr.find(listener);
     if (iter != _mailboxes_by_ptr.end()) return iter->second;
-    std::string id = generate_mailbox_id(); 
+    std::string id = generate_mailbox_id();
     iter = _mailboxes_by_ptr.emplace(listener, std::move(id)).first;
     return _mailboxes_by_name.emplace(iter->second, listener).first->first;
 }
 
-void BasicMQ::send_message(IListener *listener, ChannelID channel, MessageContent message)
+void BasicMQ::send_message(IListener *listener, ChannelID channel, MessageContent message, ConversationID cid)
 {
     std::lock_guard _(_mx);
     std::string_view sender = create_mailbox(listener);
@@ -112,8 +112,10 @@ void BasicMQ::send_message(IListener *listener, ChannelID channel, MessageConten
     {
         auto iter = _mailboxes_by_name.find(channel);
         if (iter != _mailboxes_by_name.end()) {
-            auto msg = std::make_shared<MessageDef>(
-                std::string(sender), std::string(), std::string(message)
+            auto msg = std::allocate_shared<MessageDef>(
+                ClusterAllocReference<MessageDef, 8, true>(&_allocator_instance),
+                std::string(sender), std::string(), std::string(message), cid,
+                shared_from_this()
             );
             iter->second->on_message(Message(msg));
             return;
@@ -124,7 +126,10 @@ void BasicMQ::send_message(IListener *listener, ChannelID channel, MessageConten
         auto iter = _channels.find(std::string(channel));
         if (iter == _channels.end()) return; //unknown channel, drop message
 
-        Message msg ( std::make_shared<MessageDef>(sender, channel, message));
+        Message msg ( std::allocate_shared<MessageDef>(
+                ClusterAllocReference<MessageDef, 8, true>(&_allocator_instance),
+                sender, channel, message, cid,
+                shared_from_this()));
         for (auto l: iter->second._items) {
             l->on_message(msg);
         }
@@ -148,9 +153,10 @@ void BasicMQ::remove_channel_from_listener(std::string_view channel, IListener *
     auto iter = _listeners.find(listener);
     if (iter == _listeners.end()) return;
     iter->second.erase(std::find(iter->second.begin(),
-                                 iter->second.end(), channel), iter->second.end());    
+                                 iter->second.end(), channel), iter->second.end());
     if (iter->second.empty()) {
         _listeners.erase(iter);
     }
 }
 }
+

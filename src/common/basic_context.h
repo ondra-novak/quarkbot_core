@@ -51,7 +51,7 @@ public:
 
     virtual void on_update(Instrument i, AsyncResult<void> st) override;
     virtual void on_update(Account a, AsyncResult<void> st)  override;
-    virtual void on_subscription_event(Instrument i, MarketEvent ev)  override;
+    virtual bool on_subscription_event(Instrument i, MarketEventType type, MarketEvent ev)  override;
     virtual void on_update(Instrument i, MarketEventType type, AsyncResult<MarketEvent> ev)  override;
     virtual void on_order_report(Order order,Order::Report report)  override;
     virtual void subscribe(MarketEventType type, const Instrument &i)override;
@@ -79,7 +79,7 @@ public:
     virtual void on_message(MQClient::Message message) override;
     virtual void mq_subscribe_channel(std::string_view channel) override;
     virtual void mq_unsubscribe_channel(std::string_view channel) override;
-    virtual void mq_send_message(std::string_view channel, std::string_view msg) override;
+    virtual void mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) override;
     virtual void update_market(const Instrument &i, MarketEventType type) override;
 
     virtual quarkbot::VarSet<> get_vars(
@@ -120,6 +120,7 @@ protected:
     struct EvMarketEventItem{
         BasicContext *me;
         Instrument i;
+        MarketEventType type;
         MarketEvent event;
         void operator()();
         bool operator==(const EvStart &) const ;

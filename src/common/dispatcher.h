@@ -119,6 +119,13 @@ public:
             _near_tp = tp;
             if (!executor(std::move(*fn))) return false;
             _executing_ident = {};
+            
+            if (_tqueue.front()._tp > tp) {
+                _near_tp = _tqueue.front()._tp;
+            } else {
+                _near_tp = TimePoint::max();
+            }
+            
             return true;
         }
         return process_message(std::forward<Executor>(executor));
@@ -153,6 +160,8 @@ public:
     TimePoint get_nearest_schedule() const {return _near_tp;}
 
     bool empty() const {return _queue.empty() && _tqueue.empty();}
+    
+    Ident get_executing_ident() const {return _executing_ident;}
 
 protected:
 

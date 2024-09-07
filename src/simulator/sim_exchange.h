@@ -1,6 +1,7 @@
 #pragma once
 #include <quarkbot/exchange.h>
 #include <quarkbot/weak_object_map.h>
+#include <quarkbot/shared/saved_span.h>
 #include "sim_instrument.h"
 
 namespace quarkbot {
@@ -41,7 +42,7 @@ public:
             std::span<SerializedOrder> orders,
             RestoreOrdersCallback callback) override ;
 
-    void replay_accept(std::string_view symbol, const TickData &ticker, Timestamp recvtime);
+    void replay_accept(std::string_view symbol, TickData &&ticker, Timestamp recvtime);
 
 protected:
 
@@ -50,6 +51,7 @@ protected:
     WeakObjectMap<SimInstrument> _instruments;
     Function<void()> _done_cb;
     unsigned int _replay_count = 0;
+    std::chrono::nanoseconds _sim_latency = {};
 
 
     void match_order(simulator::Matching &m, const Order &ord);
@@ -69,6 +71,10 @@ protected:
 
     template<typename R>
     void run_replay(R replay);
+
+    void batch_place_2(std::span<Order> orders);
+    void batch_cancel_2(std::span<Order> orders);
+
 };
 
 }

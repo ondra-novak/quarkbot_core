@@ -3,7 +3,7 @@
 namespace quarkbot {
 
 BasicConfig::BasicConfig(std::shared_ptr<StructuredIni> whole_config)
-:BasicConfig(std::move(whole_config), whole_config->root()) {}
+:BasicConfig(whole_config, whole_config->root()) {}
 
 BasicConfig::BasicConfig(std::shared_ptr<StructuredIni> whole_config,
         StructuredIni::Section cur_section)

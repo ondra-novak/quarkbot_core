@@ -18,8 +18,15 @@ public:
     virtual void on_start() {}
 
     ///call this function when market event for given instrument arrived (subscription)
-    void send_market_event(const Instrument &i, const MarketEvent &t) const {
-        _ctx->income_data(i, t);
+    /**
+     * @param i associated instrument
+     * @param type type of market event/subscription
+     * @param data market event data, you can use MarketEventFactory to fast allocate these objects
+     * @retval true continue sending next data
+     * @retval false passive unsubscribe (same as call unsubscribe)
+     */
+    bool send_market_event(const Instrument &i, MarketEventType type, const MarketEvent &data) const {
+        return _ctx->income_data(i, type, data);
     }
     ///call this function when account is updated
     void object_updated(const Account &a, AsyncResult<void> st) const {

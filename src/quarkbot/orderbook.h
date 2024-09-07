@@ -161,8 +161,6 @@ protected:
     WanderingTree<Decimal, Decimal, CmpAsk> _ask_side = {};    //<ask side
 };
 
-template<typename Lock = NoLock>
-using MarketEvent_OrderBook = MarketEventHolder<MarketEventType::orderbook, OrderBook, Lock>;
 
 
 }

@@ -97,13 +97,14 @@ void BasicContext::post_collapse(QueueItem &&q) {
 }
 
 
-void BasicContext::on_subscription_event(Instrument i, MarketEvent event) {
+bool BasicContext::on_subscription_event(Instrument i, MarketEventType type, MarketEvent event) {
     std::lock_guard _(_queue_mx);
-    if (can_collapse(event.get_type())) {
-        post_collapse(EvMarketEventItem{this,std::move(i), std::move(event)});
+    if (can_collapse(type)) {
+        post_collapse(EvMarketEventItem{this,std::move(i), type, std::move(event)});
     } else {
-        post(EvMarketEventItem{this,std::move(i), std::move(event)});
+        post(EvMarketEventItem{this,std::move(i), type,std::move(event)});
     }
+    return true;
 }
 
 void BasicContext::on_order_report(Order order,Order::Report report) {
@@ -376,8 +377,8 @@ void BasicContext::mq_subscribe_channel(std::string_view channel) {
 void BasicContext::mq_unsubscribe_channel(std::string_view channel) {
     _mq.unsubscribe(this, channel);
 }
-void BasicContext::mq_send_message(std::string_view channel, std::string_view msg) {
-    _mq.send_message(this, channel, msg);
+void BasicContext::mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) {
+    _mq.send_message(this, channel, msg, cid);
 
 }
 
@@ -420,7 +421,7 @@ std::size_t BasicContext::QueueItemHasher::operator ()(const QueueItem &x) const
     if (std::holds_alternative<EvMarketEventItem>(x)) {
         auto ev = std::get<EvMarketEventItem>(x);
         Instrument::Hasher hasher;
-        return hasher(ev.i) + static_cast<std::size_t>(ev.event.get_type());
+        return hasher(ev.i) + static_cast<std::size_t>(ev.type);
     } else {
         throw std::runtime_error("Internal: Attempt to collapse noncollapsable event");
     }
@@ -430,7 +431,7 @@ bool BasicContext::QueueItemCompare::operator ()(const QueueItem &a, const Queue
     if (std::holds_alternative<EvMarketEventItem>(a) && std::holds_alternative<EvMarketEventItem>(b)) {
         auto ev_a = std::get<EvMarketEventItem>(a);
         auto ev_b = std::get<EvMarketEventItem>(b);
-        return ev_a.i == ev_b.i && ev_a.event.get_type() == ev_b.event.get_type();
+        return ev_a.i == ev_b.i && ev_a.type == ev_b.type;
     } else {
         throw std::runtime_error("Internal: Attempt to collapse noncollapsable event");
     }

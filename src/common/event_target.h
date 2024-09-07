@@ -52,12 +52,15 @@ public:
     ///called when subscription update
     /**
      * @param i instrument
-     * @param subscription_type type of subscription
+     * @param type type of subscription
+     * @param event event data
+     * @retval true keep subscribed
+     * @retval false unsubscribe
      *
      * @note actual market data are not part of event. When event is processed
      * the strategy must read last market data from the exchange object
      */
-    virtual void on_subscription_event(Instrument i, MarketEvent event) = 0;
+    virtual bool on_subscription_event(Instrument i,  MarketEventType type, MarketEvent event) = 0;
 
     ///called when update_market is complete
     /**

@@ -18,7 +18,7 @@ public:
 
     virtual ~IExchangeContext() = default;
 
-    virtual void income_data(const Instrument &i, const MarketEvent &t) = 0;
+    virtual bool income_data(const Instrument &i, MarketEventType type, const MarketEvent &t) = 0;
     ///call this function when account is updated
     virtual void object_updated(const Account &i, AsyncResult<void> st) = 0;
     ///call this function when instrument is updated

@@ -102,7 +102,7 @@ public:
 
     virtual void mq_subscribe_channel(std::string_view channel) = 0;
     virtual void mq_unsubscribe_channel(std::string_view channel) = 0;
-    virtual void mq_send_message(std::string_view channel, std::string_view msg) = 0;
+    virtual void mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) = 0;
 
 
     ///retrieve one shot market event
@@ -110,6 +110,8 @@ public:
 
 
     virtual Log get_logger() const = 0;
+
+    virtual std::string_view get_strategy_name() const = 0;
 
 };
 

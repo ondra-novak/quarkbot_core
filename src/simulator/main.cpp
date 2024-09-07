@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
         SimScheduler scheduler;
         auto logservice = std::make_shared<BasicLog>(std::cerr, ILog::Serverity::debug);
         auto context = std::make_shared<BasicExchangeContext>("simulator",
-                scheduler.get_instance(), Network(), Log(logservice));
+                scheduler.get_instance_for_exchange(), Network(), Log(logservice));
         context->init(std::make_unique<SimExchange>([&]{
                         replay_done = true;
                     }), cfg["simulator"]);

@@ -2,60 +2,24 @@
 
 #include "market_event.h"
 #include "shared/cluster_alloc.h"
+#include "shared/cluster_alloc_reference.h"
 #include <any>
 
 namespace quarkbot {
 
 
-template<typename T>
-class MarketEventAllocator { // @suppress("Miss copy constructor or assignment operator")
-public:
-
-    using value_type = T;
-
-    using Allocator = ClusterAlloc<T,8,true>;
-
-    MarketEventAllocator() = delete;
-    MarketEventAllocator(std::any *instance):_instance(instance) {}
-
-    template<typename Q>
-    MarketEventAllocator(const MarketEventAllocator<Q> &other)
-        :_instance(other._instance) {}
-
-
-    T *allocate(int n) {
-        if (!_instance->has_value())  {
-            _instance->emplace<Allocator>();
-        }
-        auto &a = std::any_cast<Allocator &>(*_instance);
-        return a.allocate(n);
-    }
-
-    void deallocate(T *ptr, int n) {
-        auto &a = std::any_cast<Allocator &>(*_instance);
-        return a.deallocate(ptr,n);
-    }
-
-protected:
-
-    template<typename Q>
-    friend class MarketEventAllocator ;
-
-    std::any *_instance;
-};
 
 
 
 ///Fast allocator of market events
 /**
- * @tparam _type type of market event
  * @tparam T class representing market event
  *
  * The class uses fast allocator to allocate and reuse nolonger used memory
  * The class is not MT Safe. It is expected that allocated market event is read only
  * and its deallocation is MT safe.
  */
-template<MarketEventType _type, typename T>
+template<typename T>
 class MarketEventFactory {
 public:
 
@@ -98,9 +62,6 @@ public:
         virtual bool contains(const std::type_info &type) const {
             return type == typeid(T);
         }
-        virtual MarketEventType type() const {
-            return _type;
-        }
         virtual void dump(std::ostream &s) const {
             if constexpr(can_output_to_ostream<T>) {
                 s << _content;
@@ -121,7 +82,7 @@ public:
      */
     template<typename ... Args>
     std::shared_ptr<Event> create(Args && ... args)  {
-        return std::allocate_shared<Event>(MarketEventAllocator<Event>(&_instance), std::forward<Args>(args)...);
+        return std::allocate_shared<Event>(ClusterAllocReference<Event,8,true>(&_instance), std::forward<Args>(args)...);
     }
 
 
