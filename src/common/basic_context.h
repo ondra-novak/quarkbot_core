@@ -35,6 +35,7 @@ public:
         ,_storage(std::move(storage))
         ,_logger(std::move(logger), "{}", strategy_name)
         ,_mq(mq)
+        ,_name(strategy_name)
     {
     }
 
@@ -81,6 +82,10 @@ public:
     virtual void mq_unsubscribe_channel(std::string_view channel) override;
     virtual void mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) override;
     virtual void update_market(const Instrument &i, MarketEventType type) override;
+    virtual Positions load_positions(std::string_view filter) const override;
+    virtual Trades load_closed(Timestamp limit, std::string_view filter) const override;
+    virtual std::string_view get_strategy_name() const override;
+
 
     virtual quarkbot::VarSet<> get_vars(
             std::string_view prefix) const override;
@@ -94,6 +99,7 @@ protected:
     std::unique_ptr<IStrategy> _strategy;
     Log _logger;
     MQBroker _mq;
+    std::string _name;
     std::vector<Account> _accounts;
     std::vector<Instrument> _instruments;
     Config _config;

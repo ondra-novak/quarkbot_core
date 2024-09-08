@@ -117,7 +117,7 @@ public:
             return cpy;
         }
         bool operator==(const iterator &other) const {
-            return &_owner == &other._owner && _valid == other._valid;
+            return _owner == other._owner && _valid == other._valid;
         }
     protected:
         const VarSet *_owner = {};

@@ -236,6 +236,9 @@ struct Config::ValueProxy {
     ValueProxy operator[](std::string_view s) const {
         return {cfg.get_section(name), s};
     }
+    ValueProxy operator[](const char *s) const {
+        return {cfg.get_section(name), s};
+    }
     template<typename T>
     auto operator || (T defval) const {
         return cfg.get(name, defval);

@@ -6,10 +6,16 @@
 namespace quarkbot {
 
 
-class ReportLDJSON: public IStorage {
+class ReportLDJSONBase: public IStorage {
 public:
 
-    ReportLDJSON(IStorage *storage, std::ostream &out):_storage(storage),_out(out) {}
+
+    ReportLDJSONBase(std::unique_ptr<IStorage>storage, std::string strategy_name)
+        :_storage(std::move(storage))
+        ,_strategy_name(std::move(strategy_name)) {}
+
+    ReportLDJSONBase(const ReportLDJSONBase &) =delete;
+    ReportLDJSONBase &operator=(const ReportLDJSONBase &) =delete;
 
     virtual void rollback() override;
     virtual std::string get_var(std::string_view var_name) const override;
@@ -36,16 +42,62 @@ public:
 
 protected:
 
-    IStorage *_storage;
-    std::ostream &_out;
+    std::unique_ptr<IStorage>_storage;
+    std::string _strategy_name;
     std::vector<json::value> _tx;
     void tx_beg();
     void tx_end();
     void tx_rollback();
     unsigned int _txcnt = 0;
+    virtual void flush() = 0;
 
-    static json::value new_record(Timestamp tm, std::string_view type, json::value payload);
+    json::value new_record(Timestamp tm, std::string_view type, json::value payload);
     static json::value order_to_json(const Order &ord);
 };
+
+template<std::invocable<std::string_view> Output>
+class ReportLDJson: public ReportLDJSONBase {
+public:
+
+    ReportLDJson(std::unique_ptr<IStorage>storage, std::string strategy_name, Output output)
+        :ReportLDJSONBase(std::move(storage), std::move(strategy_name)), _output(output) {}
+
+protected:
+    Output _output;
+    std::vector<char> _buffer;
+    json::serializer_t _srl;
+
+    virtual void flush() {
+        for (json::value_t &x: _tx) {
+            _buffer.clear();
+            _srl.serialize(x, [&](std::string_view str){
+                auto sz = _buffer.size();
+                _buffer.resize(sz + str.size());
+                std::copy(str.begin(), str.end(), _buffer.data()+sz);
+            });
+            _output(std::string_view(_buffer.data(), _buffer.size()));
+        }
+    }
+};
+
+template<typename Lock = NoLock>
+class ReportOutput_ostream {
+public:
+    ReportOutput_ostream(std::ostream &s):_s(s) {}
+    ReportOutput_ostream(const ReportOutput_ostream &other):_s(other._s) {}
+    ReportOutput_ostream &operator=(const ReportOutput_ostream &other) = delete;
+
+    void operator()(const std::string_view &s) const {
+        std::lock_guard _(_mx);
+        _s << s << std::endl;
+    }
+
+protected:
+    std::ostream &_s;
+    Lock _mx;
+};
+
+template<typename Lock = NoLock>
+using ReportLDJsonToStream = ReportLDJson<ReportOutput_ostream<Lock> >;
 
 }

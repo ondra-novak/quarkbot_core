@@ -19,6 +19,22 @@ BasicContext::~BasicContext() {
 
 }
 
+Positions BasicContext::load_positions(std::string_view filter) const {
+    return _storage->load_positions(filter);
+}
+
+Trades BasicContext::load_closed(Timestamp limit, std::string_view filter) const {
+    return _storage->load_closed(limit, filter);
+}
+
+std::string_view BasicContext::get_strategy_name() const {
+    return _name;
+}
+
+Log BasicContext::get_logger() const {
+    return _logger;
+}
+
 std::vector<std::pair<Order, Order::Report> > BasicContext::restore_orders() {
     std::mutex mx;
     std::condition_variable cond;
@@ -351,11 +367,11 @@ void BasicContext::on_scheduler(Timestamp tp) noexcept {
             r = _strategy->on_context_idle();
         });
         lk.lock();
-        if (!r) {
+        if (r) {
             next_ev = _queue.get_nearest_schedule();
         }
     }
-    _scheduler(tp, [this](auto tp){on_scheduler(tp);}, this);
+    _scheduler(next_ev, [this](auto tp){on_scheduler(tp);}, this);
 }
 
 

@@ -23,7 +23,7 @@ public:
         Type _val;
     };
 
-
+    LvlDBStorage(std::shared_ptr<leveldb::DB> db, std::string key_pfx);
     virtual void begin_transaction() override;
     virtual void put_var(Timestamp event_time, std::string_view name, std::string_view value) override;
     virtual void erase_var(Timestamp event_time, std::string_view name) override;

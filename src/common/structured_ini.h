@@ -98,7 +98,7 @@ public:
     class Value: public ConvString {
     public:
 
-        std::size_t count() const {return size();}
+        std::size_t count() const {return _val.seps.size()+1;}
         ConvString operator[](std::size_t idx) const {
             std::size_t beg = idx?_val.seps[idx-1]:0;
             std::size_t end = idx>=_val.seps.size()?this->size():_val.seps[idx]-1;
@@ -141,7 +141,7 @@ public:
         };
 
         Iterator begin() const {return Iterator(*this,0);}
-        Iterator end() const {return Iterator(*this,size());}
+        Iterator end() const {return Iterator(*this,count());}
 
 
         Value(const ValueData &val)

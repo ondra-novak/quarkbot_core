@@ -196,6 +196,7 @@ VarSet<std::string_view> MemoryStorage::get_vars(std::string_view prefix) const
         std::string s(prefix);
         while (!s.empty()) {
             auto c = static_cast<unsigned char>(s.back());
+            s.pop_back();
             ++c;
             if (c) {
                 s.push_back(static_cast<char>(c));

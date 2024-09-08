@@ -4,6 +4,10 @@
 
 namespace quarkbot {
 
+LvlDBStorage::LvlDBStorage(std::shared_ptr<leveldb::DB> db, std::string key_pfx)
+:_db(std::move(db)),_key_pfx(std::move(key_pfx)) {}
+
+
 
 void LvlDBStorage::begin_transaction()
 {
@@ -61,7 +65,7 @@ void LvlDBStorage::put_order(Timestamp,const Order &ord)
 {
     auto b = ord.to_binary();
     std::string account_id = ord.get_account().get_id();
-    std::string key = OrderKey::compose(account_id, key);
+    std::string key = OrderKey::compose(account_id, b.order_id);
     if (ord.done()) {
         _batch.Delete(build_key(RecordType::order,key));
     } else {
@@ -342,6 +346,7 @@ std::string_view LvlDBStorage::remove_key_prefix(const leveldb::Slice &slice) co
 {
     return std::string_view(slice.data(), slice.size()).substr(_key_pfx.size()+1);
 }
+
 std::string_view LvlDBStorage::extract_slice(const leveldb::Slice &slice)
 {
     return std::string_view(slice.data(), slice.size());
