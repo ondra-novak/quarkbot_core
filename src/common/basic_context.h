@@ -85,7 +85,10 @@ public:
     virtual Positions load_positions(std::string_view filter) const override;
     virtual Trades load_closed(Timestamp limit, std::string_view filter) const override;
     virtual std::string_view get_strategy_name() const override;
-
+    virtual void series_erase_points(std::string_view series_name, uint64_t index_and_less) override;
+    virtual uint64_t series_add_point(std::string_view series_name, std::string_view point_data) override;
+    virtual ValueStream<std::string_view> load_series(std::string_view name) const override;
+    virtual void load_open_orders(Account acc, Function<void(std::vector<Order>)> callback) override;
 
     virtual quarkbot::VarSet<> get_vars(
             std::string_view prefix) const override;
@@ -118,8 +121,8 @@ protected:
     };
 
     struct EvRestoreOrders {
-        BasicContext *me;
         std::vector<Order> orders;
+        Function<void(AsyncResult<std::vector<Order> > )> cb;
         void operator()();
     };
 

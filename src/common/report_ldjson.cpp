@@ -236,6 +236,21 @@ void ReportLDJSONBase::tx_rollback() {
     tx_end();
 }
 
+void ReportLDJSONBase::series_erase_points(std::string_view series_name,
+        uint64_t index_and_less) {
+    return _storage->series_erase_points(series_name, index_and_less);
+}
+
+uint64_t ReportLDJSONBase::series_add_point(std::string_view series_name,
+        std::string_view point_data) {
+    return _storage->series_add_point(series_name, point_data);
+}
+
+ValueStream<std::string_view> ReportLDJSONBase::load_series(
+        std::string_view name) const {
+    return _storage->load_series(name);
+}
+
 json::value ReportLDJSONBase::order_to_json(const Order &ord) {
     Order replaced = ord.get_replaced_order();
     Order::State state = ord.get_state();

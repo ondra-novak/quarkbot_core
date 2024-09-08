@@ -35,6 +35,18 @@ Log BasicContext::get_logger() const {
     return _logger;
 }
 
+void BasicContext::series_erase_points(std::string_view series_name, uint64_t index_and_less) {
+    _storage->series_erase_points(series_name, index_and_less);
+}
+
+uint64_t BasicContext::series_add_point(std::string_view series_name, std::string_view point_data) {
+    return _storage->series_add_point(series_name, point_data);
+}
+
+ValueStream<std::string_view> BasicContext::load_series(std::string_view name) const {
+    return _storage->load_series(name);
+}
+
 std::vector<std::pair<Order, Order::Report> > BasicContext::restore_orders() {
     std::mutex mx;
     std::condition_variable cond;
@@ -87,21 +99,14 @@ void BasicContext::init(std::unique_ptr<IStrategy> strategy,
         _exchanges.emplace(i.get_exchange(),Batches{});
     }
     _strategy->on_init(this);
-    auto restored = restore_orders();
-    EvRestoreOrders ev_restored{this,{}};
-    ev_restored.orders.reserve(restored.size());
-    for (auto &x: restored) {ev_restored.orders.push_back(x.first);}
-    if (!ev_restored.orders.empty()) {
-        _queue.post(std::move(ev_restored));
-    }
     _queue.post(EvStart{this});
-    for (auto &x: restored) {
+/*    for (auto &x: restored) {
         if (!IOrder::is_done(*x.second.new_state)) {
             auto &ex = BasicExchangeContext::from_exchange(x.first.get_account().get_exchange());
             ex.subscribe_order(this, x.first);
         }
         _queue.post(EvOrderReport{this, std::move(x.first), std::move(x.second)});
-    }
+    }*/
     notify_queue();
 }
 
@@ -416,7 +421,7 @@ void BasicContext::EvStart::operator ()() {
 }
 
 void BasicContext::EvRestoreOrders::operator ()() {
-    me->_strategy->on_active_orders(std::move(orders));
+    cb(std::move(orders));
 }
 void BasicContext::EvOrderReport::operator ()() {
     auto &ex = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
@@ -451,7 +456,13 @@ bool BasicContext::QueueItemCompare::operator ()(const QueueItem &a, const Queue
     } else {
         throw std::runtime_error("Internal: Attempt to collapse noncollapsable event");
     }
+}
 
+//TODO
+void BasicContext::load_open_orders(Account acc, Function<void(std::vector<Order>)> callback) {
+    auto &ex = BasicExchangeContext::from_exchange(acc.get_exchange());
+    ex.restore_orders(acc,_storage->load_open_orders(acc),
+            [this, acc, callback=std::move(callback)]())
 }
 
 }

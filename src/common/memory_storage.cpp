@@ -244,4 +244,50 @@ Trades MemoryStorage::load_closed(Timestamp limit, std::string_view filter) cons
     return res;
 }
 
+void MemoryStorage::series_erase_points(std::string_view series_name, uint64_t index_and_less) {
+    auto iter = _series.find(std::string(series_name));
+    if (iter != _series.end()) {
+        Series &s = iter->second;
+        std::uint64_t ql = s.index - index_and_less - 1;
+        while (s.data.size() > ql) s.data.pop_front();
+    }
 }
+
+uint64_t MemoryStorage::series_add_point(std::string_view series_name, std::string_view point_data) {
+    Series &s = _series[std::string(series_name)];
+    std::uint64_t r = s.index++;
+    s.data.emplace_back(point_data);
+    return r;
+}
+
+
+class MemoryStorage::ValueSetDef: public IValueStream {
+public:
+
+    ValueSetDef(std::vector<std::string> data):_data(data) {}
+
+    virtual bool next() override {++pos;return pos < _data.size();}
+    virtual bool init() override {pos =0;return pos < _data.size();}
+    virtual std::string_view get() const override {return _data[pos];}
+
+protected:
+    std::vector<std::string> _data;
+    std::size_t pos = 0;
+
+};
+
+ValueStream<std::string_view> MemoryStorage::load_series(std::string_view series_name) const {
+    auto iter = _series.find(std::string(series_name));
+    if (iter != _series.end()) {
+        const Series &s = iter->second;
+        return ValueStream<std::string_view>(std::make_unique<ValueSetDef>(
+                std::vector<std::string>(s.data.begin(), s.data.end())));
+    } else {
+        return ValueStream<std::string_view>(std::make_unique<ValueSetDef>(
+                std::vector<std::string>()));
+    }
+
+}
+
+}
+

@@ -47,7 +47,7 @@ public:
 inline thread_local std::exception_ptr CoroutineBase::stored_exception = {};
 
 
-template<typename T>
+template<typename T = void>
 class Coroutine: public CoroutineBase {
 public:
 
@@ -57,7 +57,7 @@ public:
 
         struct finisher { // @suppress("Miss copy constructor or assignment operator")
             promise_type *me;
-            static constexpr bool await_ready() {return false;}
+            static constexpr bool await_ready() noexcept {return false;}
             std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) noexcept {
                 auto r = me->_awaiting;
                 if (!r) {
@@ -78,7 +78,7 @@ public:
         void unhandled_exception() {
             this->_result.set_exception();
         }
-        std::coroutine_handle<promise_type> get_handle() const {
+        std::coroutine_handle<promise_type> get_handle()  {
             return std::coroutine_handle<promise_type>::from_promise(*this);
         }
     };

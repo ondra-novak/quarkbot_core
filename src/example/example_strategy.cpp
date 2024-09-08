@@ -1,5 +1,6 @@
 #include <quarkbot/strategy_api.h>
 #include <quarkbot/module.h>
+#include <quarkbot/series.h>
 
 
 using namespace quarkbot;

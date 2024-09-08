@@ -1,6 +1,8 @@
 #include "storage.h"
 #include <leveldb/db.h>
 #include <leveldb/write_batch.h>
+#include <unordered_map>
+#include <vector>
 
 
 namespace quarkbot {
@@ -12,7 +14,8 @@ public:
         enum Type: char {
             variable='V',
             order='O',
-            fill='F'
+            fill='F',
+            series='S'
         };
         constexpr RecordType(Type x):_val(x) {}
         constexpr RecordType(char c):_val(static_cast<Type>(c)) {}
@@ -40,6 +43,9 @@ public:
     virtual VarSet<std::string_view> get_vars(std::string_view start, std::string_view end) const override;
     virtual Positions load_positions(std::string_view filter = {}) const override;
     virtual Trades load_closed(Timestamp limit, std::string_view filter = {}) const override;
+    virtual void series_erase_points(std::string_view series_name, uint64_t index_and_less) override;
+    virtual uint64_t series_add_point(std::string_view series_name, std::string_view point_data) override;
+    virtual ValueStream<std::string_view> load_series(std::string_view name) const override;
 
 protected:
     std::shared_ptr<leveldb::DB> _db;
@@ -50,15 +56,30 @@ protected:
     bool _batch_rollback = false;
     std::string _buffer;
 
+    struct SeriesState {
+        std::uint64_t first_point = 0;
+        std::uint64_t last_point = 1;
+    };
+
+    std::unordered_map<std::string, SeriesState> _series_state;
+    std::vector<std::pair<SeriesState *, SeriesState> > _series_state_rollback_data;
+
     void auto_commit() {
         if (!_txlevel) commit();
     }
     const std::string &build_key(RecordType type, const std::string_view &rest);
     const std::string &build_fill_key(Timestamp tm, std::string_view id);
+    const std::string &build_series_key(const std::string_view &name, std::uint64_t index);
     const std::string &build_key(std::string &buff, RecordType type, const std::string_view &rest) const;
     const std::string &build_fill_key(std::string &buff, Timestamp tm, std::string_view id) const;
+    const std::string &build_series_key(std::string &buff, const std::string_view &name, std::uint64_t index) const;
+    const std::string &build_series_key(std::string &buff, const std::string_view &name) const;
     static bool key_match_prefix(const std::string_view &pfx, const leveldb::Slice &slice);
     std::string_view remove_key_prefix(const leveldb::Slice &slice) const;
     static std::string_view extract_slice(const leveldb::Slice &slice);
+    SeriesState load_series_state_from_db(std::string_view name) const;
+    SeriesState &get_series_state(const std::string &name);
+
+
 };
 }

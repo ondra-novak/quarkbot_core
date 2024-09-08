@@ -53,6 +53,27 @@ const std::string &LvlDBStorage::build_fill_key(std::string &buffer, Timestamp t
     return buffer;
 }
 
+const std::string& LvlDBStorage::build_series_key(const std::string_view &name, std::uint64_t index) {
+    return build_series_key(_buffer, name, index);
+}
+
+const std::string& LvlDBStorage::build_series_key(std::string &buffer, const std::string_view &name, std::uint64_t index) const {
+    build_key(buffer, RecordType::series, "");
+    buffer.append(name);
+    buffer.push_back('\0');
+    for (int i = 0; i < 8; ++i) {
+        char c = static_cast<char>(index >> ((7-i)*8));
+        buffer.push_back(c);
+    }
+    return buffer;
+}
+
+const std::string& LvlDBStorage::build_series_key(std::string &buffer, const std::string_view &name) const {
+    build_key(buffer, RecordType::series, "");
+    buffer.append(name);
+    buffer.push_back('\0');
+    return buffer;
+}
 void LvlDBStorage::erase_var(Timestamp,std::string_view name)
 {
     _batch.Delete(build_key(RecordType::variable, name));
@@ -106,9 +127,17 @@ void LvlDBStorage::commit()
         if (!_batch_rollback) {
             leveldb::Status s = _db->Write(_write_opts, &_batch);
             if (!s.ok()) throw s;
+        } else {
+            while (_series_state_rollback_data.empty()) {
+                const auto &item = _series_state_rollback_data.back();
+                *item.first = item.second;
+                _series_state_rollback_data.pop_back();
+            }
         }
+
         _txlevel = 0;
         _batch.Clear();
+        _series_state_rollback_data.clear();
         _batch_rollback = false;
     }
 }
@@ -347,8 +376,124 @@ std::string_view LvlDBStorage::remove_key_prefix(const leveldb::Slice &slice) co
     return std::string_view(slice.data(), slice.size()).substr(_key_pfx.size()+1);
 }
 
+
 std::string_view LvlDBStorage::extract_slice(const leveldb::Slice &slice)
 {
     return std::string_view(slice.data(), slice.size());
 }
+
+ValueStream<std::string_view> LvlDBStorage::load_series(std::string_view name) const {
+
+    class Stream: public IValueStream {
+    public:
+        Stream(std::string pfx, leveldb::DB *db)
+            :prefix(std::move(pfx))
+            ,iter(db->NewIterator({})) {}
+        virtual bool next() override {
+            iter->Next();
+            return is_valid();
+        }
+        virtual bool init() override {
+            iter->Seek(prefix);
+            return is_valid();
+        }
+        virtual std::string_view get() const override {
+            return extract_slice(iter->value());
+        }
+        bool is_valid() const {
+            return iter->Valid() && iter->key().starts_with(prefix);
+        }
+    protected:
+        std::string prefix;
+        std::unique_ptr<leveldb::Iterator> iter;
+    };
+
+    std::string pfx;
+    build_series_key(pfx,name);
+    return ValueStream<>(std::make_unique<Stream>(std::move(pfx), _db.get()));
 }
+
+LvlDBStorage::SeriesState &LvlDBStorage::get_series_state(const std::string &name) {
+    auto iter = _series_state.find(name);
+    if (iter == _series_state.end()) {
+        auto r = _series_state.emplace(name, load_series_state_from_db(name));
+        iter = r.first;
+    }
+    return iter->second; // @suppress("Returning the address of a local variable")
+}
+
+uint64_t LvlDBStorage::series_add_point(std::string_view series_name, std::string_view point_data) {
+    SeriesState &st = get_series_state(std::string(series_name));
+    _series_state_rollback_data.emplace_back(&st, st);
+    auto idx = st.first_point++;
+    build_series_key(series_name, idx);
+    _batch.Put(_buffer, {point_data.data(), point_data.size()});
+    return idx;
+}
+
+void LvlDBStorage::series_erase_points(std::string_view series_name, uint64_t index_and_less) {
+    SeriesState &st = get_series_state(std::string(series_name));
+    if (st.first_point < index_and_less) return;
+    if (st.last_point > index_and_less) return;
+    _series_state_rollback_data.emplace_back(&st, st);
+    for (auto idx = st.last_point; idx <= index_and_less; ++idx) {
+        build_series_key(series_name, idx);
+        _batch.Delete(_buffer);
+    }
+    st.last_point = index_and_less+1;
+}
+
+static std::pair<std::string, std::string> findFirstAndLastKeyInRange(leveldb::DB* db, const std::string& range_start, const std::string& range_end) { // @suppress("Name convention for function")
+    std::string first_key;
+    std::string last_key;
+
+    std::unique_ptr<leveldb::Iterator> it (db->NewIterator({}));
+
+    it->Seek(range_start);   //seek at beginning of the range
+    //test whether first item is in range
+    if (it->Valid() && it->key().compare(range_end)<=0) {first_key = it->key().ToString();}
+    it->Seek(range_end);   //seek after end of the range
+    if (!it->Valid()) it->SeekToLast(); else it->Prev(); //go one item back
+    //test, whether last item is in range.
+    if (it->Valid() && it->key().compare(range_start)>=0) {last_key = it->key().ToString();}
+
+    return std::make_pair(first_key, last_key);
+}
+
+
+LvlDBStorage::SeriesState LvlDBStorage::load_series_state_from_db(std::string_view name) const {
+    std::string range_start;
+    std::string range_end;
+    build_series_key(range_start, name, 0);
+    build_series_key(range_end, name, -1);
+    auto r = findFirstAndLastKeyInRange(_db.get(), range_start, range_end);
+    if (r.first.empty()) return {};
+
+    auto parse_uint = [](std::string_view text){
+        std::uint64_t r = 0;
+        for (char c: text) {
+            r = (r << 8) | static_cast<unsigned char>(c);
+        }
+        return r;
+    };
+
+    auto first_str = remove_key_prefix(r.first).substr(name.size()+1);
+    auto last_str = remove_key_prefix(r.second).substr(name.size()+1);
+    return {parse_uint(first_str),parse_uint(last_str)};
+}
+
+
+
+std::string_view LvlDBStorage::RecordType::to_string() const {
+    switch (_val){
+        case variable: return "var";
+        case order: return "order";
+        case fill: return "fill";
+        case series: return "series";
+        default: return std::string_view(reinterpret_cast<const char *>(&_val),1);
+    }
+}
+
+}
+
+

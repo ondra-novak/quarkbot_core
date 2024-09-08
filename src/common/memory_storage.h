@@ -1,8 +1,8 @@
 #include "storage.h"
-#include <leveldb/db.h>
-#include <leveldb/write_batch.h>
 #include <shared_mutex>
 #include <map>
+#include <unordered_map>
+#include <queue>
 
 namespace quarkbot {
 class MemoryStorage: public IStorage {
@@ -24,6 +24,9 @@ public:
     virtual VarSet<std::string_view> get_vars(std::string_view start, std::string_view end) const override;
     virtual Positions load_positions(std::string_view filter = {}) const override;
     virtual Trades load_closed(Timestamp limit, std::string_view filter = {}) const override;
+    virtual void series_erase_points(std::string_view series_name, uint64_t index_and_less) override;
+    virtual uint64_t series_add_point(std::string_view series_name, std::string_view point_data) override;
+    virtual ValueStream<std::string_view> load_series(std::string_view name) const override;
 
 protected:
     struct TxVar {
@@ -38,14 +41,22 @@ protected:
         bool erase;
     };
 
+    struct Series {
+        std::deque<std::string> data;
+        std::uint64_t index = 0;
+    };
+
     using Tx = std::variant<TxVar, TxOrder, Fill>;
 
     struct StoreAction;
     class VarSetDef;
+    class ValueSetDef;
 
     mutable std::shared_mutex _mx;
     using VarMap = std::map<std::string, std::string, std::less<> >;
+    using SeriesMap = std::unordered_map<std::string, Series>;
     VarMap _variables;
+    SeriesMap _series;
     std::unordered_map<Account, std::unordered_map<std::string, std::string>, Account::Hasher > _orders;
     std::vector<Fill> _fills;
     std::vector<Tx> _tx;

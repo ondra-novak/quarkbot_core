@@ -1,6 +1,7 @@
 #pragma once
 #include "istrategy.h"
 #include "awaiter.h"
+#include "coro_support.h"
 
 #include <queue>
 
@@ -10,6 +11,7 @@ namespace quarkbot {
 class Strategy: public IStrategy {
 public:
 
+    using Decimal = ::quarkbot::Decimal;
 
 
     ///Awaitable object
@@ -57,15 +59,6 @@ protected: //recommended overrides
         return {};
     }
 
-    ///called before on_start() if there are active orders (from previous run)
-    /**
-     * @param active_orders active orders. All orders have restored state. They
-     * actuall state is set through standard report which is send after on_start()
-     */
-    virtual void on_active_orders(ActiveOrders ) override {
-        log.warning("called pure virtual on_active_orders() - you should override");
-    }
-
     ///this is strategy's entry point. You need to declare own implementation
     /**
      * Function is called as an event, but only once at the beginning. In this
@@ -76,10 +69,11 @@ protected: //recommended overrides
      * strategy finishes on_start(). If you need a special processing after these
      * reports arrive, you can use on_idle() to schedule execution
      */
-    virtual void on_start() override {
-        log.warning("called pure virtual on_start() - you should override");
-
+    virtual Coroutine<> main() {
+        co_return;
     }
+
+
 
     ///Called when an uncaught exception is detected
     /**You can process the exception in this function.
@@ -98,6 +92,30 @@ protected: //recommended overrides
 
 
 public:  //context API
+
+
+    ///Register startup function
+    /**
+     * You need to register startup function before main() is called. Any
+     * registration later calls the function as on_idle
+     * @return awaitable, you can use >> to set callback function or you
+     * can use co_await
+     *
+     * @note the function is alias to on_idle, because it uses the same
+     * container of callbacks. The function on_idle has no meaning before
+     * main() is called, however, startup has no meaning after main() is
+     * called.
+     *
+     * Registered callbacks are called before main() is called. This is
+     * only legal way how to perform initialization from the database
+     *
+     * You can call this function from strategy constructor
+     *
+     *
+     */
+    Awaitable<void> start() {
+        return on_idle();
+    }
 
 
     ///Retrieve strategy name
@@ -128,6 +146,23 @@ public:  //context API
      * @return configuration object
      */
     const Config &get_config() const {return _ctx->get_config();}
+
+    ///Loads open orders from the database
+    /**
+     * @param acc account
+     * @return awaitable - returned list of orders are in restored state, however
+     * the strategy should immediately receive update reports of these orders.
+     * The function should be called once for every account, otherwise duplicate
+     * order instances can be created
+     */
+    Awaitable<std::vector<Order> > load_open_orders(Account acc) {
+        return [&](auto &&cb) {
+            _ctx->load_open_orders(acc, [cb = std::move(cb)](std::vector<Order> orders) mutable {
+               cb(AsyncResult<std::vector<Order>>(std::move(orders)));
+            });
+        };
+    }
+
 
     ///store value under a variable name in a persistent storage
     /**
@@ -700,6 +735,40 @@ public:  //context API
         return _ctx->get_service<T>();
     }
 
+    /// Append a point to a series
+    /**
+     * @param series_name Name of the series
+     * @param point_data Binary representation of a point (serialized to binary)
+     * @return Index of the newly created point
+     *
+     * @see Series
+     */
+    std::uint64_t series_add_point(std::string_view series_name, std::string_view point_data) {
+        return _ctx->series_add_point(series_name, point_data);
+    }
+
+    /// Erase older points from a series
+    /**
+     * @param series_name Name of the series
+     * @param index_and_less Highest index of points to erase
+     *
+     * @see Series
+     */
+    void series_erase_points(std::string_view series_name, std::uint64_t index_and_less) {
+        _ctx->series_erase_points(series_name, index_and_less);
+    }
+
+    ///Loads points of series
+    /**
+     * @param name
+     * @return instance of Values - iteratable container of values in
+     * binary serialized format for given series
+     *
+     * @see Series
+     */
+    virtual ValueStream<std::string_view> load_series(std::string_view name) const {
+        return _ctx->load_series(name);
+    }
 
 
 
@@ -788,6 +857,12 @@ protected: //optional overrides
             _update_market_cbs.erase(iter);
         }
     }
+
+    virtual void on_start() override {
+        invoke_callbacks(_on_idle_cbs, AsyncResult<void>(std::in_place));
+        main();
+    }
+
 
 protected:
     Log log;

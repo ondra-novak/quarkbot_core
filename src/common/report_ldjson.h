@@ -39,6 +39,9 @@ public:
     virtual Trades load_closed(Timestamp limit,
             std::string_view filter) const override;
     virtual void put_order(Timestamp tm,const Order &ord) override;
+    virtual void series_erase_points(std::string_view series_name, uint64_t index_and_less) override;
+    virtual uint64_t series_add_point(std::string_view series_name, std::string_view point_data) override;
+    virtual ValueStream<std::string_view> load_series(std::string_view name) const override;
 
 protected:
 

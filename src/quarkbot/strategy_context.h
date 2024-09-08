@@ -104,6 +104,12 @@ public:
     virtual void mq_unsubscribe_channel(std::string_view channel) = 0;
     virtual void mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) = 0;
 
+    ///Load open orders (from database)
+    /**
+     * @param acc account
+     * @param callback callback receives orders (called even empty)
+     */
+    virtual void load_open_orders(Account acc, Function<void(std::vector<Order>)> callback) = 0;
 
     ///retrieve one shot market event
     virtual void update_market(const Instrument &i, MarketEventType type) = 0;
@@ -112,6 +118,30 @@ public:
     virtual Log get_logger() const = 0;
 
     virtual std::string_view get_strategy_name() const = 0;
+
+    /// Append a point to a series
+    /**
+     * @param series_name Name of the series
+     * @param point_data Binary representation of a point (serialized to binary)
+     * @return Index of the newly created point
+     */
+    virtual std::uint64_t series_add_point(std::string_view series_name, std::string_view point_data) = 0;
+
+    /// Erase older points from a series
+    /**
+     * @param series_name Name of the series
+     * @param index_and_less Highest index of points to erase
+     */
+    virtual void series_erase_points(std::string_view series_name, std::uint64_t index_and_less) = 0;
+
+    ///Loads points of series
+    /**
+     * @param name
+     * @return instance of Values - iteratable container of values in
+     * binary serialized format for given series
+     */
+    virtual ValueStream<std::string_view> load_series(std::string_view name) const = 0;
+
 
 };
 

@@ -43,6 +43,22 @@ public:
      * @param fill fill to store
      */
     virtual void put_fill(Timestamp event_time, const Fill &fill) = 0;
+
+    /// Append a point to a series
+    /**
+     * @param series_name Name of the series
+     * @param point_data Binary representation of a point (serialized to binary)
+     * @return Index of the newly created point
+     */
+    virtual std::uint64_t series_add_point(std::string_view series_name, std::string_view point_data) = 0;
+
+    /// Erase older points from a series
+    /**
+     * @param series_name Name of the series
+     * @param index_and_less Highest index of points to erase
+     */
+    virtual void series_erase_points(std::string_view series_name, std::uint64_t index_and_less) = 0;
+
     ///commit all writes
     virtual void commit() = 0;
     ///discard writes
@@ -111,6 +127,14 @@ public:
     virtual Trades load_closed(Timestamp limit, std::string_view filter = {} ) const = 0;
 
 
+    ///Loads points of series
+    /**
+     * @param name
+     * @return instance of Values - iteratable container of values in
+     * binary serialized format for given series
+     */
+    virtual ValueStream<std::string_view> load_series(std::string_view name) const = 0;
+
     class Null;
 
 };
@@ -133,6 +157,9 @@ public:
     virtual Trades load_closed(Timestamp , std::string_view ) const override {return {};}
     virtual VarSet<std::string_view> get_vars(std::string_view ) const override {return {};}
     virtual VarSet<std::string_view> get_vars(std::string_view , std::string_view ) const override {return {};}
+    virtual void series_erase_points(std::string_view , uint64_t ) override {};
+    virtual uint64_t series_add_point(std::string_view , std::string_view ) override {return 0;}
+    virtual ValueStream<std::string_view> load_series(std::string_view ) const override {return{};}
 };
 
 
