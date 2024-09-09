@@ -806,6 +806,57 @@ public:  //context API
     }
 
 
+    ///Stop the strategy (now)
+    /**
+     * Causes that strategy is stopped. No more events can be generated,
+     * including timed events. All asynchronous calls are exited with
+     * an canceled exception.
+     *
+     * @note this should be last code in the strategy. The function must
+     * be called right before return from the event. Not garantee, that
+     * any code below this call will execute.
+     *
+     * If your strategy needs to close orders or positions, it must handle this
+     * before stop()
+     */
+
+    void stop() {
+        _update_account_cbs.clear();
+        _update_instrument_cbs.clear();
+        _update_market_cbs.clear();
+        _on_idle_cbs.clear();
+        _on_next_event_cbs.clear();
+        _receive_market_event_cbs.clear();
+        _order_report.clear();
+        _receive_mq_msg.clear();
+        _restored_order_cbs.clear();
+        _stop_cb = {};
+        _ctx->stop();
+    }
+
+    ///returns true, if stop has been requested
+    /**
+     * @retval false normal operation
+     * @retval true stop has been requested
+     */
+    bool is_stop_requested() const {
+        return _ctx->is_stop_requested();
+    }
+
+    ///Awaits for stop request
+    /** A callback or coroutine is executed, when stop is requested.
+     *
+     * The strategy should finish its operation and call stop() if everything
+     * is settled. If no such callback/coroutine is defined, the strategy
+     * is stopped immediately on the request
+     *
+     * @return awaitable to attach a callback or co_await in coroutine.
+     */
+    Awaitable<void> stop_request() {
+        return [&](auto &&promise) {
+            _stop_cb = std::move(promise);
+        };
+    }
 
 protected: //optional overrides
     ///called on market event
@@ -904,6 +955,13 @@ protected: //optional overrides
         _orders_restored = true;
     }
 
+    virtual void on_stop_requested() override {
+        if (_stop_cb) {
+            _stop_cb(AsyncResult<void>());
+        } else {
+            _ctx->stop();
+        }
+    }
 
 protected:
     Log log;
@@ -932,6 +990,8 @@ private:
     CallbackList<std::pair<Instrument,MarketEvent> > _receive_market_event_cbs;
     CallbackList<Message> _receive_mq_msg;
     CallbackList<std::vector<Order> > _restored_order_cbs;
+    Callback<void> _stop_cb;
+
     bool _started = false;
     bool _orders_restored = false;
 

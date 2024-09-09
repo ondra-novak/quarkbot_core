@@ -12,12 +12,7 @@ namespace quarkbot {
 
 
 BasicContext::~BasicContext() {
-    _mq.unsubscribe_all(this);
-    _scheduler(Timestamp{}, [](auto){}, this);
-    for (const auto &[e,_]: _exchanges) {
-        BasicExchangeContext::from_exchange(e).disconnect(this);
-    }
-
+    stop_internal();
 }
 
 Positions BasicContext::load_positions(std::string_view filter) const {
@@ -46,6 +41,10 @@ uint64_t BasicContext::series_add_point(std::string_view series_name, std::strin
 
 ValueStream<std::string_view> BasicContext::load_series(std::string_view name) const {
     return _storage->load_series(name);
+}
+
+void BasicContext::stop() {
+    _stop_called = true;
 }
 
 std::vector<std::pair<Order, Order::Report> > BasicContext::restore_orders() {
@@ -351,10 +350,36 @@ void BasicContext::call_strategy(Fn &&strategy_fn) {
     commit();
 }
 
+bool BasicContext::is_stopped() const {
+    return _stop_called;
+}
+
+void BasicContext::request_stop() {
+    std::lock_guard _(_queue_mx);
+    if (_queue.post(EvStopRequest{this})) {
+        notify_queue();
+    }
+}
+
+void BasicContext::stop_internal() {
+    _queue.clear();
+    _mq.unsubscribe_all(this);
+    _scheduler(Timestamp{}, [](auto){}, this);
+    for (const auto &[e,_]: _exchanges) {
+        BasicExchangeContext::from_exchange(e).disconnect(this);
+    }
+
+}
+
 void BasicContext::on_scheduler(Timestamp tp) noexcept {
     _event_time = tp;
     auto next_ev = tp;
     std::unique_lock lk(_queue_mx);
+
+    if (_stop_called) {
+        stop_internal();
+        return;
+    }
 
     auto executor = [&](auto &&ev){
         lk.unlock();
@@ -458,4 +483,8 @@ bool BasicContext::QueueItemCompare::operator ()(const QueueItem &a, const Queue
     }
 }
 
+void BasicContext::EvStopRequest::operator ()() {
+    me->_stop_requested = true;
+    me->_strategy->on_stop_requested();
+}
 }

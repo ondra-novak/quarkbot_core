@@ -107,6 +107,7 @@ public:
     ///update instrument market state (ticker, orderbook etc)
     virtual void on_update_complete(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> result) = 0;
 
+    virtual void on_stop_requested() = 0;
 
 
 };

@@ -50,6 +50,11 @@ public:
             std::vector<Instrument> instruments,
             Config config);
 
+    ///request strategy to stop
+    void request_stop();
+    ///returns true if strategy is stopped
+    bool is_stopped() const;
+
     virtual void on_update(Instrument i, AsyncResult<void> st) override;
     virtual void on_update(Account a, AsyncResult<void> st)  override;
     virtual bool on_subscription_event(Instrument i, MarketEventType type, MarketEvent ev)  override;
@@ -93,7 +98,8 @@ public:
             std::string_view prefix) const override;
     virtual quarkbot::VarSet<> get_vars(
             std::string_view start, std::string_view end) const override;
-
+    virtual bool is_stop_requested() const override {return _stop_requested;}
+    virtual void stop() override;
 protected:
 
     GlobalScheduler _scheduler;
@@ -105,6 +111,8 @@ protected:
     std::vector<Account> _accounts;
     std::vector<Instrument> _instruments;
     Config _config;
+    bool _stop_requested = false;
+    bool _stop_called = false;
     Timestamp _event_time = Timestamp::min();
 
     struct MarketEventItem {
@@ -164,6 +172,10 @@ protected:
         void operator()();
     };
 
+    struct EvStopRequest {
+        BasicContext *me;
+        void operator()();
+    };
 
     struct EvMQ {
         BasicContext *me;
@@ -216,6 +228,8 @@ protected:
     void post(QueueItem &&);
     void post_collapse(QueueItem &&);
     std::vector<std::pair<Order, Order::Report> > restore_orders();
+
+    void stop_internal();
 };
 
 

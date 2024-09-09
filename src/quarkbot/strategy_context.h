@@ -137,7 +137,30 @@ public:
     virtual ValueStream<std::string_view> load_series(std::string_view name) const = 0;
 
 
+    ///stops the strategy
+    /**
+     * Causes that strategy is stopped. No more events can be generated,
+     * including timed events. All asynchronous calls are exited with
+     * an canceled exception.
+     *
+     * @note this should be last code in the strategy. The function must
+     * be called right before return from the event. Not garantee, that
+     * any code below this call will execute.
+     *
+     * If your strategy needs to close orders or positions, it must handle this
+     * before stop()
+     */
+    virtual void stop() = 0;
+
+    ///returns true, if stop has been requested
+    /**
+     * @retval false normal operation
+     * @retval true stop has been requested
+     */
+    virtual bool is_stop_requested() const = 0;
 };
+
+
 
 }
 

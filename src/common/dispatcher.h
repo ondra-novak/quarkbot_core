@@ -157,6 +157,12 @@ public:
         return true;
     }
 
+    void clear() {
+        _queue.clear();
+        _collaps_map.clear();
+        _tqueue.clear();
+    }
+
     TimePoint get_nearest_schedule() const {return _queue.empty()?_near_tp: TimePoint::min();}
 
     bool empty() const {return _queue.empty() && _tqueue.empty();}
