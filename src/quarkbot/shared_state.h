@@ -67,8 +67,8 @@ public:
     void clear() {_ctx.reset();}
 
     template<typename Fn>
-    SharedState(T &data, Fn &&fn):_ctx(std::shared_ptr<Content>(
-            new Content_Fn<std::decay_t<Fn> >(std::move(data), std::move(fn)))) {}
+    SharedState(T &data, Fn &&fn)
+        :_ctx(std::make_shared<Content_Fn<std::decay_t<Fn> > >(std::move(data), std::move(fn))) {}
     template<typename Fn>
     SharedState(T &&data, Fn &&fn): SharedState(data, std::forward<Fn>(fn)) {}
     SharedState(T &data):SharedState(data,[](const auto &){}) {}

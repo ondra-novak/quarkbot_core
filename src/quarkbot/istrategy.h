@@ -25,6 +25,17 @@ public:
     ///called on initialization
     virtual void on_init(IContext *ctx) = 0;
 
+    ///called before on_start and carries active orders
+    /** these orders are associated with the strategy, and they are probably
+     * created by previous run, or it is part of initial state.
+     * @param active_orders list of active orders.
+     * @note all orders has origin and state 'restored'. Their state will be updated by
+     * function on_order_report() which immediately follows per order.
+     * That function can also report fills received
+     * in between time. You should not process state of the orders now, you just need
+     * to use them to restore the strategy state.
+     */
+    virtual void on_active_orders(ActiveOrders active_orders) = 0;
 
     ///called when strategy is officially started, when context is fully initialized and ready to process requests
     virtual void on_start() = 0;

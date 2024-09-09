@@ -1,6 +1,7 @@
 #include "basic_context.h"
 
 #include <quarkbot/basic_order.h>
+#include <quarkbot/shared_state.h>
 
 #include <list>
 #include <future>
@@ -48,36 +49,29 @@ ValueStream<std::string_view> BasicContext::load_series(std::string_view name) c
 }
 
 std::vector<std::pair<Order, Order::Report> > BasicContext::restore_orders() {
-    std::mutex mx;
-    std::condition_variable cond;
-    unsigned int counter = 1;
 
     std::vector<std::pair<Order, Order::Report> > result;
+    SharedState<std::vector<std::pair<Order, Order::Report> > > state({},
+                    [&](auto &v){result = std::move(v);});
+
     std::exception_ptr e = {};
     for (const auto &a: _accounts) {
         auto &ctx = BasicExchangeContext::from_exchange(a.get_exchange());
         auto orders = _storage->load_open_orders(a);
         if (!orders.empty()) {
-            ctx.restore_orders(a, orders, [&](AsyncResult<IExchange::RestoredOrders> arg){
-
-                //runs async
-                std::lock_guard _(mx);
+            ctx.restore_orders(a, orders, [state, &e](AsyncResult<IExchange::RestoredOrders> arg){
+                std::lock_guard _(state);
                 try {
                     auto arr = arg.get();
-                    result.insert(result.end(), arr.begin(), arr.end());
+                    state->insert(state->end(), arr.begin(), arr.end());
                 } catch (...) {
                     e = std::current_exception();
                 }
-                if (--counter == 0) cond.notify_all(); //notify last operation
 
             });
         }
     }
-    std::unique_lock lk(mx);
-    --counter;
-
-    //wait for completion
-    cond.wait(lk,[&]{return counter == 0;});
+    state.wait();
     if (e) std::rethrow_exception(e);
     return result;
 
@@ -99,14 +93,20 @@ void BasicContext::init(std::unique_ptr<IStrategy> strategy,
         _exchanges.emplace(i.get_exchange(),Batches{});
     }
     _strategy->on_init(this);
+    auto restored = restore_orders();
+    EvRestoreOrders ev_restored{this,{}};
+    ev_restored.orders.reserve(restored.size());
+    for (auto &x: restored) {ev_restored.orders.push_back(x.first);}
+
     _queue.post(EvStart{this});
-/*    for (auto &x: restored) {
+    _queue.post(std::move(ev_restored));
+    for (auto &x: restored) {
         if (!IOrder::is_done(*x.second.new_state)) {
             auto &ex = BasicExchangeContext::from_exchange(x.first.get_account().get_exchange());
             ex.subscribe_order(this, x.first);
         }
         _queue.post(EvOrderReport{this, std::move(x.first), std::move(x.second)});
-    }*/
+    }
     notify_queue();
 }
 
@@ -421,7 +421,7 @@ void BasicContext::EvStart::operator ()() {
 }
 
 void BasicContext::EvRestoreOrders::operator ()() {
-    cb(std::move(orders));
+    me->_strategy->on_active_orders(std::move(orders));
 }
 void BasicContext::EvOrderReport::operator ()() {
     auto &ex = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
@@ -456,13 +456,6 @@ bool BasicContext::QueueItemCompare::operator ()(const QueueItem &a, const Queue
     } else {
         throw std::runtime_error("Internal: Attempt to collapse noncollapsable event");
     }
-}
-
-//TODO
-void BasicContext::load_open_orders(Account acc, Function<void(std::vector<Order>)> callback) {
-    auto &ex = BasicExchangeContext::from_exchange(acc.get_exchange());
-    ex.restore_orders(acc,_storage->load_open_orders(acc),
-            [this, acc, callback=std::move(callback)]())
 }
 
 }

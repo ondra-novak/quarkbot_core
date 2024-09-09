@@ -68,12 +68,13 @@ protected: //recommended overrides
      * If there are stored opened orders, they report arrives immediatelly after
      * strategy finishes on_start(). If you need a special processing after these
      * reports arrive, you can use on_idle() to schedule execution
+     *
+     * @note main() is coroutine. If your code is not want to be a coroutine, just
+     * return value of base implementation
      */
-    virtual Coroutine<> main() {
+    virtual coro main() {
         co_return;
     }
-
-
 
     ///Called when an uncaught exception is detected
     /**You can process the exception in this function.
@@ -96,25 +97,28 @@ public:  //context API
 
     ///Register startup function
     /**
-     * You need to register startup function before main() is called. Any
-     * registration later calls the function as on_idle
-     * @return awaitable, you can use >> to set callback function or you
-     * can use co_await
+     * @code
+     * co_await start()
+     * @endcode
      *
-     * @note the function is alias to on_idle, because it uses the same
-     * container of callbacks. The function on_idle has no meaning before
-     * main() is called, however, startup has no meaning after main() is
-     * called.
+     * Ensures that strategy started. This is required for coroutines
+     * initiated before main() is called. If function is called after main(),
+     * it has no suspend effect
      *
-     * Registered callbacks are called before main() is called. This is
-     * only legal way how to perform initialization from the database
+     * Alternative usage:
      *
-     * You can call this function from strategy constructor
-     *
-     *
+     * @code
+     * start() >> [this]{
+     *      //code called at start
+     * }
+     * @endcode
      */
     Awaitable<void> start() {
-        return on_idle();
+        if (_started) {
+            return [&](auto fn){fn(AsyncResult<void>());};
+        } else {
+            return on_idle();
+        }
     }
 
 
@@ -146,23 +150,6 @@ public:  //context API
      * @return configuration object
      */
     const Config &get_config() const {return _ctx->get_config();}
-
-    ///Loads open orders from the database
-    /**
-     * @param acc account
-     * @return awaitable - returned list of orders are in restored state, however
-     * the strategy should immediately receive update reports of these orders.
-     * The function should be called once for every account, otherwise duplicate
-     * order instances can be created
-     */
-    Awaitable<std::vector<Order> > load_open_orders(Account acc) {
-        return [&](auto &&cb) {
-            _ctx->load_open_orders(acc, [cb = std::move(cb)](std::vector<Order> orders) mutable {
-               cb(AsyncResult<std::vector<Order>>(std::move(orders)));
-            });
-        };
-    }
-
 
     ///store value under a variable name in a persistent storage
     /**
@@ -230,6 +217,20 @@ public:  //context API
         static_assert(!std::is_same_v<T, std::string_view>, "Can't return reference, use std::string");
         std::string s = _ctx->get_var(varname);
         if (s.empty()) return default_value;
+        return Serializer::from_binary<T>(s.begin(), s.end());
+    }
+
+    ///retrieve stored value as optional (with detection whether is defined)
+    /**
+     * @param key variable name
+     * @return content of variable as optional. If variable is not defined
+     * return empty value
+     */
+    template<SerializableType T>
+    std::optional<T> get_var_opt(std::string_view varname) const{
+        static_assert(!std::is_same_v<T, std::string_view>, "Can't return reference, use std::string");
+        std::string s = _ctx->get_var(varname);
+        if (s.empty()) return {};
         return Serializer::from_binary<T>(s.begin(), s.end());
     }
 
@@ -436,6 +437,40 @@ public:  //context API
         return _ctx->replace(order, setup, label.empty()?order.get_label():label);
     }
 
+    ///Installs awaiter which is signaled when list of active orders is received
+    /**
+     * This function must be used at least in main() or prior. By using it
+     * in any other event always returns an empty array
+     *
+     * @code
+     * coro<void> main() {
+     *     auto active = co_await active_orders();
+     *     for (auto order: active) {
+     *         process_order_coro(order); //run coroutine for every order
+     *     }
+     * }
+     * @endcode
+     *
+     *
+     * @return awaitable object which returns list of active orders. These
+     * orders has been placed during previous run, they are stored in the
+     * database in active state.
+     *
+     * This function only carries instances of these orders, but not
+     * their recent report and fills. The recent report is retrieved
+     * through on_report()
+     */
+    Awaitable<std::vector<Order> > active_orders() {
+        if (_orders_restored) {
+            return [&](auto &&promise) {
+                promise(AsyncResult<std::vector<Order> >());
+            };
+        } else {
+            return [&](auto &&promise) {
+                _restored_order_cbs.push_back(std::move(promise));
+            };
+        }
+    }
 
 
     ///Request awaiter for order report
@@ -859,8 +894,14 @@ protected: //optional overrides
     }
 
     virtual void on_start() override {
-        invoke_callbacks(_on_idle_cbs, AsyncResult<void>(std::in_place));
+        while (!on_context_idle()) {}
+        _started = true;
         main();
+    }
+
+    virtual void on_active_orders(ActiveOrders orders) override {
+        invoke_callbacks(_restored_order_cbs, AsyncResult<std::vector<Order> >(std::move(orders)));
+        _orders_restored = true;
     }
 
 
@@ -890,6 +931,9 @@ private:
     CallbackList<void>  _on_next_event_cbs;
     CallbackList<std::pair<Instrument,MarketEvent> > _receive_market_event_cbs;
     CallbackList<Message> _receive_mq_msg;
+    CallbackList<std::vector<Order> > _restored_order_cbs;
+    bool _started = false;
+    bool _orders_restored = false;
 
     template<typename CBList, typename Result>
     bool invoke_callbacks(CBList &lst, Result res) {

@@ -7,7 +7,6 @@ namespace quarkbot {
 template<typename T>
 class Wrapper {
 public:
-
     using NullT = typename T::Null;
 
     static constexpr NullT null_instance = {};

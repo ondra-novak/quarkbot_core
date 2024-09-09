@@ -104,12 +104,6 @@ public:
     virtual void mq_unsubscribe_channel(std::string_view channel) = 0;
     virtual void mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) = 0;
 
-    ///Load open orders (from database)
-    /**
-     * @param acc account
-     * @param callback callback receives orders (called even empty)
-     */
-    virtual void load_open_orders(Account acc, Function<void(std::vector<Order>)> callback) = 0;
 
     ///retrieve one shot market event
     virtual void update_market(const Instrument &i, MarketEventType type) = 0;

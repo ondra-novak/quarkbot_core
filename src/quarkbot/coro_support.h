@@ -48,7 +48,7 @@ inline thread_local std::exception_ptr CoroutineBase::stored_exception = {};
 
 
 template<typename T = void>
-class Coroutine: public CoroutineBase {
+class coro_t: public CoroutineBase {
 public:
 
 
@@ -74,7 +74,7 @@ public:
 
         static constexpr std::suspend_always initial_suspend() noexcept {return {};}
         constexpr finisher final_suspend() noexcept {return {this};}
-        constexpr Coroutine get_return_object() {return {this};}
+        constexpr coro_t get_return_object() {return {this};}
         void unhandled_exception() {
             this->_result.set_exception();
         }
@@ -104,8 +104,13 @@ protected:
     };
 
 
-    Coroutine(promise_type *p):_prom(p) {}
+    coro_t(promise_type *p):_prom(p) {}
 
     std::unique_ptr<promise_type, Detacher> _prom;
 };
+
+using coro = coro_t<void>;
+
+
+
 }
