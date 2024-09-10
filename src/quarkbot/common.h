@@ -10,6 +10,14 @@
 #include <tuple>
 
 
+///Entity is MT-safe, can be used from different thread
+#define MT_SAFE
+///Entity is MT-unsafe, you need to use synchronization
+/**
+ * If entity is part of class, you need to protect whole class
+ */
+#define MT_UNSAFE   /* function is MT-Unsafe */
+
 namespace quarkbot {
 
 template<typename T>

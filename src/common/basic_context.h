@@ -3,11 +3,12 @@
 #include "common.h"
 #include "event_target.h"
 #include "dispatcher.h"
+#include "storage.h"
+#include "basic_exchange.h"
+#include "icontrol.h"
+
 
 #include <quarkbot/strategy.h>
-#include "storage.h"
-
-#include "basic_exchange.h"
 #include <deque>
 #include <mutex>
 #include <map>
@@ -21,7 +22,8 @@ namespace quarkbot {
 
 class BasicContext: public IContext,
                     public IEventTarget,
-                    public IMQBroker::IListener{
+                    public IMQBroker::IListener,
+                    public IControlledEntity{
 public:
 
     using GlobalScheduler = Function<void(Timestamp,Function<void(Timestamp)>, const void *)>;
@@ -51,14 +53,14 @@ public:
             Config config);
 
     ///request strategy to stop
-    void request_stop();
+    virtual void request_stop() noexcept override;
     ///returns true if strategy is stopped
-    bool is_stopped() const;
+    virtual bool is_stopped() const noexcept override;
 
     virtual void on_update(Instrument i, AsyncResult<void> st) override;
     virtual void on_update(Account a, AsyncResult<void> st)  override;
-    virtual bool on_subscription_event(Instrument i, MarketEventType type, MarketEvent ev)  override;
-    virtual void on_update(Instrument i, MarketEventType type, AsyncResult<MarketEvent> ev)  override;
+    virtual bool on_subscription_event(const MarketEvent &event)  override;
+    virtual void on_update(Instrument i, MarketEventType type, AsyncResult<MarketEventData> ev)  override;
     virtual void on_order_report(Order order,Order::Report report)  override;
     virtual void subscribe(MarketEventType type, const Instrument &i)override;
     virtual void unsubscribe(MarketEventType type, const Instrument &i) override;
@@ -70,10 +72,10 @@ public:
     virtual void set_timer(Timestamp at, TimerEventCB fnptr, TimerID id) override;
     virtual Timestamp get_event_time() const override;
     virtual Order bind_order(const Instrument &instrument, const Account &account, std::string_view label) override;
-    virtual void update_account(const Account &a) override;
+    virtual void update_account(const Account &a, Function<void(AsyncResult<void>)> &&cb) override;
     virtual void allocate(const Account &a, double equity) override;
     virtual bool clear_timer(TimerID id) override;
-    virtual void update_instrument(const Instrument &i) override;
+    virtual void update_instrument(const Instrument &i, Function<void(AsyncResult<void>)> &&cb) override;
     virtual void unset_var(std::string_view var_name) override;
     virtual void set_var(std::string_view var_name, std::string_view value) override;
     virtual bool get_service(const std::type_info &tinfo, std::shared_ptr<void> &ptr) override;
@@ -86,19 +88,25 @@ public:
     virtual void mq_subscribe_channel(std::string_view channel) override;
     virtual void mq_unsubscribe_channel(std::string_view channel) override;
     virtual void mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) override;
-    virtual void update_market(const Instrument &i, MarketEventType type) override;
+    virtual void update_market(const Instrument &i, MarketEventType type, Function<void(AsyncResult<MarketEventData>)> &&cb) override;
     virtual Positions load_positions(std::string_view filter) const override;
     virtual Trades load_closed(Timestamp limit, std::string_view filter) const override;
     virtual std::string_view get_strategy_name() const override;
     virtual void series_erase_points(std::string_view series_name, uint64_t index_and_less) override;
     virtual uint64_t series_add_point(std::string_view series_name, std::string_view point_data) override;
     virtual ValueStream<std::string_view> load_series(std::string_view name) const override;
+    virtual void receive_order_report(const Order &order, Function<void(AsyncResult<std::span<Fill> >)> &&cb) override;
+    virtual void on_idle(Function<void(AsyncResult<void> )> &&fn) override;
 
     virtual quarkbot::VarSet<> get_vars(
             std::string_view prefix) const override;
     virtual quarkbot::VarSet<> get_vars(
             std::string_view start, std::string_view end) const override;
     virtual bool is_stop_requested() const override {return _stop_requested;}
+    virtual void on_stop_requested(Function<void(AsyncResult<void>)> &&fn) override;
+    virtual void on_market_event(Function<void(AsyncResult<MarketEvent>)> &&callback) override;
+    virtual void on_orders_restored(Function<void(AsyncResult<std::span<Order> >)> &&callback) override;
+
     virtual void stop() override;
 protected:
 
@@ -113,11 +121,13 @@ protected:
     Config _config;
     bool _stop_requested = false;
     bool _stop_called = false;
+    bool _in_scheduler = false;
+    bool _orders_restored = false;
     Timestamp _event_time = Timestamp::min();
 
     struct MarketEventItem {
         Instrument i;
-        MarketEvent event;
+        MarketEventData event;
         bool operator==(const MarketEventItem &) const = default;
     };
 
@@ -135,8 +145,6 @@ protected:
 
     struct EvMarketEventItem{
         BasicContext *me;
-        Instrument i;
-        MarketEventType type;
         MarketEvent event;
         void operator()();
         bool operator==(const EvStart &) const ;
@@ -161,7 +169,7 @@ protected:
         BasicContext *me;
         Instrument i;
         MarketEventType type;
-        AsyncResult<MarketEvent> ev;
+        AsyncResult<MarketEventData> ev;
         void operator()();
     };
 
@@ -209,19 +217,35 @@ protected:
         std::vector<Order> _batch_cancel;
     };
 
+    using InstSubPair = std::pair<Instrument, MarketEventType>;
+    struct InstSubPairHasher {
+        std::size_t operator()(const InstSubPair &p) const {
+            return Instrument::Hasher()(p.first);
+        }
+    };
+
+
+    template<typename X> using CallbackList = Strategy::CallbackList<X>;
 
     std::mutex _queue_mx;
     DispatcherCore<QueueItem, QueueItemHasher, QueueItemCompare> _queue;
-
     std::map<ExchangeInfo, Batches> _exchanges;
-    unsigned int _start_counter = 0;
+    std::unordered_map<Account, CallbackList<void>, Account::Hasher> _update_account_cbs;
+    std::unordered_map<Instrument, CallbackList<void>,Instrument::Hasher> _update_instrument_cbs;
+    std::unordered_map<InstSubPair, CallbackList<MarketEventData>,InstSubPairHasher> _update_market_cbs;
+    std::unordered_map<Order, CallbackList<std::span<Fill> >,Order::Hasher> _order_report;
+    CallbackList<void> _on_idle_cbs;
+    CallbackList<MarketEvent> _on_market_event_cbs;
+    CallbackList<std::span<Order> > _on_restored_orders_cbs;
+
+    Function<void(AsyncResult<void>)> _on_stop_cb;
 
     void begin_transaction();
     void commit();
     void rollback();
     void notify_queue();
 
-    void on_scheduler(Timestamp tp) noexcept;
+    virtual void on_scheduled(Timestamp tp) noexcept override;
     template<std::invocable<> Fn>
     void call_strategy(Fn &&strategy_fn);
 

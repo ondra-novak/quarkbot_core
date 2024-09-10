@@ -117,12 +117,12 @@ void BasicContext::post_collapse(QueueItem &&q) {
 }
 
 
-bool BasicContext::on_subscription_event(Instrument i, MarketEventType type, MarketEvent event) {
+bool BasicContext::on_subscription_event(const MarketEvent &event) {
     std::lock_guard _(_queue_mx);
-    if (can_collapse(type)) {
-        post_collapse(EvMarketEventItem{this,std::move(i), type, std::move(event)});
+    if (can_collapse(event.type)) {
+        post_collapse(EvMarketEventItem{this,event});
     } else {
-        post(EvMarketEventItem{this,std::move(i), type,std::move(event)});
+        post(EvMarketEventItem{this,event});
     }
     return true;
 }
@@ -147,7 +147,7 @@ void BasicContext::on_update(Account a, AsyncResult<void> st ) {
     post(EvUpdateAccount{this, std::move(a), std::move(st)});
 }
 
-void BasicContext::on_update(Instrument i, MarketEventType type, AsyncResult<MarketEvent> event) {
+void BasicContext::on_update(Instrument i, MarketEventType type, AsyncResult<MarketEventData> event) {
     std::lock_guard _(_queue_mx);
     post(EvUpdateMarket{this, i, type, std::move(event)});
 }
@@ -155,8 +155,9 @@ void BasicContext::on_update(Instrument i, MarketEventType type, AsyncResult<Mar
 
 
 void BasicContext::notify_queue() {
+    if (_in_scheduler) return;
     Timestamp tp = _queue.get_nearest_schedule();
-    _scheduler(tp,[this](auto tp){on_scheduler(tp);}, this);
+    _scheduler(tp,[this](auto tp){on_scheduled(tp);}, this);
 }
 
 
@@ -229,9 +230,13 @@ Order BasicContext::bind_order(const Instrument &instrument, const Account &acco
 }
 
 
-void BasicContext::update_account(const Account &a) {
-    BasicExchangeContext &e = BasicExchangeContext::from_exchange(a.get_exchange());
-    e.update_account(this, a);
+void BasicContext::update_account(const Account &a, Function<void(AsyncResult<void>)> &&cb) {
+    auto &cbs = _update_account_cbs[a];
+    cbs.push_back(std::move(cb));
+    if (cbs.size() == 1) {
+        BasicExchangeContext &e = BasicExchangeContext::from_exchange(a.get_exchange());
+        e.update_account(this, a);
+    }
 }
 
 
@@ -247,10 +252,13 @@ bool BasicContext::clear_timer(TimerID id) {
 
 
 
-void BasicContext::update_instrument(const Instrument &i) {
-    BasicExchangeContext &e = BasicExchangeContext::from_exchange(i.get_exchange());
-    e.update_instrument(this, i);
-
+void BasicContext::update_instrument(const Instrument &i, Function<void(AsyncResult<void>)> &&cb) {
+    auto &cbs = _update_instrument_cbs[i];
+    cbs.push_back(std::move(cb));
+    if (cbs.size() == 1) {
+        BasicExchangeContext &e = BasicExchangeContext::from_exchange(i.get_exchange());
+        e.update_instrument(this, i);
+    }
 }
 
 
@@ -297,19 +305,44 @@ void BasicContext::set_var(std::string_view var_name, std::string_view value) {
 
 
 void BasicContext::EvUpdateInstrument::operator ()() {
-    me->_strategy->on_update_complete(i, st);
+    auto iter = me->_update_instrument_cbs.find(i);
+    if (iter != me->_update_instrument_cbs.end()) {
+        while (!iter->second.empty()) {
+            iter->second.front()(st);
+            iter->second.pop_front();
+        }
+        me->_update_instrument_cbs.erase(iter);
+    }
 }
 
 void BasicContext::EvUpdateAccount::operator ()() {
-    me->_strategy->on_update_complete(a, st);
+    auto iter = me->_update_account_cbs.find(a);
+    if (iter != me->_update_account_cbs.end()) {
+        while (!iter->second.empty()) {
+            iter->second.front()(st);
+            iter->second.pop_front();
+        }
+        me->_update_account_cbs.erase(iter);
+    }
 }
 
 void BasicContext::EvUpdateMarket::operator ()() {
-    me->_strategy->on_update_complete(i, type, ev);
+    auto iter = me->_update_market_cbs.find({i,type});
+    if (iter != me->_update_market_cbs.end()) {
+        while (!iter->second.empty()) {
+            iter->second.front()(ev);
+            iter->second.pop_front();
+        }
+        me->_update_market_cbs.erase(iter);
+    }
 }
 
 void BasicContext::EvMarketEventItem::operator ()() {
-    me->_strategy->on_market_event(i, event);
+    for (std::size_t i = 0, cnt = me->_on_market_event_cbs.size(); i < cnt; ++i) {
+        me->_on_market_event_cbs.front()(event);
+        me->_on_market_event_cbs.pop_front();
+    }
+    me->_strategy->on_market_event(event);
 }
 
 
@@ -350,11 +383,11 @@ void BasicContext::call_strategy(Fn &&strategy_fn) {
     commit();
 }
 
-bool BasicContext::is_stopped() const {
+bool BasicContext::is_stopped() const noexcept  {
     return _stop_called;
 }
 
-void BasicContext::request_stop() {
+void BasicContext::request_stop()  noexcept {
     std::lock_guard _(_queue_mx);
     if (_queue.post(EvStopRequest{this})) {
         notify_queue();
@@ -371,7 +404,7 @@ void BasicContext::stop_internal() {
 
 }
 
-void BasicContext::on_scheduler(Timestamp tp) noexcept {
+void BasicContext::on_scheduled(Timestamp tp) noexcept {
     _event_time = tp;
     auto next_ev = tp;
     std::unique_lock lk(_queue_mx);
@@ -380,6 +413,8 @@ void BasicContext::on_scheduler(Timestamp tp) noexcept {
         stop_internal();
         return;
     }
+
+    _in_scheduler = true;
 
     auto executor = [&](auto &&ev){
         lk.unlock();
@@ -391,17 +426,22 @@ void BasicContext::on_scheduler(Timestamp tp) noexcept {
     };
 
     if (!_queue.process_message(tp, executor)) {
-        bool r = true;
-        lk.unlock();
-        call_strategy([this, &r]{
-            r = _strategy->on_context_idle();
-        });
-        lk.lock();
+        bool r = _on_idle_cbs.empty();
+        if (!r) {
+            auto &fn = _on_idle_cbs.front();
+            lk.unlock();
+            call_strategy([&]{
+                fn(AsyncResult<void>());
+            });
+            lk.lock();
+            r = _on_idle_cbs.empty();
+        }
         if (r) {
             next_ev = _queue.get_nearest_schedule();
         }
     }
-    _scheduler(next_ev, [this](auto tp){on_scheduler(tp);}, this);
+    _in_scheduler = false;
+    _scheduler(next_ev, [this](auto tp){on_scheduled(tp);}, this);
 }
 
 
@@ -428,9 +468,14 @@ void BasicContext::mq_send_message(std::string_view channel, std::string_view ms
 
 }
 
-void BasicContext::update_market(const Instrument &i, MarketEventType type)
+void BasicContext::update_market(const Instrument &i, MarketEventType type, Function<void(AsyncResult<MarketEventData>)> &&cb)
 {
-    BasicExchangeContext::from_exchange(i.get_exchange()).update_market(this, i, type);
+   auto &cbs = _update_market_cbs[{i,type}];
+   cbs.push_back(std::move(cb));
+   if (cbs.size() == 1) {
+       BasicExchangeContext::from_exchange(i.get_exchange())
+                       .update_market(this, i, type);
+   }
 }
 
 VarSet<> BasicContext::get_vars(std::string_view prefix) const {
@@ -446,30 +491,44 @@ void BasicContext::EvStart::operator ()() {
 }
 
 void BasicContext::EvRestoreOrders::operator ()() {
-    me->_strategy->on_active_orders(std::move(orders));
+    std::span spanv(orders.begin(), orders.end());
+    while (!me->_on_restored_orders_cbs.empty()) {
+        me->_on_restored_orders_cbs.front()(spanv);
+        me->_on_restored_orders_cbs.pop_front();
+    }
+    me->_orders_restored = true;
+
 }
 void BasicContext::EvOrderReport::operator ()() {
     auto &ex = BasicExchangeContext::from_exchange(order.get_account().get_exchange());
     ex.order_apply_report(order, report);
     me->_storage->put_order(me->_event_time, order);
-    { //remove duplicate fills, store unique fills to the DB
-        auto iter = std::remove_if(report.fills.begin(), report.fills.end(), [&](const Fill &f){
-            bool dup = me->_storage->is_duplicate_fill(f);
-            if (!dup) me->_storage->put_fill(me->_event_time, f);
-            return dup;
-        });
-        report.fills.erase(iter, report.fills.end());
+     //remove duplicate fills, store unique fills to the DB
+    report.fills.erase(std::remove_if(report.fills.begin(), report.fills.end(), [&](const Fill &f){
+        bool dup = me->_storage->is_duplicate_fill(f);
+        if (!dup) me->_storage->put_fill(me->_event_time, f);
+        return dup;
+    }), report.fills.end());
+    auto fillspan = std::span(report.fills.data(), report.fills.size());
+    auto iter = me->_order_report.find(order);
+    if (iter != me->_order_report.end()) {
+        auto &cbs = iter->second;
+        for (std::size_t i = 0, sz = cbs.size(); i < sz; ++i) {
+            cbs.front()(AsyncResult(fillspan));
+            cbs.pop_front();
+        }
+        if (order.done()) me->_order_report.erase(iter);
     }
-    me->_strategy->on_order_report(std::move(order), std::move(report.fills));
+    me->_strategy->on_order_report(std::move(order), fillspan);
 }
 
 std::size_t BasicContext::QueueItemHasher::operator ()(const QueueItem &x) const {
     if (std::holds_alternative<EvMarketEventItem>(x)) {
         auto ev = std::get<EvMarketEventItem>(x);
         Instrument::Hasher hasher;
-        return hasher(ev.i) + static_cast<std::size_t>(ev.type);
+        return hasher(ev.event.instrument) + static_cast<std::size_t>(ev.event.type);
     } else {
-        throw std::runtime_error("Internal: Attempt to collapse noncollapsable event");
+        throw std::runtime_error("Internal: Attempt to collapse non-collapsable event");
     }
 }
 
@@ -477,14 +536,48 @@ bool BasicContext::QueueItemCompare::operator ()(const QueueItem &a, const Queue
     if (std::holds_alternative<EvMarketEventItem>(a) && std::holds_alternative<EvMarketEventItem>(b)) {
         auto ev_a = std::get<EvMarketEventItem>(a);
         auto ev_b = std::get<EvMarketEventItem>(b);
-        return ev_a.i == ev_b.i && ev_a.type == ev_b.type;
+        return ev_a.event.instrument == ev_b.event.instrument
+                && ev_a.event.type == ev_b.event.type;
     } else {
-        throw std::runtime_error("Internal: Attempt to collapse noncollapsable event");
+        throw std::runtime_error("Internal: Attempt to collapse non-collapsable event");
     }
 }
 
 void BasicContext::EvStopRequest::operator ()() {
     me->_stop_requested = true;
-    me->_strategy->on_stop_requested();
+    if (me->_on_stop_cb) {
+        me->_on_stop_cb(AsyncResult<void>());
+    } else {
+        me->stop();
+    }
 }
+
+void BasicContext::on_idle(Function<void(AsyncResult<void> )> &&fn) {
+    std::lock_guard _(_queue_mx);
+    _on_idle_cbs.push_back(std::move(fn));
+    if (_in_scheduler) return;
+    _scheduler(Timestamp::min(), [this](auto tp){on_scheduled(tp);}, this);
+}
+
+void BasicContext::receive_order_report(const Order &order, Function<void(AsyncResult<std::span<Fill>  >)> &&cb)  {
+    if (order.done()) return;
+    auto &cbs = _order_report[order];
+    cbs.push_back(std::move(cb));
+}
+
+void BasicContext::on_stop_requested(Function<void(AsyncResult<void>)> &&fn) {
+    _on_stop_cb = std::move(fn);
+}
+
+void BasicContext::on_market_event(Function<void(AsyncResult<MarketEvent>)> &&callback) {
+    _on_market_event_cbs.push_back(std::move(callback));
+}
+void BasicContext::on_orders_restored(Function<void(AsyncResult<std::span<Order> >)> &&callback) {
+    if (_orders_restored) {
+        callback(std::in_place);
+    } else {
+        _on_restored_orders_cbs.push_back(std::move(callback));
+    }
+}
+
 }

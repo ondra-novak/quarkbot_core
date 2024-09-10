@@ -5,6 +5,7 @@
 #include "order.h"
 #include "fill.h"
 #include "network.h"
+#include "market_event.h"
 
 #include "log.h"
 namespace quarkbot {
@@ -18,12 +19,12 @@ public:
 
     virtual ~IExchangeContext() = default;
 
-    virtual bool income_data(const Instrument &i, MarketEventType type, const MarketEvent &t) = 0;
+    virtual bool income_data(const MarketEvent &event) = 0;
     ///call this function when account is updated
     virtual void object_updated(const Account &i, AsyncResult<void> st) = 0;
     ///call this function when instrument is updated
     virtual void object_updated(const Instrument &i, AsyncResult<void> st) = 0;
-    virtual void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) = 0;
+    virtual void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEventData> ev) = 0;
     ///call this function when order's state changed
     /**
      * As the orders are const, you cannot change state of the order directly. The

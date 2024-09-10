@@ -1,7 +1,6 @@
 #pragma once
 #include "instrument.h"
 #include "function.h"
-#include "market_event.h"
 #include "wrapper.h"
 #include <memory>
 #include <optional>

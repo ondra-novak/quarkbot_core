@@ -1,6 +1,7 @@
 #pragma once
 
 #include "market_event.h"
+
 #include "shared/cluster_alloc.h"
 #include "shared/cluster_alloc_reference.h"
 #include <any>
@@ -24,7 +25,7 @@ class MarketEventFactory {
 public:
 
     ///Event storage
-    class Event : public IMarketEvent {
+    class Event : public IMarketEventData {
     public:
         template<typename ... Args>
         Event(Args &&... args):_content(std::forward<Args>(args)...) {}

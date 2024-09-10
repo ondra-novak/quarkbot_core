@@ -345,7 +345,7 @@ void SimExchange::replay_accept(std::string_view symbol, TickData &&ticker, Time
         auto m = matching.lock();
         m->accept_ticker(ticker);
         simulate_market(*m);
-        this->send_market_event(Instrument(instrument), MarketEventType::tickdata, m->get_ticker(_cur_sim_time));
+        this->send_market_event({Instrument(instrument), MarketEventType::tickdata, m->get_ticker(_cur_sim_time)});
     }
 }
 

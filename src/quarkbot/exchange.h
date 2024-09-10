@@ -25,8 +25,8 @@ public:
      * @retval true continue sending next data
      * @retval false passive unsubscribe (same as call unsubscribe)
      */
-    bool send_market_event(const Instrument &i, MarketEventType type, const MarketEvent &data) const {
-        return _ctx->income_data(i, type, data);
+    bool send_market_event(const MarketEvent &event) const {
+        return _ctx->income_data(event);
     }
     ///call this function when account is updated
     void object_updated(const Account &a, AsyncResult<void> st) const {
@@ -36,7 +36,7 @@ public:
     void object_updated(const Instrument &i, AsyncResult<void> st) const {
         _ctx->object_updated(i, std::move(st));
     }
-    void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) const {
+    void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEventData> ev) const {
         _ctx->object_updated(i, std::move(type), std::move(ev));
     }
     void order_report(const Order &order, Order::Report report) const {

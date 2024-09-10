@@ -37,13 +37,13 @@ void BasicExchangeContext::unsubscribe(IEventTarget *target, MarketEventType sbs
     }
 }
 
-bool BasicExchangeContext::income_data(const Instrument &i, MarketEventType type, const MarketEvent &ev) {
+bool BasicExchangeContext::income_data(const MarketEvent &event) {
     std::lock_guard _(_mx);
     bool ret = false;
-    auto iter = _subscriptions.find({type,i});
+    auto iter = _subscriptions.find({event.type,event.instrument});
     if (iter != _subscriptions.end()) {
         for (auto t: iter->second) {
-            bool ok = t->on_subscription_event(i, type, ev);
+            bool ok = t->on_subscription_event(event);
             ret = ret || ok;
         }
     }
@@ -189,7 +189,7 @@ void BasicExchangeContext::update_market(IEventTarget *target, const Instrument 
 }
 
 
-void BasicExchangeContext::object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) {
+void BasicExchangeContext::object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEventData> ev) {
     std::lock_guard _(_mx);
     Subscription sub{type,i};
     auto iter = _market_updates.find(sub);

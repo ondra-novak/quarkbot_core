@@ -168,12 +168,12 @@ Decimal Matching::get_effective_price() const {
     else return (_spread.bid + _spread.ask)/2_dec;
 }
 
-MarketEvent Matching::get_ticker(Timestamp curTime) const {
+MarketEventData Matching::get_ticker(Timestamp curTime) const {
     auto ev = _me_tick.create(TickData{
         curTime,_spread.bid,_spread.ask,_last, _index,
         _spread.bid_size,_spread.ask_size, _cum_volume, _trades
     });
-    return MarketEvent(ev);
+    return MarketEventData(ev);
 
 }
 

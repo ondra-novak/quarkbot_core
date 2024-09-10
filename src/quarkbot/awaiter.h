@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common.h"
 #include "function.h"
 
 #include <atomic>
@@ -171,6 +172,9 @@ protected:
 
 };
 
+template<typename X>
+AsyncResult(X) -> AsyncResult<X>;
+
 ///Generic awaitable, can be accessed both by coroutine or by callback
 /**
  * @tparam T type of result (including void)
@@ -254,10 +258,30 @@ public:
      * @param fn callback. It receives AsyncResult<T>, you need to extract the actuall
      * result from it
      */
-    template<std::invocable<AsyncResult<T> > Fn>
+    template<typename Fn>
     void operator>>(Fn &&fn) {
-        _regfn(std::forward<Fn>(fn));
+         if constexpr(std::is_void_v<T> && std::is_invocable_v<Fn>) {
+             _regfn([_fn = std::move(fn)](AsyncResult<void> res) mutable {
+                 try {
+                     res.get();
+                     _fn();
+                 } catch (...) {
+                     _fn();
+                 }
+             });
+         } else if constexpr(std::is_invocable_v<Fn, T>) {
+             _regfn([_fn = std::move(fn)](AsyncResult<void> res) mutable {
+                 if (res.has_value()) {
+                     _fn(res.get());
+                 }
+             });
+         } else if constexpr(std::is_invocable_v<Fn, AsyncResult<T> >) {
+             _regfn(std::forward<Fn>(fn));
+         } else {
+             static_assert(assert_error<Fn>, "The callback must accept T, or AsyncResult<T>");
+         }
     }
+
 
     ///Handles co_await operator.
     /**

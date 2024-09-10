@@ -1,4 +1,6 @@
 #pragma once
+#include <quarkbot/market_event.h>
+
 #include <memory>
 
 #include <quarkbot/instrument.h>
@@ -9,7 +11,6 @@
 #include <quarkbot/fill.h>
 #include <quarkbot/function.h>
 #include <quarkbot/awaiter.h>
-#include <quarkbot/market_event.h>
 
 
 namespace quarkbot {
@@ -60,7 +61,7 @@ public:
      * @note actual market data are not part of event. When event is processed
      * the strategy must read last market data from the exchange object
      */
-    virtual bool on_subscription_event(Instrument i,  MarketEventType type, MarketEvent event) = 0;
+    virtual bool on_subscription_event(const MarketEvent &event) = 0;
 
     ///called when update_market is complete
     /**
@@ -68,7 +69,7 @@ public:
      * @param st operation status
      * @param subscription_type
      */
-    virtual void on_update(Instrument i, MarketEventType type, AsyncResult<MarketEvent> ev) = 0;
+    virtual void on_update(Instrument i, MarketEventType type, AsyncResult<MarketEventData> ev) = 0;
 
     ///called when order state changed or fills
     virtual void on_order_report(Order order,Order::Report report) = 0;

@@ -55,7 +55,14 @@ public:
 protected: //recommended overrides
 
     ///you need to redefine this function if you need to generate configuration schema
-    virtual ConfigSchema get_config_schema() const override {
+    /**
+     * This function can be called before context is initialized. If it is called,
+     * it is probably only for configuration schema and strategy will not be probably
+     * started in this time.
+     *
+     * @return configuration schema.
+     */
+    MT_SAFE virtual ConfigSchema get_config_schema() const override {
         return {};
     }
 
@@ -65,14 +72,14 @@ protected: //recommended overrides
      * case, everything is correctly initialized and strategy can do anything it
      * wants.
      *
-     * If there are stored opened orders, they report arrives immediatelly after
+     * If there are stored opened orders, they report arrives immediately after
      * strategy finishes on_start(). If you need a special processing after these
      * reports arrive, you can use on_idle() to schedule execution
      *
      * @note main() is coroutine. If your code is not want to be a coroutine, just
      * return value of base implementation
      */
-    virtual coro main() {
+    MT_UNSAFE virtual coro main() {
         co_return;
     }
 
@@ -86,7 +93,7 @@ protected: //recommended overrides
      * However, if the function throws an exception, the exception is reported
      * to the log file and all active transactions are rollbacked
      */
-    virtual void on_unhandled_exception() override {
+    MT_UNSAFE virtual void on_unhandled_exception() override {
         throw;
     }
 
@@ -98,24 +105,28 @@ public:  //context API
     ///Register startup function
     /**
      * @code
-     * co_await start()
+     * co_await started()
      * @endcode
      *
      * Ensures that strategy started. This is required for coroutines
      * initiated before main() is called. If function is called after main(),
      * it has no suspend effect
      *
+     * This is one of functions available before the context is initialized.
+     *
      * Alternative usage:
      *
      * @code
-     * start() >> [this]{
+     * started() >> [this]{
      *      //code called at start
      * }
      * @endcode
+     *
+     * @note NOT MT SAFE
      */
-    Awaitable<void> start() {
+    MT_UNSAFE Awaitable<void> started() {
         if (_started) {
-            return [&](auto fn){fn(AsyncResult<void>());};
+            return [=](auto fn){fn(AsyncResult<void>());};
         } else {
             return on_idle();
         }
@@ -129,7 +140,7 @@ public:  //context API
      *
      * @return strategy name as defined in configuration
      */
-    std::string_view get_strategy_name() const {
+    MT_SAFE std::string_view get_strategy_name() const {
         return _ctx->get_strategy_name();
     }
 
@@ -137,19 +148,19 @@ public:  //context API
     /**
      * @return available (configired) accounts
      */
-    std::span<const Account> get_accounts() const {return _ctx->get_accounts();}
+    MT_SAFE std::span<const Account> get_accounts() const {return _ctx->get_accounts();}
 
     ///Retrieve available instruments
     /**
      * @return configired instruments
      */
-    std::span<const Instrument> get_instruments() const {return _ctx->get_instruments();}
+    MT_SAFE std::span<const Instrument> get_instruments() const {return _ctx->get_instruments();}
 
     ///Retrieve strategy's configuration
     /**
      * @return configuration object
      */
-    const Config &get_config() const {return _ctx->get_config();}
+    MT_SAFE const Config &get_config() const {return _ctx->get_config();}
 
     ///store value under a variable name in a persistent storage
     /**
@@ -166,7 +177,7 @@ public:  //context API
      * @note store operation is asynchronous. Calling get() immediately
      * after set() can still return previous value
      */
-    void set_var(std::string_view key, std::string_view value) const {
+    MT_UNSAFE void set_var(std::string_view key, std::string_view value) const {
         _ctx->set_var(key, value);
     }
 
@@ -182,7 +193,7 @@ public:  //context API
      * after set() can still return previous value
      */
     template<SerializableType T>
-    void set_var(std::string_view key, const T &value) const {
+    MT_UNSAFE void set_var(std::string_view key, const T &value) const {
         std::string s;
         Serializer::to_binary(std::back_inserter(s), value);
         _ctx->set_var(key,s);
@@ -193,7 +204,7 @@ public:  //context API
      * @param varname variale to unset
      * @note it is better to use unset_var instead of setting variable to empty string.
      */
-    void unset_var(std::string_view varname) const {
+    MT_UNSAFE void unset_var(std::string_view varname) const {
         _ctx->unset_var(varname);
     }
 
@@ -202,7 +213,7 @@ public:  //context API
      * @param varname name of variable
      * @return content. If the variable doesn't exist, returns empty string
      */
-    std::string get_var(std::string_view varname) const{
+    MT_UNSAFE std::string get_var(std::string_view varname) const{
         return _ctx->get_var(varname);
     }
 
@@ -213,7 +224,7 @@ public:  //context API
      * @return content of variable or default value if doesn't exists
      */
     template<SerializableType T>
-    T get_var(std::string_view varname, const T &default_value) const{
+    MT_UNSAFE T get_var(std::string_view varname, const T &default_value) const{
         static_assert(!std::is_same_v<T, std::string_view>, "Can't return reference, use std::string");
         std::string s = _ctx->get_var(varname);
         if (s.empty()) return default_value;
@@ -227,7 +238,7 @@ public:  //context API
      * return empty value
      */
     template<SerializableType T>
-    std::optional<T> get_var_opt(std::string_view varname) const{
+    MT_UNSAFE std::optional<T> get_var_opt(std::string_view varname) const{
         static_assert(!std::is_same_v<T, std::string_view>, "Can't return reference, use std::string");
         std::string s = _ctx->get_var(varname);
         if (s.empty()) return {};
@@ -244,7 +255,7 @@ public:  //context API
      * big tables can be retrieved as the database is iterated during processing results
      */
     template<typename T>
-    VarSet<T> get_vars(std::string_view prefix) const {
+    MT_UNSAFE VarSet<T> get_vars(std::string_view prefix) const {
         return _ctx->get_vars(prefix);
     }
 
@@ -258,7 +269,7 @@ public:  //context API
      * big tables can be retrieved as the database is iterated during processing results
      */
     template<typename T>
-    VarSet<T> get_vars(std::string_view from_key, std::string_view to_key) const {
+    MT_UNSAFE VarSet<T> get_vars(std::string_view from_key, std::string_view to_key) const {
         return _ctx->get_vars(from_key, to_key);
     }
 
@@ -268,7 +279,7 @@ public:  //context API
      * @note you can delete whole table
      */
     template<typename T>
-    void unset_vars(const VarSet<T> &vars) const {
+    MT_UNSAFE void unset_vars(const VarSet<T> &vars) const {
         auto h = vars.get_handle();
         bool s = h->init();
         while (s) {
@@ -285,10 +296,9 @@ public:  //context API
      *
      * @note In most cases, you don't need to update account when fill.
      */
-    Awaitable<void> update_account(const Account &a)  {
-        _ctx->update_account(a);
-        return [this, a](auto &&cb){
-            _update_account_cbs[a].emplace_back(std::move(cb));
+    MT_UNSAFE Awaitable<void> update_account(const Account &a)  {
+        return [&a,this](auto &&promise) {
+            _ctx->update_account(a, std::move(promise));
         };
     }
 
@@ -302,10 +312,9 @@ public:  //context API
      * @note you don't need to update instrument often.
      */
 
-    Awaitable<void> update_instrument(const Instrument &i)  {
-        _ctx->update_instrument(i);
-        return [this, i](auto &&cb){
-            _update_instrument_cbs[i].emplace_back(std::move(cb));
+    MT_UNSAFE Awaitable<void> update_instrument(const Instrument &i)  {
+        return [&i,this](auto &&promise) {
+            _ctx->update_instrument(i, std::move(promise));
         };
     }
 
@@ -316,7 +325,7 @@ public:  //context API
      * the function returns same value during processing the event, so don't
      * use it to measure time of calculations
      */
-    Timestamp get_event_time() const {return _ctx->get_event_time();}
+    MT_UNSAFE Timestamp get_event_time() const {return _ctx->get_event_time();}
 
     ///Sleep until specified time is reached
     /**
@@ -340,8 +349,8 @@ public:  //context API
      * co_await sleep_until(at, id);
      * @endcode
      */
-    Awaitable<void> wait_until(Timestamp at, TimerID id = 0) {
-        return [this, at, id](auto &&cb) {
+    MT_SAFE Awaitable<void> wait_until(Timestamp at, TimerID id = 0) {
+        return [=,this](auto &&cb) {
             _ctx->set_timer(at, [cb = std::move(cb)]{
                 cb(AsyncResult<void>(std::in_place));
             },id);
@@ -371,7 +380,7 @@ public:  //context API
      * @endcode
      */
     template<typename A, typename B>
-    Awaitable<void> wait_for(std::chrono::duration<A,B> dur, TimerID id = 0) {
+    MT_UNSAFE Awaitable<void> wait_for(std::chrono::duration<A,B> dur, TimerID id = 0) {
         return wait_until(get_event_time()+dur, id);
     }
 
@@ -385,7 +394,7 @@ public:  //context API
      * sleep operation is co_awaited, then an AsyncCallException is thrown inside in
      * coroutine (coroutine is finished during this call)
      */
-    bool interrupt_wait(TimerID id) {return _ctx->clear_timer(id);}
+    MT_UNSAFE bool interrupt_wait(TimerID id) {return _ctx->clear_timer(id);}
     ///Place an order
     /**
      * @param account account used to trade the instrument
@@ -394,7 +403,7 @@ public:  //context API
      * @param label custom label (don't need to be unique). The label can be retrieves by get_label()
      * @return created order
      */
-    Order place_order(const Account &account, const Instrument &instrument, const Order::Setup &setup, std::string_view label = {}) {
+    MT_UNSAFE Order place_order(const Account &account, const Instrument &instrument, const Order::Setup &setup, std::string_view label = {}) {
         return _ctx->place(instrument, account, setup, label);
     }
 
@@ -410,7 +419,7 @@ public:  //context API
      *
      * @return dummy order (can be replaced)
      */
-    Order bind_order(const Account &account, const Instrument &instrument, std::string_view label) const {
+    MT_UNSAFE Order bind_order(const Account &account, const Instrument &instrument, std::string_view label) const {
         return _ctx->bind_order(instrument, account, label);
     }
 
@@ -422,7 +431,7 @@ public:  //context API
      * @note you cannot cancel associated or discarded order. You won't receive status
      * in this case
      */
-    void cancel_order(const Order &order) const {_ctx->cancel(order);}
+    MT_UNSAFE void cancel_order(const Order &order) const {_ctx->cancel(order);}
 
     ///Replace order
     /**
@@ -433,7 +442,7 @@ public:  //context API
      *
      * @return new order
      */
-    Order replace_order(const Order &order, const Order::Setup &setup, std::string_view label)  {
+    MT_UNSAFE Order replace_order(const Order &order, const Order::Setup &setup, std::string_view label)  {
         return _ctx->replace(order, setup, label.empty()?order.get_label():label);
     }
 
@@ -460,16 +469,10 @@ public:  //context API
      * their recent report and fills. The recent report is retrieved
      * through on_report()
      */
-    Awaitable<std::vector<Order> > active_orders() {
-        if (_orders_restored) {
-            return [&](auto &&promise) {
-                promise(AsyncResult<std::vector<Order> >());
-            };
-        } else {
-            return [&](auto &&promise) {
-                _restored_order_cbs.push_back(std::move(promise));
-            };
-        }
+    MT_UNSAFE Awaitable<std::span<Order> > on_restored_orders() {
+        return [this](auto &&promise) {
+            _ctx->on_orders_restored(std::move(promise));
+        };
     }
 
 
@@ -480,16 +483,13 @@ public:  //context API
      * Note this is one-shot action - only first report is received by callback, you
      * need to request report again. Result of co_await operation is fills. This
      * array can be empty, which means, that only status changed, without fills
-     * @note there can be only one awaiter per order. Multiple awaiters cancels each other
+     *
+     * @note on_order_report() is always called.
      */
-    Awaitable<Fills> on_report(const Order &order) {
-        if (order.done()) {
-            throw std::runtime_error("Order already done (order.done() == true)");
-        } else {
-            return [this, order](auto &&cb) {
-                _order_report[order].emplace_back(std::move(cb));
-            };
-        }
+    MT_UNSAFE Awaitable<std::span<Fill> > on_report(const Order &order) {
+        return [=,this](auto &&cb) {
+            _ctx->receive_order_report(order, std::move(cb));
+        };
     }
 
 
@@ -502,7 +502,7 @@ public:  //context API
      * @return list of fills, ordered descending in time (most recent fill is the first)
      * @note if called from on_fill, the recent fill won't be in the database yet
      */
-    Fills get_fills(std::size_t limit, std::string_view filter = {}) const {
+    MT_UNSAFE Fills get_fills(std::size_t limit, std::string_view filter = {}) const {
         return _ctx->get_fills(limit, filter);
     }
 
@@ -515,7 +515,7 @@ public:  //context API
      * @return list of fills, ordered descending in time (most recent fill is the first)
      * @note if called from on_fill, the recent fill won't be in the database yet
      */
-    Fills get_fills(Timestamp tp, std::string_view filter = {}) const {
+    MT_UNSAFE Fills get_fills(Timestamp tp, std::string_view filter = {}) const {
         return _ctx->get_fills(tp, filter);
     }
 
@@ -531,7 +531,7 @@ public:  //context API
      * @note if there are a lot of fills in the databse,
      *       this function can a take noticable time to process
      */
-    Positions get_opened_positions(std::string_view filter = {}) const {
+    MT_UNSAFE Positions get_opened_positions(std::string_view filter = {}) const {
         return _ctx->load_positions(filter);
     }
     ///Retrieve closed postions from the databse
@@ -547,7 +547,7 @@ public:  //context API
      *       this function can a take noticable time to process. The limit and filter
      *       won't to speed up the operation (both acts as HAVING key in SQL query)
      */
-    Trades get_closed_positions(Timestamp limit, std::string_view filter = {}) const {
+    MT_UNSAFE Trades get_closed_positions(Timestamp limit, std::string_view filter = {}) const {
         return _ctx->load_closed(limit, filter);
     }
 
@@ -562,7 +562,7 @@ public:  //context API
      * change in the strategy state, for example after fill.
      *
      */
-    void allocate_equity(const Account &a, double equity) {
+    MT_UNSAFE void allocate_equity(const Account &a, double equity) {
          _ctx->allocate(a, equity);
     }
 
@@ -574,7 +574,7 @@ public:  //context API
      * market events are passed through on_market_event. You can one-shot wait on
      * specific market event by function receive_event()
      */
-    void subscribe(MarketEventType type, const Instrument &i) {
+    MT_UNSAFE void subscribe(MarketEventType type, const Instrument &i) {
         _ctx->subscribe(type, i);
     }
 
@@ -588,20 +588,18 @@ public:  //context API
      * @note your strategy doesn't need to call unsubscribe in the destructor.
      *
      */
-    void unsubscribe(MarketEventType type, const Instrument &i) {
+    MT_UNSAFE void unsubscribe(MarketEventType type, const Instrument &i) {
         _ctx->unsubscribe(type, i);
     }
 
 
     ///Awaitable to receive next market event
     /**
-     * @return awaitable, which returns pair, containing instrument and market event.
-     * This function is introduced to help write strategies as coroutines.
-     * You can call receive_event multiple times, all awaiters will receive the next event
+     * @return awaitable, which returns MarketEvent
      */
-    Awaitable<std::pair<Instrument, MarketEvent> > receive_event() {
+    MT_UNSAFE Awaitable<MarketEvent> receive_event() {
         return [this](auto &&cb) {
-            _receive_market_event_cbs.emplace_back(std::move(cb));
+            _ctx->on_market_event(std::move(cb));
         };
     }
 
@@ -645,17 +643,16 @@ public:  //context API
      * }
      * @endcode
      */
-    Awaitable<MarketEvent> update_market(MarketEventType type, const Instrument &i) {
-        _ctx->update_market(i, type);
-        return [this, i, type](auto &&cb) {
-            _update_market_cbs[InstSubPair(i, type)].emplace_back(std::move(cb));
+    MT_UNSAFE Awaitable<MarketEventData> update_market(MarketEventType type, const Instrument &i) {
+        return [this, type, &i](auto &&promise) {
+            _ctx->update_market(i, type, std::move(promise));
         };
     }
 
 
 
     ///Retrieve logger object (for logging and output)
-    Log get_logger() {return _ctx->get_logger();}
+    MT_SAFE Log get_logger() {return _ctx->get_logger();}
 
     ///Subscribe MQ channel
     /**
@@ -665,7 +662,7 @@ public:  //context API
      *
      * @param channel channel name. Name can't be empty string
      */
-    void subscribe_channel(std::string_view channel) {
+    MT_UNSAFE void subscribe_channel(std::string_view channel) {
         _ctx->mq_subscribe_channel(channel);
     }
 
@@ -673,7 +670,7 @@ public:  //context API
     /**
      * @param channel channel to unsubscribe
      */
-    void unsubscribe_channel(std::string_view channel) {
+    MT_UNSAFE void unsubscribe_channel(std::string_view channel) {
         _ctx->mq_unsubscribe_channel(channel);
     }
 
@@ -686,7 +683,7 @@ public:  //context API
      *
      * @note there is no way how to find out whether the message was delivered
      */
-    void send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid = 0) {
+    MT_UNSAFE void send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid = 0) {
         _ctx->mq_send_message(channel, msg, cid);
     }
 
@@ -697,7 +694,7 @@ public:  //context API
      *  All of them receives the very next message
      * @return awaitable object
      */
-    Awaitable<Message> receive_mq_message() {
+    MT_UNSAFE Awaitable<Message> receive_mq_message() {
         return [this](auto &&cb) {
             _receive_mq_msg.emplace_back(std::move(cb));
         };
@@ -716,34 +713,14 @@ public:  //context API
      * You can use `co_await on_idle()` in coroutine, if you need to retrieve latest
      * data. However, do not waste CPU time by calling this function in cycle
      *
-     */
-    Awaitable<void> on_idle() {
-        return [this](auto &&cb) {
-            _on_idle_cbs.push_back(std::move(cb));
-        };
-    }
-
-    ///Schedule operation on idle cycle after next event
-    /**
-     * This schedules operation to be executed in idle cycle after next event.
-     *  - event : on_idle(A)
-     *  - event : on_next_event(B)
-     *  - A is executed : on_idle(C), on_next_event(D)
-     *  - C is executed :
-     *  - event : on_idle(E)
-     *  - event : on_next_event(F)
-     *  - B is executed :
-     *  - E is executed :
-     *  - event
-     *  - F is executed :
+     * @note function is MT-Safe. If called from different thread, it is enqueued
+     * in first on idle event
      *
-     * @return awaitable. You can co_await or attach a callback
      */
-    Awaitable<void> on_next_event() {
+    MT_SAFE Awaitable<void> on_idle() {
         return [this](auto &&cb) {
-            _on_next_event_cbs.push_back(std::move(cb));
+            _ctx->on_idle(std::move(cb));
         };
-
     }
 
     ///Get extension service
@@ -766,7 +743,7 @@ public:  //context API
      * @endcode
      */
     template<typename T>
-    T get_service() {
+    MT_UNSAFE T get_service() {
         return _ctx->get_service<T>();
     }
 
@@ -778,7 +755,7 @@ public:  //context API
      *
      * @see Series
      */
-    std::uint64_t series_add_point(std::string_view series_name, std::string_view point_data) {
+    MT_UNSAFE std::uint64_t series_add_point(std::string_view series_name, std::string_view point_data) {
         return _ctx->series_add_point(series_name, point_data);
     }
 
@@ -789,7 +766,7 @@ public:  //context API
      *
      * @see Series
      */
-    void series_erase_points(std::string_view series_name, std::uint64_t index_and_less) {
+    MT_UNSAFE void series_erase_points(std::string_view series_name, std::uint64_t index_and_less) {
         _ctx->series_erase_points(series_name, index_and_less);
     }
 
@@ -801,7 +778,7 @@ public:  //context API
      *
      * @see Series
      */
-    virtual ValueStream<std::string_view> load_series(std::string_view name) const {
+    MT_UNSAFE virtual ValueStream<std::string_view> load_series(std::string_view name) const {
         return _ctx->load_series(name);
     }
 
@@ -820,17 +797,8 @@ public:  //context API
      * before stop()
      */
 
-    void stop() {
-        _update_account_cbs.clear();
-        _update_instrument_cbs.clear();
-        _update_market_cbs.clear();
-        _on_idle_cbs.clear();
-        _on_next_event_cbs.clear();
-        _receive_market_event_cbs.clear();
-        _order_report.clear();
+    MT_UNSAFE void stop() {
         _receive_mq_msg.clear();
-        _restored_order_cbs.clear();
-        _stop_cb = {};
         _ctx->stop();
     }
 
@@ -839,7 +807,7 @@ public:  //context API
      * @retval false normal operation
      * @retval true stop has been requested
      */
-    bool is_stop_requested() const {
+    MT_UNSAFE bool is_stop_requested() const {
         return _ctx->is_stop_requested();
     }
 
@@ -850,11 +818,15 @@ public:  //context API
      * is settled. If no such callback/coroutine is defined, the strategy
      * is stopped immediately on the request
      *
-     * @return awaitable to attach a callback or co_await in coroutine.
+     * @code
+     * on_stop_requested() >> [&]{
+     *      //handle operation
+     * }
+     * @endcode
      */
-    Awaitable<void> stop_request() {
-        return [&](auto &&promise) {
-            _stop_cb = std::move(promise);
+    MT_UNSAFE Awaitable<void> on_stop_requested() {
+        return [this](auto &&promise) {
+            _ctx->on_stop_requested(std::move(promise));
         };
     }
 
@@ -866,134 +838,46 @@ protected: //optional overrides
      * @param ev market event
      * @note you need to call the original implementation in order to call all registered callbacks
      */
-    virtual void on_market_event(const Instrument i, MarketEvent ev) override {
-        invoke_callbacks(_receive_market_event_cbs, std::pair<Instrument,MarketEvent>(std::move(i), ev));
-    }
+    MT_UNSAFE virtual void on_market_event(const MarketEvent &) override {}
     ///Called when a change of order status occurs
     /**
      * @param ord order reference
      * @note you need to call the original implementation in order to call all registered callbacks
      */
-    virtual void on_order_report(const Order ord, std::vector<Fill> fills) override {
-        auto iter = _order_report.find(ord);
-            if (iter != _order_report.end() && invoke_callbacks(iter->second, std::move(fills))) {
-        }
-    }
+    MT_UNSAFE virtual void on_order_report(Order , std::span<Fill> ) override {}
     ///It is called when an MQ message arrives on the subscribed channel or in the private mailbox
     /**
      * @param msg MQ message
      * @note you need to call the original implementation in order to call all registered callbacks
      */
-    virtual void on_mq_message(const Message &msg) override {
+    MT_UNSAFE virtual void on_mq_message(const Message &msg) override {
         invoke_callbacks(_receive_mq_msg, msg);
     };
-    ///Called when there are no events
-    /**
-     * @note you need to call the original implementation in order to call all registered callbacks
-     *
-     */
-    virtual bool on_context_idle() override {
-        //any idle?
-        if (!_on_idle_cbs.empty()) {
-            //retrieve front and execute it
-            _on_idle_cbs.front()(true);
-            //pop it
-            _on_idle_cbs.pop_front();
-            //indicate that we are not complete
-            return false;
-        } else {
-            //no more idle
-            //prepare on_next_event callbacks to be scheduled on next on_idle
-            std::swap(_on_idle_cbs, _on_next_event_cbs);
-            //indicate completion, so new idle list won't be called
-            return true;
-        }
-    }
-    ///
-    /**
-     * @param a account updated
-     * @param status update status
-     *
-     * @note you need to call the original implementation in order to call all registered callbacks
-     *
-     */
-    virtual void on_update_complete(const Account &a, AsyncResult<void> result) override {
-        auto iter = _update_account_cbs.find(a);
-        if (iter != _update_account_cbs.end() && invoke_callbacks(iter->second,std::move(result))) {
-            _update_account_cbs.erase(iter);
-        }
-    }
-    /**
-     * @param i instrument updated
-     * @param status update status
-     *
-     * @note you need to call the original implementation in order to call all registered callbacks
-     *
-     */
-    virtual void on_update_complete(const Instrument &i, AsyncResult<void> result) override {
-        auto iter = _update_instrument_cbs.find(i);
-        if (iter != _update_instrument_cbs.end() && invoke_callbacks(iter->second,std::move(result))) {
-            _update_instrument_cbs.erase(iter);
-        }
-    }
 
-    virtual void on_update_complete(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> result) override {
-        auto iter = _update_market_cbs.find(InstSubPair(i, type));
-        if (iter != _update_market_cbs.end() && invoke_callbacks(iter->second,std::move(result))) {
-            _update_market_cbs.erase(iter);
-        }
-    }
-
-    virtual void on_start() override {
-        while (!on_context_idle()) {}
+    MT_UNSAFE virtual void on_start() override {
+        invoke_callbacks(_start_cbs, AsyncResult<void>());
         _started = true;
         main();
     }
 
-    virtual void on_active_orders(ActiveOrders orders) override {
-        invoke_callbacks(_restored_order_cbs, AsyncResult<std::vector<Order> >(std::move(orders)));
-        _orders_restored = true;
-    }
 
-    virtual void on_stop_requested() override {
-        if (_stop_cb) {
-            _stop_cb(AsyncResult<void>());
-        } else {
-            _ctx->stop();
-        }
-    }
 
 protected:
-    Log log;
+    MT_UNSAFE Log log;
 
 private:
     IContext *_ctx = nullptr;
 
-    using InstSubPair = std::pair<Instrument, MarketEventType>;
-    struct InstSubPairHasher {
-        std::size_t operator()(const InstSubPair &p) const {
-            return Instrument::Hasher()(p.first);
-        }
-    };
 
     virtual void on_init(IContext *ctx) override {
         _ctx = ctx;
         log = _ctx->get_logger();
     }
 
-    std::unordered_map<Account, CallbackList<void>, Account::Hasher> _update_account_cbs;
-    std::unordered_map<Instrument, CallbackList<void>,Instrument::Hasher> _update_instrument_cbs;
-    std::unordered_map<InstSubPair, CallbackList<MarketEvent>,InstSubPairHasher> _update_market_cbs;
-    std::unordered_map<Order, CallbackList<Fills>,Order::Hasher> _order_report;
-    CallbackList<void>  _on_idle_cbs;
-    CallbackList<void>  _on_next_event_cbs;
-    CallbackList<std::pair<Instrument,MarketEvent> > _receive_market_event_cbs;
+    CallbackList<void>  _start_cbs;
     CallbackList<Message> _receive_mq_msg;
-    CallbackList<std::vector<Order> > _restored_order_cbs;
-    Callback<void> _stop_cb;
 
     bool _started = false;
-    bool _orders_restored = false;
 
     template<typename CBList, typename Result>
     bool invoke_callbacks(CBList &lst, Result res) {

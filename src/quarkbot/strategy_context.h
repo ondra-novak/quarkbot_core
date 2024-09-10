@@ -9,9 +9,11 @@
 #include "market_event.h"
 #include "mq.h"
 #include "serialize.h"
-#include <span>
 #include "service.h"
 #include "variables.h"
+
+#include <span>
+#include <deque>
 
 namespace quarkbot {
 
@@ -22,13 +24,21 @@ namespace quarkbot {
 class IContext : public IService{
 public:
 
+
+
     virtual ~IContext() = default;
 
     ///request update account
-    virtual void update_account(const Account &a) = 0;
+    virtual void update_account(const Account &a, Function<void(AsyncResult<void>)> &&cb) = 0;
 
     ///request update instrument
-    virtual void update_instrument(const Instrument &i) = 0;
+    virtual void update_instrument(const Instrument &i, Function<void(AsyncResult<void>)> &&cb) = 0;
+
+    ///retrieve one shot market event
+    virtual void update_market(const Instrument &i, MarketEventType type, Function<void(AsyncResult<MarketEventData>)> &&cb) = 0;
+
+    ///await for order report and calls function when report is ready
+    virtual void receive_order_report(const Order &order, Function<void(AsyncResult<std::span<Fill>  >)> &&cb) = 0;
 
     virtual std::span<const Account> get_accounts() const = 0;
 
@@ -80,8 +90,6 @@ public:
 
     virtual VarSet<std::string_view> get_vars(std::string_view start, std::string_view end) const = 0;
 
-
-
     ///Deletes persistently stored variable
     /**
      * @param var_name name of variable.
@@ -105,8 +113,6 @@ public:
     virtual void mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) = 0;
 
 
-    ///retrieve one shot market event
-    virtual void update_market(const Instrument &i, MarketEventType type) = 0;
 
 
     virtual Log get_logger() const = 0;
@@ -137,6 +143,12 @@ public:
     virtual ValueStream<std::string_view> load_series(std::string_view name) const = 0;
 
 
+    virtual void on_idle(Function<void(AsyncResult<void> )> &&fn) = 0;
+
+
+    virtual void on_market_event(Function<void(AsyncResult<MarketEvent>)> &&callback) = 0;
+
+    virtual void on_orders_restored(Function<void(AsyncResult<std::span<Order> >)> &&callback) = 0;
     ///stops the strategy
     /**
      * Causes that strategy is stopped. No more events can be generated,
@@ -152,6 +164,16 @@ public:
      */
     virtual void stop() = 0;
 
+    ///Defines a function which is called when stop is requested
+    /**
+     * If this function is not defined, the strategy is stopped immediately
+     * on the stop request. You can handle this situation by suppling
+     * own function. This function should eventually call stop()
+     *
+     * @param fn function which handles stop request. Note there can be
+     * only one handler.
+     */
+    virtual void on_stop_requested(Function<void(AsyncResult<void>)> &&fn) = 0;
     ///returns true, if stop has been requested
     /**
      * @retval false normal operation

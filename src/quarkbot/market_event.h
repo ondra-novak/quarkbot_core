@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 #include "wrapper.h"
+#include "instrument.h"
 #include <optional>
 #include <typeinfo>
 
@@ -47,9 +48,9 @@ inline constexpr bool can_collapse(MarketEventType e) {
 }
 
 ///Contains abstract interface for market event
-class IMarketEvent {
+class IMarketEventData {
 public:
-    virtual ~IMarketEvent() = default;
+    virtual ~IMarketEventData() = default;
     ///Retrieve value directly
     /**
      * @param type type of target variable
@@ -88,7 +89,7 @@ public:
 };
 
 ///Contains undefined market event
-class IMarketEvent::Null: public IMarketEvent {
+class IMarketEventData::Null: public IMarketEventData {
 public:
     virtual bool retrieve_value(const std::type_info &, void *, std::size_t ) const override {return false;};
     virtual void retrieve_optional(const std::type_info &, void *, std::size_t ) const override {};
@@ -100,9 +101,9 @@ public:
 /**
  * This class handles an access to a market event. It can hold any market event type and its data.
  */
-class MarketEvent: public Wrapper<IMarketEvent> {
+class MarketEventData: public Wrapper<IMarketEventData> {
 public:
-    using Wrapper<IMarketEvent>::Wrapper;
+    using Wrapper<IMarketEventData>::Wrapper;
 
     ///Store market event into a variable
     /**
@@ -149,7 +150,7 @@ public:
 
 
     ///Dump content of the market event (for debugging purpose)
-    friend std::ostream &operator<<(std::ostream &s, const MarketEvent &ev) {
+    friend std::ostream &operator<<(std::ostream &s, const MarketEventData &ev) {
         ev._ptr->dump(s);
         return s;
     }
@@ -172,7 +173,7 @@ public:
  * you should specify std::mutex
  */
 template<typename T, typename Lock = NoLock>
-class MarketEventHolder: public IMarketEvent {
+class MarketEventHolder: public IMarketEventData {
 public:
     ///construct initial instance
     template<typename ... Args> requires(std::is_constructible_v<T, Args...>)
@@ -234,6 +235,15 @@ public:
 protected:
     [[no_unique_address]] mutable Lock _mx;
     T _val;
+};
+
+struct MarketEvent {
+    ///contains associated instrument
+    Instrument instrument;
+    ///contains type of market event
+    MarketEventType type;
+    ///contains associated data
+    MarketEventData data;
 };
 
 }

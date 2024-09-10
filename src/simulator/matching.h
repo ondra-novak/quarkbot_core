@@ -1,7 +1,7 @@
 #pragma once
 
-#include <quarkbot/exchange.h>
 #include <quarkbot/market_event_factory.h>
+#include <quarkbot/exchange.h>
 #include <quarkbot/orderbook.h>
 #include <optional>
 namespace quarkbot {
@@ -177,7 +177,7 @@ public:
     ///Calculates price for conversion ratio etc.
     Decimal get_effective_price() const;
 
-    MarketEvent get_ticker(Timestamp curTime) const;
+    MarketEventData get_ticker(Timestamp curTime) const;
     void accept_ticker(const TickData &tk);
 
 protected:

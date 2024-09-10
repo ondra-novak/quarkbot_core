@@ -249,13 +249,13 @@ protected:
     bool _processing_queue = false;
 
 
-    virtual bool income_data(const Instrument &i, MarketEventType type, const MarketEvent &t) override;
+    virtual bool income_data(const MarketEvent &event) override;
     ///call this function when account is updated
     virtual void object_updated(const Account &i, AsyncResult<void> st) override;
     ///call this function when instrument is updated
     virtual void object_updated(const Instrument &i, AsyncResult<void> st) override;
 
-    virtual void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEvent> ev) override;
+    virtual void object_updated(const Instrument &i, MarketEventType type, AsyncResult<MarketEventData> ev) override;
 
 
     virtual void order_report(const Order &order, Order::Report report) override;
