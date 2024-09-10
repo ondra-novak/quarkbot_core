@@ -10,6 +10,20 @@
 namespace quarkbot {
 
 
+BasicContext::BasicContext(std::unique_ptr<IStorage> storage,
+        IControl &control,
+        Log logger,
+        MQBroker mq,
+        std::string_view strategy_name)
+    :_control(control)
+    ,_storage(std::move(storage))
+    ,_logger(std::move(logger), "{}", strategy_name)
+    ,_mq(mq)
+    ,_name(strategy_name)
+{
+    _control.attach(this);
+}
+
 
 BasicContext::~BasicContext() {
     stop_internal();
@@ -157,7 +171,7 @@ void BasicContext::on_update(Instrument i, MarketEventType type, AsyncResult<Mar
 void BasicContext::notify_queue() {
     if (_in_scheduler) return;
     Timestamp tp = _queue.get_nearest_schedule();
-    _scheduler(tp,[this](auto tp){on_scheduled(tp);}, this);
+    _control.schedule(tp);
 }
 
 
@@ -232,8 +246,7 @@ Order BasicContext::bind_order(const Instrument &instrument, const Account &acco
 
 void BasicContext::update_account(const Account &a, Function<void(AsyncResult<void>)> &&cb) {
     auto &cbs = _update_account_cbs[a];
-    cbs.push_back(std::move(cb));
-    if (cbs.size() == 1) {
+    if (cbs.register_callback(std::move(cb))) {
         BasicExchangeContext &e = BasicExchangeContext::from_exchange(a.get_exchange());
         e.update_account(this, a);
     }
@@ -254,8 +267,7 @@ bool BasicContext::clear_timer(TimerID id) {
 
 void BasicContext::update_instrument(const Instrument &i, Function<void(AsyncResult<void>)> &&cb) {
     auto &cbs = _update_instrument_cbs[i];
-    cbs.push_back(std::move(cb));
-    if (cbs.size() == 1) {
+    if (cbs.register_callback(std::move(cb))) {
         BasicExchangeContext &e = BasicExchangeContext::from_exchange(i.get_exchange());
         e.update_instrument(this, i);
     }
@@ -307,10 +319,7 @@ void BasicContext::set_var(std::string_view var_name, std::string_view value) {
 void BasicContext::EvUpdateInstrument::operator ()() {
     auto iter = me->_update_instrument_cbs.find(i);
     if (iter != me->_update_instrument_cbs.end()) {
-        while (!iter->second.empty()) {
-            iter->second.front()(st);
-            iter->second.pop_front();
-        }
+        iter->second.send(st);
         me->_update_instrument_cbs.erase(iter);
     }
 }
@@ -318,10 +327,7 @@ void BasicContext::EvUpdateInstrument::operator ()() {
 void BasicContext::EvUpdateAccount::operator ()() {
     auto iter = me->_update_account_cbs.find(a);
     if (iter != me->_update_account_cbs.end()) {
-        while (!iter->second.empty()) {
-            iter->second.front()(st);
-            iter->second.pop_front();
-        }
+        iter->second.send(st);
         me->_update_account_cbs.erase(iter);
     }
 }
@@ -329,19 +335,13 @@ void BasicContext::EvUpdateAccount::operator ()() {
 void BasicContext::EvUpdateMarket::operator ()() {
     auto iter = me->_update_market_cbs.find({i,type});
     if (iter != me->_update_market_cbs.end()) {
-        while (!iter->second.empty()) {
-            iter->second.front()(ev);
-            iter->second.pop_front();
-        }
+        iter->second.send(ev);
         me->_update_market_cbs.erase(iter);
     }
 }
 
 void BasicContext::EvMarketEventItem::operator ()() {
-    for (std::size_t i = 0, cnt = me->_on_market_event_cbs.size(); i < cnt; ++i) {
-        me->_on_market_event_cbs.front()(event);
-        me->_on_market_event_cbs.pop_front();
-    }
+    me->_on_market_event_cbs.send(event);
     me->_strategy->on_market_event(event);
 }
 
@@ -377,6 +377,7 @@ void BasicContext::call_strategy(Fn &&strategy_fn) {
         } catch (...) {
             _storage->rollback();
             _logger.fatal("Unhandled exception in strategy{}", std::current_exception());
+            _control.notify_fail();
             return;
         }
     }
@@ -397,10 +398,19 @@ void BasicContext::request_stop()  noexcept {
 void BasicContext::stop_internal() {
     _queue.clear();
     _mq.unsubscribe_all(this);
-    _scheduler(Timestamp{}, [](auto){}, this);
     for (const auto &[e,_]: _exchanges) {
         BasicExchangeContext::from_exchange(e).disconnect(this);
     }
+    _update_account_cbs.clear();
+    _update_instrument_cbs.clear();
+    _update_market_cbs.clear();
+    _order_report.clear();
+    _on_idle_cbs.clear();
+    _on_market_event_cbs.clear();
+    _on_restored_orders_cbs.clear();
+    _on_mq_message.clear();
+    _on_stop_cb = {};
+    _control.notify_exit();
 
 }
 
@@ -441,12 +451,12 @@ void BasicContext::on_scheduled(Timestamp tp) noexcept {
         }
     }
     _in_scheduler = false;
-    _scheduler(next_ev, [this](auto tp){on_scheduled(tp);}, this);
+    _control.schedule(next_ev);
 }
 
 
 void BasicContext::EvMQ::operator()() {
-    me->_strategy->on_mq_message(std::move(msg));
+    me->_on_mq_message.send(std::move(msg));
 }
 void BasicContext::on_message(MQClient::Message message) {
     std::lock_guard _(_queue_mx);
@@ -471,8 +481,7 @@ void BasicContext::mq_send_message(std::string_view channel, std::string_view ms
 void BasicContext::update_market(const Instrument &i, MarketEventType type, Function<void(AsyncResult<MarketEventData>)> &&cb)
 {
    auto &cbs = _update_market_cbs[{i,type}];
-   cbs.push_back(std::move(cb));
-   if (cbs.size() == 1) {
+   if (cbs.register_callback(std::move(cb))) {
        BasicExchangeContext::from_exchange(i.get_exchange())
                        .update_market(this, i, type);
    }
@@ -491,11 +500,7 @@ void BasicContext::EvStart::operator ()() {
 }
 
 void BasicContext::EvRestoreOrders::operator ()() {
-    std::span spanv(orders.begin(), orders.end());
-    while (!me->_on_restored_orders_cbs.empty()) {
-        me->_on_restored_orders_cbs.front()(spanv);
-        me->_on_restored_orders_cbs.pop_front();
-    }
+    while (!me->_on_restored_orders_cbs.send(std::span(orders.begin(), orders.end())));
     me->_orders_restored = true;
 
 }
@@ -513,10 +518,7 @@ void BasicContext::EvOrderReport::operator ()() {
     auto iter = me->_order_report.find(order);
     if (iter != me->_order_report.end()) {
         auto &cbs = iter->second;
-        for (std::size_t i = 0, sz = cbs.size(); i < sz; ++i) {
-            cbs.front()(AsyncResult(fillspan));
-            cbs.pop_front();
-        }
+        cbs.send(fillspan);
         if (order.done()) me->_order_report.erase(iter);
     }
     me->_strategy->on_order_report(std::move(order), fillspan);
@@ -556,13 +558,13 @@ void BasicContext::on_idle(Function<void(AsyncResult<void> )> &&fn) {
     std::lock_guard _(_queue_mx);
     _on_idle_cbs.push_back(std::move(fn));
     if (_in_scheduler) return;
-    _scheduler(Timestamp::min(), [this](auto tp){on_scheduled(tp);}, this);
+    _control.schedule(Timestamp::min());
 }
 
 void BasicContext::receive_order_report(const Order &order, Function<void(AsyncResult<std::span<Fill>  >)> &&cb)  {
     if (order.done()) return;
     auto &cbs = _order_report[order];
-    cbs.push_back(std::move(cb));
+    cbs.register_callback(std::move(cb));
 }
 
 void BasicContext::on_stop_requested(Function<void(AsyncResult<void>)> &&fn) {
@@ -570,14 +572,17 @@ void BasicContext::on_stop_requested(Function<void(AsyncResult<void>)> &&fn) {
 }
 
 void BasicContext::on_market_event(Function<void(AsyncResult<MarketEvent>)> &&callback) {
-    _on_market_event_cbs.push_back(std::move(callback));
+    _on_market_event_cbs.register_callback(std::move(callback));
 }
 void BasicContext::on_orders_restored(Function<void(AsyncResult<std::span<Order> >)> &&callback) {
     if (_orders_restored) {
         callback(std::in_place);
     } else {
-        _on_restored_orders_cbs.push_back(std::move(callback));
+        _on_restored_orders_cbs.register_callback(std::move(callback));
     }
+}
+void BasicContext::on_mq_message(Function<void(AsyncResult<IMQBroker::Message>)> &&callback) {
+    _on_mq_message.register_callback(std::move(callback));
 }
 
 }

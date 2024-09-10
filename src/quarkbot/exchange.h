@@ -105,6 +105,9 @@ public:
         _ctx->clear_timer(id);
     }
 
+    void stop() {
+        _ctx->stop();
+    }
 
 protected:
     IExchangeContext *_ctx = {};

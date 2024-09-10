@@ -107,11 +107,13 @@ void load_strategies(StructuredIni::Section strategy_cfg,
         auto report = std::make_unique<ReportLDJsonToStream<> >(std::move(storage),
                 std::string(name), std::cout);
 
+        auto control = scheduler.new_control_for_strategy();
         auto context = std::make_shared<BasicContext>(std::move(report),
-                                    scheduler.get_instance_for_strategy(),
+                                    *control,
                                     logger,
                                     mq_broker,
                                     name);
+        scheduler.add(std::move(control));
         auto strategy = modules.create_strategy(name);
         if (!strategy) {
             throw std::runtime_error("Strategy '"+std::string(name) + "' wasn't found (missing module at command line?)");
@@ -143,15 +145,14 @@ int main(int argc, char **argv) {
         auto inicfg = load_config(cfgfname);
         auto cfg = Config(std::make_shared<BasicConfig>(inicfg));
 
-        bool replay_done = false;
 
         SimScheduler scheduler;
         auto logservice = std::make_shared<BasicLog>(std::cerr, ILog::Serverity::debug);
+        auto control = scheduler.new_control_for_exchange();
         auto context = std::make_shared<BasicExchangeContext>("simulator",
-                scheduler.get_instance_for_exchange(), Network(), Log(logservice));
-        context->init(std::make_unique<SimExchange>([&]{
-                        replay_done = true;
-                    }), cfg["simulator"]);
+                                            *control, Network(), Log(logservice));
+        scheduler.add(std::move(control));
+        context->init(std::make_unique<SimExchange>(), cfg["simulator"]);
 
         AccountInstrumentMap aimap;
         auto mq = std::make_shared<BasicMQ>();
@@ -167,7 +168,6 @@ int main(int argc, char **argv) {
         while (scheduler.is_next()) {
             std::cout << "Timestamp: " << scheduler.get_next_time() << std::endl;
             scheduler.go_next();
-            if (replay_done) break;
         }
 
 

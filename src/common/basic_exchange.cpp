@@ -3,12 +3,14 @@
 namespace quarkbot {
 
 BasicExchangeContext::BasicExchangeContext(std::string label,
-        GlobalScheduler gscheduler,
+        IControl &control,
         Network ntw, Log log)
             :_label(std::move(label))
-            ,_scheduler(std::move(gscheduler))
+            ,_control(control)
             ,_ntw(std::move(ntw))
-            ,_log(std::move(log),"ex/{}",_label) {}
+            ,_log(std::move(log),"ex/{}",_label) {
+    _control.attach(this);
+}
 
 void BasicExchangeContext::init(std::unique_ptr<IExchange> svc, Config configuration) {
     this->_ptr = std::move(svc);
@@ -233,10 +235,19 @@ void BasicExchangeContext::set_timer(Timestamp at, TimerCallback fnptr, TimerID 
         notify_queue();
 }
 
+void BasicExchangeContext::on_stop_requested(Function<void()> &&cb) {
+    _request_stop_cb = std::move(cb);
+}
+
+void BasicExchangeContext::stop() {
+    _is_stopped = true;
+    _control.notify_exit();
+}
+
 void BasicExchangeContext::notify_queue() {
     if (_processing_queue) return;
     Timestamp tp = _queue.get_nearest_schedule();
-    _scheduler(tp,[this](auto tp){on_scheduler(tp);}, this);
+    _control.schedule(tp);
 }
 
 bool BasicExchangeContext::clear_timer(quarkbot::TimerID id) {
@@ -244,17 +255,34 @@ bool BasicExchangeContext::clear_timer(quarkbot::TimerID id) {
     return _queue.cancel(id);
 }
 
-void BasicExchangeContext::on_scheduler(Timestamp tp) {
+void BasicExchangeContext::on_scheduled(Timestamp tp) noexcept {
     std::unique_lock lk(_queue_mx);
     _processing_queue = true;
     while (_queue.process_message(tp, [&](TimerCallback &&cb){
         lk.unlock();
-        cb(tp);
+        try {
+            cb(tp);
+        } catch (...) {
+            _control.notify_fail();
+            return false;
+        }
         lk.lock();
         return true;
     }));
     _processing_queue = false;
     notify_queue();
+}
+
+bool BasicExchangeContext::is_stopped() const noexcept {
+    return _is_stopped;
+}
+
+void BasicExchangeContext::request_stop() noexcept {
+    if (_request_stop_cb) {
+        _request_stop_cb();
+    } else {
+        stop();
+    }
 }
 
 }

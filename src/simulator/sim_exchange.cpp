@@ -17,8 +17,6 @@ ConfigSchema SimExchange::get_api_key_config_schema() const {
     return {};
 }
 
-SimExchange::SimExchange(Function<void()> done_cb)
-    :_done_cb(std::move(done_cb)) {}
 
 void SimExchange::load_credentials(const Config &, std::string_view , Function<void(ExchangeCredentials)> result) {
     ExchangeCredentials cred(std::make_shared<IExchangeCredentials::Null>());
@@ -423,7 +421,7 @@ void SimExchange::run_replay(R replay) {
     const Replay::Data * item = (*replay)();
     if (item == nullptr) {
         --_replay_count;
-        if (_replay_count == 0) _done_cb();
+        if (_replay_count == 0) stop();
         return;
     }
 
@@ -490,7 +488,7 @@ void SimExchange::on_start() {
 
      --_replay_count;
 
-     if (_replay_count == 0) _done_cb();
+     if (_replay_count == 0) stop();
 }
 
 }

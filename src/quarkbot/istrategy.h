@@ -53,11 +53,6 @@ public:
      */
     virtual void on_order_report(Order ord, std::span<Fill> fills) = 0;
 
-    ///called when MQ message is received
-    /**
-     * To gain access to MQ, use IContext::get_mq_client()
-     */
-    virtual void on_mq_message(const Message &) = 0;
     ///called when unhandled exception is detected anywhere in the strategy code
     /**
      * This function is called even if the unhandled exception happened in

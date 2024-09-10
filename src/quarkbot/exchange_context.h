@@ -54,6 +54,9 @@ public:
 
     virtual bool clear_timer(TimerID id) = 0;
 
+    virtual void on_stop_requested(Function<void()> &&cb) = 0;
+
+    virtual void stop() = 0;
 
 
 };

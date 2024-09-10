@@ -3,6 +3,7 @@
 #include "event_target.h"
 #include "small_set.h"
 #include "dispatcher.h"
+#include "icontrol.h"
 
 #include <quarkbot/strategy_context.h>
 #include <quarkbot/iexchange.h>
@@ -12,7 +13,10 @@
 
 namespace quarkbot {
 
-class BasicExchangeContext: public IExchangeContext, public IExchangeInfo, public std::enable_shared_from_this<BasicExchangeContext> {
+class BasicExchangeContext: public IExchangeContext,
+                            public IExchangeInfo,
+                            public IControlledEntity,
+                            public std::enable_shared_from_this<BasicExchangeContext> {
 public:
 
     using GlobalScheduler = Function<void(Timestamp,Function<void(Timestamp)>, const void *)>;
@@ -22,7 +26,7 @@ public:
 
 
     BasicExchangeContext(std::string label,
-            GlobalScheduler gscheduler,
+            IControl &control,
             Network ntw,
             Log log);
 
@@ -229,7 +233,7 @@ protected:
     mutable std::recursive_mutex _mx;
 
     std::string _label;
-    GlobalScheduler _scheduler;
+    IControl &_control;
     Network _ntw;
     Log _log;
     Config _cfg;
@@ -247,6 +251,9 @@ protected:
     std::mutex _queue_mx;
     DispatcherCore<TimerCallback> _queue;
     bool _processing_queue = false;
+    bool _is_stopped = false;
+    bool _stop_requested = false;
+    Function<void()> _request_stop_cb = {};
 
 
     virtual bool income_data(const MarketEvent &event) override;
@@ -267,8 +274,12 @@ private:
 
     std::unique_ptr<IExchange> _ptr;
 
-    void on_scheduler(Timestamp tp);
-    void notify_queue();
+    virtual void on_scheduled(Timestamp tp) noexcept override;
+    virtual bool is_stopped() const noexcept override;
+    virtual void request_stop() noexcept override;
+    virtual void on_stop_requested(Function<void()> &&cb) override;
+    virtual void stop() override;
+void notify_queue();
 
 
 };

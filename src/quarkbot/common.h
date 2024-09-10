@@ -8,6 +8,7 @@
 #include <variant>
 #include <memory>
 #include <tuple>
+#include <mutex>
 
 
 ///Entity is MT-safe, can be used from different thread

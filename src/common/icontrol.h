@@ -22,6 +22,8 @@ public:
 
 
     virtual ~IControl() = default;
+    ///attach controlled entity to control object
+    virtual void attach(IControlledEntity *ent) = 0;
     ///schedule associated entity to given timestamp
     virtual void schedule(Timestamp tp) = 0;
     ///notify that entity exited normally

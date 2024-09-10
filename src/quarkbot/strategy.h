@@ -2,6 +2,7 @@
 #include "istrategy.h"
 #include "awaiter.h"
 #include "coro_support.h"
+#include "signal.h"
 
 #include <queue>
 
@@ -696,7 +697,7 @@ public:  //context API
      */
     MT_UNSAFE Awaitable<Message> receive_mq_message() {
         return [this](auto &&cb) {
-            _receive_mq_msg.emplace_back(std::move(cb));
+            _ctx->on_mq_message(std::move(cb));
         };
     }
 
@@ -798,7 +799,6 @@ public:  //context API
      */
 
     MT_UNSAFE void stop() {
-        _receive_mq_msg.clear();
         _ctx->stop();
     }
 
@@ -845,17 +845,9 @@ protected: //optional overrides
      * @note you need to call the original implementation in order to call all registered callbacks
      */
     MT_UNSAFE virtual void on_order_report(Order , std::span<Fill> ) override {}
-    ///It is called when an MQ message arrives on the subscribed channel or in the private mailbox
-    /**
-     * @param msg MQ message
-     * @note you need to call the original implementation in order to call all registered callbacks
-     */
-    MT_UNSAFE virtual void on_mq_message(const Message &msg) override {
-        invoke_callbacks(_receive_mq_msg, msg);
-    };
 
     MT_UNSAFE virtual void on_start() override {
-        invoke_callbacks(_start_cbs, AsyncResult<void>());
+        while (!_start_cbs.send());
         _started = true;
         main();
     }
@@ -874,20 +866,9 @@ private:
         log = _ctx->get_logger();
     }
 
-    CallbackList<void>  _start_cbs;
-    CallbackList<Message> _receive_mq_msg;
+    Signaller<void>  _start_cbs;
 
     bool _started = false;
-
-    template<typename CBList, typename Result>
-    bool invoke_callbacks(CBList &lst, Result res) {
-        std::size_t cnt = lst.size();
-        for (std::size_t i = 0; i <cnt; ++i) {
-            lst.front()(res);
-            lst.pop_front();
-        }
-        return lst.empty();
-    }
 
 };
 

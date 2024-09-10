@@ -1,11 +1,13 @@
 #pragma once
 
 #include "common.h"
+#include "icontrol.h"
 #include "event_target.h"
 #include "dispatcher.h"
 #include "storage.h"
 #include "basic_exchange.h"
 #include "icontrol.h"
+#include <quarkbot/signal.h>
 
 
 #include <quarkbot/strategy.h>
@@ -29,17 +31,10 @@ public:
     using GlobalScheduler = Function<void(Timestamp,Function<void(Timestamp)>, const void *)>;
 
     BasicContext(std::unique_ptr<IStorage> storage,
-            GlobalScheduler gscheduler,
+            IControl &control,
             Log logger,
             MQBroker mq,
-            std::string_view strategy_name)
-        :_scheduler(std::move(gscheduler))
-        ,_storage(std::move(storage))
-        ,_logger(std::move(logger), "{}", strategy_name)
-        ,_mq(mq)
-        ,_name(strategy_name)
-    {
-    }
+            std::string_view strategy_name);
 
     BasicContext(const BasicContext &) = delete;
     BasicContext &operator=(const BasicContext &) = delete;
@@ -106,11 +101,12 @@ public:
     virtual void on_stop_requested(Function<void(AsyncResult<void>)> &&fn) override;
     virtual void on_market_event(Function<void(AsyncResult<MarketEvent>)> &&callback) override;
     virtual void on_orders_restored(Function<void(AsyncResult<std::span<Order> >)> &&callback) override;
+    virtual void on_mq_message(Function<void(AsyncResult<IMQBroker::Message>)> &&callback) override;
 
     virtual void stop() override;
 protected:
 
-    GlobalScheduler _scheduler;
+    IControl &_control;
     std::unique_ptr<IStorage> _storage;
     std::unique_ptr<IStrategy> _strategy;
     Log _logger;
@@ -230,13 +226,14 @@ protected:
     std::mutex _queue_mx;
     DispatcherCore<QueueItem, QueueItemHasher, QueueItemCompare> _queue;
     std::map<ExchangeInfo, Batches> _exchanges;
-    std::unordered_map<Account, CallbackList<void>, Account::Hasher> _update_account_cbs;
-    std::unordered_map<Instrument, CallbackList<void>,Instrument::Hasher> _update_instrument_cbs;
-    std::unordered_map<InstSubPair, CallbackList<MarketEventData>,InstSubPairHasher> _update_market_cbs;
-    std::unordered_map<Order, CallbackList<std::span<Fill> >,Order::Hasher> _order_report;
+    std::unordered_map<Account, Signaller<void>, Account::Hasher> _update_account_cbs;
+    std::unordered_map<Instrument, Signaller<void>,Instrument::Hasher> _update_instrument_cbs;
+    std::unordered_map<InstSubPair, Signaller<MarketEventData>,InstSubPairHasher> _update_market_cbs;
+    std::unordered_map<Order, Signaller<std::span<Fill> >,Order::Hasher> _order_report;
     CallbackList<void> _on_idle_cbs;
-    CallbackList<MarketEvent> _on_market_event_cbs;
-    CallbackList<std::span<Order> > _on_restored_orders_cbs;
+    Signaller<MarketEvent> _on_market_event_cbs;
+    Signaller<std::span<Order> > _on_restored_orders_cbs;
+    Signaller<IMQBroker::Message> _on_mq_message;
 
     Function<void(AsyncResult<void>)> _on_stop_cb;
 

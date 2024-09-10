@@ -9,7 +9,6 @@ namespace quarkbot {
 class SimExchange: public Exchange {
 public:
 
-    SimExchange(Function<void()> done_cb = []{});
 
     virtual ConfigSchema get_exchange_config_schema() const override;
     virtual ConfigSchema get_api_key_config_schema() const override;
@@ -49,7 +48,6 @@ protected:
 
     Timestamp _cur_sim_time;
     WeakObjectMap<SimInstrument> _instruments;
-    Function<void()> _done_cb;
     unsigned int _replay_count = 0;
     std::chrono::nanoseconds _sim_latency = {};
 

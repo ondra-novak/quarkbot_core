@@ -149,6 +149,8 @@ public:
     virtual void on_market_event(Function<void(AsyncResult<MarketEvent>)> &&callback) = 0;
 
     virtual void on_orders_restored(Function<void(AsyncResult<std::span<Order> >)> &&callback) = 0;
+
+    virtual void on_mq_message(Function<void(AsyncResult<IMQBroker::Message>)> &&callback) = 0;
     ///stops the strategy
     /**
      * Causes that strategy is stopped. No more events can be generated,
