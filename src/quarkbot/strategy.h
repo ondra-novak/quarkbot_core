@@ -13,6 +13,7 @@ class Strategy: public IStrategy {
 public:
 
     using Decimal = ::quarkbot::Decimal;
+    using Message = IContext::Message;
 
 
     ///Awaitable object
@@ -664,7 +665,7 @@ public:  //context API
      * @param channel channel name. Name can't be empty string
      */
     MT_UNSAFE void subscribe_channel(std::string_view channel) {
-        _ctx->mq_subscribe_channel(channel);
+        _ctx->subscribe_channel(channel);
     }
 
     ///Unsubscribe MQ channel
@@ -672,7 +673,7 @@ public:  //context API
      * @param channel channel to unsubscribe
      */
     MT_UNSAFE void unsubscribe_channel(std::string_view channel) {
-        _ctx->mq_unsubscribe_channel(channel);
+        _ctx->unsubscribe_channel(channel);
     }
 
     ///Send message to a channel
@@ -684,8 +685,8 @@ public:  //context API
      *
      * @note there is no way how to find out whether the message was delivered
      */
-    MT_UNSAFE void send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid = 0) {
-        _ctx->mq_send_message(channel, msg, cid);
+    MT_UNSAFE void send_message(std::string_view channel, std::string_view msg, std::uint32_t cid = 0) {
+        _ctx->send_message(channel, msg, cid);
     }
 
 
@@ -695,7 +696,7 @@ public:  //context API
      *  All of them receives the very next message
      * @return awaitable object
      */
-    MT_UNSAFE Awaitable<Message> receive_mq_message() {
+    MT_UNSAFE Awaitable<Message> receive_message() {
         return [this](auto &&cb) {
             _ctx->on_mq_message(std::move(cb));
         };

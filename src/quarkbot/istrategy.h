@@ -12,7 +12,6 @@ namespace quarkbot {
 class IStrategy {
 public:
 
-    using Message = IMQBroker::Message;
     using ActiveOrders = std::vector<Order>;
 
 

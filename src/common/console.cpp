@@ -7,7 +7,7 @@ namespace quarkbot {
 
 
 
-void ConsoleClient::on_message(quarkbot::IMQBroker::Message message) {
+void ConsoleClient::on_message(const quarkbot::IMQBroker::Message &message, bool ) noexcept {
     if (message.get_channel() == "stdout") {
         std::cout << "[" << message.get_sender() << "] " << message.get_content() << std::endl;
     } else if (message.get_channel().empty()) {
@@ -21,10 +21,10 @@ void ConsoleClient::on_message(quarkbot::IMQBroker::Message message) {
 }
 
 ConsoleClient::ConsoleClient(MQBroker broker, ReadLineConfig rlcfg)
-:ReadLine(std::move(rlcfg)),
- _client(broker, this)
+:ReadLine(std::move(rlcfg))
+,MQClient(broker)
 {
-    _client.subscribe("stdout");
+    subscribe("stdout");
 }
 
 void ConsoleClient::run(std::stop_token tkn) {
@@ -38,7 +38,7 @@ void ConsoleClient::worker(std::stop_token tkn) {
     });
     std::string line;
     while (this->read(line)) {
-        _client.send_message( "stdin", line);
+        this->send_message( "stdin", line);
     }
 }
 
@@ -52,7 +52,7 @@ bool ConsoleClient::onComplete(const char *wholeLine, std::size_t start,
         _cache.line = line;
         _cache.pos = pos;
         _cache.srl = ++_cur_srl;
-        _client.send_message( "stdin_hint",
+        this->send_message( "stdin_hint",
                 Interactive::HintRequestTuple::compose(_cache.srl, _cache.pos, _cache.line));
     }
     lk.unlock();

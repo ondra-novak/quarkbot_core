@@ -7,6 +7,8 @@
 #include "storage.h"
 #include "basic_exchange.h"
 #include "icontrol.h"
+#include "mq.h"
+
 #include <quarkbot/signal.h>
 
 
@@ -79,10 +81,10 @@ public:
     virtual std::span<const Account> get_accounts() const override;
     virtual std::span<const Instrument> get_instruments() const override;
     virtual const Config &get_config() const override;
-    virtual void on_message(MQClient::Message message) override;
-    virtual void mq_subscribe_channel(std::string_view channel) override;
-    virtual void mq_unsubscribe_channel(std::string_view channel) override;
-    virtual void mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) override;
+    virtual void on_message(const MQBroker::Message &message, bool pm) noexcept override;
+    virtual void subscribe_channel(std::string_view channel) override;
+    virtual void unsubscribe_channel(std::string_view channel) override;
+    virtual void send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) override;
     virtual void update_market(const Instrument &i, MarketEventType type, Function<void(AsyncResult<MarketEventData>)> &&cb) override;
     virtual Positions load_positions(std::string_view filter) const override;
     virtual Trades load_closed(Timestamp limit, std::string_view filter) const override;
@@ -101,7 +103,7 @@ public:
     virtual void on_stop_requested(Function<void(AsyncResult<void>)> &&fn) override;
     virtual void on_market_event(Function<void(AsyncResult<MarketEvent>)> &&callback) override;
     virtual void on_orders_restored(Function<void(AsyncResult<std::span<Order> >)> &&callback) override;
-    virtual void on_mq_message(Function<void(AsyncResult<IMQBroker::Message>)> &&callback) override;
+    virtual void on_mq_message(Function<void(AsyncResult<Message>)> &&callback) override;
 
     virtual void stop() override;
 protected:
@@ -184,6 +186,7 @@ protected:
     struct EvMQ {
         BasicContext *me;
         MQBroker::Message msg;
+        bool pm;
         void operator()();
     };
 
@@ -233,7 +236,7 @@ protected:
     CallbackList<void> _on_idle_cbs;
     Signaller<MarketEvent> _on_market_event_cbs;
     Signaller<std::span<Order> > _on_restored_orders_cbs;
-    Signaller<IMQBroker::Message> _on_mq_message;
+    Signaller<Message> _on_mq_message;
 
     Function<void(AsyncResult<void>)> _on_stop_cb;
 

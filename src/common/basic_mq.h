@@ -1,67 +1,169 @@
 #pragma once
 
-#include <quarkbot/mq.h>
+#include "mq.h"
 
 #include <string>
 #include <mutex>
 #include <vector>
 #include <unordered_map>
+#include <memory_resource>
 #include "shared/cluster_alloc_reference.h"
 namespace quarkbot {
 
 
 
-class BasicMQ: public IMQBroker, public std::enable_shared_from_this<BasicMQ> {
+///Implementation local message broker, it also defines messages and other functions
+/**
+ * To extend to network broker, you can inherit this broker, or implement a node
+ * as a ordinary listener. If you need to monitor channels, you can inherit and register
+ * IMonitor object
+ *
+ */
+class BasicMQ: public IMQBroker,
+                      public std::enable_shared_from_this<BasicMQ> {
 public:
 
-    class MessageDef: public IMQBroker::IMessage {
-    public:
-        MessageDef(std::string_view sender, std::string_view channel, std::string_view message, ConversationID cid, std::shared_ptr<BasicMQ> owner)
-            :sender(sender),channel(channel),message(message),cid(cid),owner(owner) {}
-        virtual std::string_view get_sender() const override {return sender;}
-        virtual std::string_view get_channel() const override {return channel;}
-        virtual MessageContent get_content() const override {return message;}
-        virtual ConversationID get_conversation() const override {return cid;}
-
-    protected:
-        std::string sender;
-        std::string channel;
-        std::string message;
-        ConversationID cid;
-        std::shared_ptr<BasicMQ> owner;
-    };
+    BasicMQ();
 
     virtual void subscribe(IListener *listener, ChannelID channel) override;
     virtual void unsubscribe(IListener *listener, ChannelID channel) override;
     virtual void unsubscribe_all(IListener *listener) override;
     virtual void send_message(IListener *listener, ChannelID channel, MessageContent msg, ConversationID cid) override;
+    virtual void forward_message(IMQBroker::IListener *listener, const IMQBroker::Message &msg) override;
+    virtual Message create_message(ChannelID sender, ChannelID channel, MessageContent msg, ConversationID cid) override;
+    virtual void get_active_channels(IMQBroker::IListener *listener,
+            IMQBroker::IChannelListCallback &&cb) const override;
+    virtual void get_subscribed_channels(IListener *listener,
+                    IChannelListCallback &&cb) const override;
+    virtual void register_monitor(IMonitor *mon) override;
+    virtual void unregister_monitor(const IMonitor *mon) override;
+    virtual bool is_channel(ChannelID id) const override;
+    virtual void unsubcribe_private(IListener *listener) override;
+    virtual std::string create_random_channel_name(std::string_view prefix) const override;
 
 
+    ///Create local message broker;
+    MQBroker create();
 
 protected:
 
-    struct ChanMapItem {
-        std::vector<IListener *> _items;
-        std::vector<char> _name;
+    class MessageDef;
+
+    using mstring = std::basic_string<char, std::char_traits<char>, std::pmr::polymorphic_allocator<char> >;
+    template<typename T>
+    using mvector = std::vector<T, std::pmr::polymorphic_allocator<T> >;
+
+    ///Channel definition
+    /** Channel is standalone object. It is reference using shared_ptr. It cannot
+     * be moved.
+     * The class solves major synchronization issue. It is locked during broadcasting
+     * so the listeners are called under the lock. However it is possible, that
+     * listener will need to unsubscribe, or subscribe a different listener
+     * during this process. So channel class uses recursive mutex, which allows
+     * to call channel operations under the lock. For situation when channel
+     * is unsubscribed during broadcasting, the registration is changed to nullptr
+     * and it is clean when lock is eventually released.
+     *
+     */
+    class ChanDef {
+    public:
+        ///Construct channel
+        /**
+         * @param name channel name. You can use get_id(), to receive ChannelID under which
+         * the channel can be stored in a map
+         */
+        ChanDef(std::string_view name, std::pmr::memory_resource *memres);
+        ///cannot be copied nor moved
+        ChanDef(const ChanDef &) = delete;
+        ///cannot be copied nor moved
+        ChanDef &operator=(const ChanDef &) = delete;
+
+        ///lock channel internals
+        void lock();        //lock the item
+        ///unlock channel internals
+        void unlock();      //unlock the item
+        ///determine whether it is empty (no listeners)
+        bool empty() const;
+        ///add listener
+        void add_listener(IListener *lsn);
+        ///remove listener
+        bool remove_listener(IListener *lsn);
+        ///determines whether channel can be exported seen from perspective or listener
+        bool can_export(IListener *lsn) const;
+        ///enumerates active listeners (available from source code only)
+        template<std::invocable<IListener *> Fn>
+        void enum_listeners(Fn &&fn);
+        ///retrieve id
+        ChannelID get_id() const;
+    protected:
+        mstring _name;  //a channel name
+        mvector<IListener *> _listeners; //list of listeners. Nullptr are skipped
+        mutable std::recursive_mutex _mx;
+        unsigned int _recursion = 0; //count of lock recursion
+        unsigned int _del_count = 0; //count of deleted listners(set nullptr);
     };
 
+    using PChanMapItem = std::shared_ptr<ChanDef>;
 
-    using ListenerMap = std::unordered_map<IListener *, std::vector<std::string_view>  >;
-    using ChannelMap = std::unordered_map<std::string_view, ChanMapItem>;
-    ListenerMap _listeners;
-    ChannelMap _channels;
-    std::unordered_map<IListener *, std::string> _mailboxes_by_ptr;
-    std::unordered_map<std::string_view, IListener *> _mailboxes_by_name;
-    std::recursive_mutex _mx;
+    using ListenerToChannelMap = std::unordered_map<IListener *, mvector<ChannelID>,
+            std::hash<IListener *>, std::equal_to<IListener *>,
+            std::pmr::polymorphic_allocator<std::pair<IListener * const, mvector<ChannelID> > > >;
+    using ChannelMap = std::unordered_map<ChannelID, PChanMapItem,
+            std::hash<ChannelID>, std::equal_to<ChannelID>,
+            std::pmr::polymorphic_allocator<std::pair<const ChannelID,  PChanMapItem > > >;
+    using ListenerToMailboxMap = std::unordered_map<IListener *, mstring,
+            std::hash<IListener *>, std::equal_to<IListener *>,
+            std::pmr::polymorphic_allocator<std::pair<IListener * const, mstring> > >;
+    using MailboxToListenerMap = std::unordered_map<std::string_view, IListener *,
+            std::hash<std::string_view>, std::equal_to<std::string_view>,
+            std::pmr::polymorphic_allocator<std::pair<const std::string_view , IListener *> > >;
 
-    std::string_view find_mailbox(IListener *lsn) const;
+    mutable std::recursive_mutex _mx;               //recursive mutex
+    std::pmr::synchronized_pool_resource _mem_resource; //contains memory resource for messages
+    ChannelMap _channels;                   //main map mapping channel name to channel instance
+    ListenerToChannelMap _listeners;        //helps to find subscribed channels
+    ListenerToMailboxMap _mailboxes_by_ptr; //maps listener pointer to mailbox name
+    MailboxToListenerMap _mailboxes_by_name; //maps mailbox name to listener ptr
+    mvector<IMonitor *> _monitors;      //list of monitors
+    mutable std::vector<ChannelID> _tmp_channels;    //temporary vector for get_active_channels
 
-    void remove_listener_from_channel(std::string_view channel, IListener *listener);
-    void remove_channel_from_listener(std::string_view channel, IListener *listener);
+    ///removes channel from existing listener.
+    /**
+     * @param channel channel to remove
+     * @param listener listener
+     * @retval true channel found and removed
+     * @retval false channel was not subscribed
+     *
+     * @note if the listener has no more channels, it is removed from map
+     */
+    bool remove_channel_from_listener(std::string_view channel, IListener *listener);
+    ///erase mailbox
+    /**
+     * @param listener listener which mailbox is erased
+     */
     void erase_mailbox(IListener *listener);
-    std::string_view create_mailbox(IListener *listener);
+    ///create mailbox address
+    /**
+     * @param listener listener
+     * @return mailbox address
+     *
+     * @note returns existing if already created
+     */
+    std::string_view get_mailbox(IListener *listener);
 
-    std::any _allocator_instance;
+    ///creates channel, or returns existing
+    /**
+     * @param name name of channel
+     * @return instance
+     */
+    PChanMapItem get_channel(ChannelID name);
+
+
+    PChanMapItem get_channel_lk(ChannelID name);
+
+    void channel_list_updated();
+
+
 };
 
 }

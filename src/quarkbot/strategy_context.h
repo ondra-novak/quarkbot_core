@@ -7,7 +7,6 @@
 #include "config.h"
 #include "log.h"
 #include "market_event.h"
-#include "mq.h"
 #include "serialize.h"
 #include "service.h"
 #include "variables.h"
@@ -108,9 +107,9 @@ public:
     ///unsubscribe instrument
     virtual void unsubscribe(MarketEventType type, const Instrument &i) = 0;
 
-    virtual void mq_subscribe_channel(std::string_view channel) = 0;
-    virtual void mq_unsubscribe_channel(std::string_view channel) = 0;
-    virtual void mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) = 0;
+    virtual void subscribe_channel(std::string_view channel) = 0;
+    virtual void unsubscribe_channel(std::string_view channel) = 0;
+    virtual void send_message(std::string_view channel, std::string_view msg, std::uint32_t cid) = 0;
 
 
 
@@ -150,7 +149,25 @@ public:
 
     virtual void on_orders_restored(Function<void(AsyncResult<std::span<Order> >)> &&callback) = 0;
 
-    virtual void on_mq_message(Function<void(AsyncResult<IMQBroker::Message>)> &&callback) = 0;
+
+    struct Message {
+        ///contains sender ID
+        std::string_view sender;
+        ///contains channel name
+        std::string_view channel;
+        ///contains content of the message
+        std::string_view content;
+        ///contains conversation ID
+        std::uint32_t conversation_id;
+        ///is set to true, if the message private (direct peer-to-peer).
+        /**
+         * - @b true - message is private/personal - sent directly
+         * - @b false - message is public - sent to a channel
+         */
+        bool private_msg;
+    };
+
+    virtual void on_mq_message(Function<void(AsyncResult<Message>)> &&callback) = 0;
     ///stops the strategy
     /**
      * Causes that strategy is stopped. No more events can be generated,

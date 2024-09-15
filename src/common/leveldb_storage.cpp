@@ -1,5 +1,6 @@
+#include "mq.h"
+
 #include "leveldb_storage.h"
-#include <quarkbot/mq.h>
 #include "position_info.h"
 
 namespace quarkbot {

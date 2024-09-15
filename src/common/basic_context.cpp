@@ -456,24 +456,26 @@ void BasicContext::on_scheduled(Timestamp tp) noexcept {
 
 
 void BasicContext::EvMQ::operator()() {
-    me->_on_mq_message.send(std::move(msg));
+    me->_on_mq_message.send(Message{
+        msg.get_sender(), msg.get_channel(), msg.get_content(), msg.get_conversation(), pm
+    });
 }
-void BasicContext::on_message(MQClient::Message message) {
+void BasicContext::on_message(const MQClient::Message &message, bool pm) noexcept {
     std::lock_guard _(_queue_mx);
-    post(EvMQ{this, std::move(message)});
+    post(EvMQ{this, std::move(message), pm});
 }
 
 bool BasicContext::get_service(const std::type_info &, std::shared_ptr<void> &) {
     return false;
 }
 
-void BasicContext::mq_subscribe_channel(std::string_view channel) {
+void BasicContext::subscribe_channel(std::string_view channel) {
     _mq.subscribe(this, channel);
 }
-void BasicContext::mq_unsubscribe_channel(std::string_view channel) {
+void BasicContext::unsubscribe_channel(std::string_view channel) {
     _mq.unsubscribe(this, channel);
 }
-void BasicContext::mq_send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) {
+void BasicContext::send_message(std::string_view channel, std::string_view msg, IMQBroker::ConversationID cid) {
     _mq.send_message(this, channel, msg, cid);
 
 }
@@ -581,7 +583,7 @@ void BasicContext::on_orders_restored(Function<void(AsyncResult<std::span<Order>
         _on_restored_orders_cbs.register_callback(std::move(callback));
     }
 }
-void BasicContext::on_mq_message(Function<void(AsyncResult<IMQBroker::Message>)> &&callback) {
+void BasicContext::on_mq_message(Function<void(AsyncResult<Message>)> &&callback) {
     _on_mq_message.register_callback(std::move(callback));
 }
 

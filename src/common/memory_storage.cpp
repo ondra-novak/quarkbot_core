@@ -1,6 +1,6 @@
-#include "memory_storage.h"
-#include <quarkbot/mq.h>
+#include "mq.h"
 
+#include "memory_storage.h"
 #include "position_info.h"
 
 namespace quarkbot {

@@ -1,8 +1,7 @@
 #pragma once
 
+#include "mq.h"
 #include "read_line.h"
-
-#include <quarkbot/mq.h>
 
 #include <cstddef>
 #include <mutex>
@@ -14,19 +13,18 @@ namespace quarkbot {
 
 class ConsoleClient:
         public ReadLine,
-        public IMQBroker::IListener
+        public MQClient
             {
 public:
 
     ConsoleClient(MQBroker broker, ReadLineConfig rlcfg);
 
-    virtual void on_message(IMQBroker::Message message) override;
+    virtual void on_message(const IMQBroker::Message &message, bool pm) noexcept override;
 
     void run(std::stop_token tkn);
 
 
 protected:
-    MQClient _client;
     void worker(std::stop_token tkn);
 
     struct HintCacheItem {
