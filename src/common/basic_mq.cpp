@@ -70,21 +70,18 @@ BasicMQ::BasicMQ()
     ,_listeners(ListenerToChannelMap::allocator_type(&_mem_resource))
     ,_mailboxes_by_ptr(ListenerToMailboxMap::allocator_type(&_mem_resource))
     ,_mailboxes_by_name(MailboxToListenerMap::allocator_type(&_mem_resource))
+    ,_back_path(_mem_resource)
     ,_monitors(mvector<IMonitor *>::allocator_type(&_mem_resource))
 {
 
 }
 
-BasicMQ::PChanMapItem BasicMQ::get_channel(ChannelID channel) {
-    std::lock_guard _(_mx);
-    return get_channel_lk(channel);
-}
 BasicMQ::PChanMapItem BasicMQ::get_channel_lk(ChannelID channel) {
     auto iter = _channels.find(channel);
     if (iter == _channels.end()) {
+        _channel_created = true;
         auto chan = std::make_shared<ChanDef>(channel, &_mem_resource);
         _channels.emplace(chan->get_id(), chan);
-        channel_list_updated();
         return chan;
     }
     return iter->second;
@@ -93,6 +90,7 @@ BasicMQ::PChanMapItem BasicMQ::get_channel_lk(ChannelID channel) {
 void BasicMQ::subscribe(IListener *listener, ChannelID channel)
 {
     std::lock_guard _(_mx);
+    _channel_created = false;
     auto chan = get_channel_lk(channel);
     chan->add_listener(listener);
     auto iter = _listeners.find(listener);
@@ -100,16 +98,18 @@ void BasicMQ::subscribe(IListener *listener, ChannelID channel)
         iter = _listeners.emplace(listener, mvector<ChannelID>(mvector<ChannelID>::allocator_type(&_mem_resource))).first;
     }
     iter->second.push_back(chan->get_id());
+    if (_channel_created) channel_list_updated_lk();
 }
 
 void BasicMQ::unsubscribe(IListener *listener, ChannelID channel)
 {
-    if (remove_channel_from_listener(channel,listener)) { //mt-safe
-        auto chan = get_channel(channel);            //mt-safe
-        if (chan->remove_listener(listener)) {          //mt-safe
-            std::lock_guard _(_mx);                 //lock here
+    std::lock_guard _(_mx);
+
+    if (remove_channel_from_listener_lk(channel,listener)) {
+        auto chan = get_channel_lk(channel);
+        if (chan->remove_listener(listener)) {
             _channels.erase(channel);
-            channel_list_updated();
+            channel_list_updated_lk();
         }
     }
 }
@@ -117,13 +117,14 @@ void BasicMQ::unsubscribe(IListener *listener, ChannelID channel)
 void BasicMQ::unsubscribe_all(IListener *listener)
 {
     std::lock_guard _(_mx);
-    erase_mailbox(listener);
+    erase_mailbox_lk(listener);
+    _back_path.remove_listener(listener);
     bool ech = false;
     auto iter = _listeners.find(listener);
     if (iter != _listeners.end()) {
         auto &chans = iter->second;
         for (auto &ch: chans) {
-            auto chptr = get_channel(ch);
+            auto chptr = get_channel_lk(ch);
             if (chptr->remove_listener(listener)) {
                 _channels.erase(ch);
                 ech = true;
@@ -131,12 +132,12 @@ void BasicMQ::unsubscribe_all(IListener *listener)
         }
         _listeners.erase(iter);
     }
-    if (ech) channel_list_updated();
+    if (ech) channel_list_updated_lk();
 }
 
 void BasicMQ::unsubcribe_private(IListener *listener) {
     std::lock_guard _(_mx);
-    erase_mailbox(listener);
+    erase_mailbox_lk(listener);
 }
 std::string BasicMQ::create_random_channel_name(std::string_view prefix) const {
     std::string out(prefix);
@@ -145,13 +146,12 @@ std::string BasicMQ::create_random_channel_name(std::string_view prefix) const {
 }
 
 
-void BasicMQ::erase_mailbox(IListener *listener) {
+void BasicMQ::erase_mailbox_lk(IListener *listener) {
     //always under lock
     auto iter = _mailboxes_by_ptr.find(listener);
     if (iter == _mailboxes_by_ptr.end()) return;
     _mailboxes_by_name.erase(iter->second);
     _mailboxes_by_ptr.erase(iter);
-    //no channel_list_updated() - handled by unsubscribe_all()
 }
 
 std::string_view BasicMQ::get_mailbox(IListener *listener)
@@ -177,20 +177,31 @@ IMQBroker::Message BasicMQ::create_message(ChannelID sender, ChannelID channel, 
         shared_from_this()
     ));
 }
-void BasicMQ::send_message(IListener *listener, ChannelID channel, MessageContent message, ConversationID cid)
+bool BasicMQ::send_message(IListener *listener, ChannelID channel, MessageContent message, ConversationID cid)
 {
     //no lock needed there
     if (listener == nullptr) {
-        forward_message(nullptr, create_message({},channel,message,cid));
+        return forward_message_internal(nullptr, create_message({},channel,message,cid));
     } else {
-        forward_message(listener, create_message(get_mailbox(listener), channel, message, cid));
+        return forward_message_internal(listener, create_message(get_mailbox(listener), channel, message, cid));
     }
 }
 
+bool BasicMQ::forward_message(IMQBroker::IListener *listener, const IMQBroker::Message &msg, bool subscribe_return_path) {
+    if (listener && subscribe_return_path) {
+        auto sender = msg.get_sender();
+        if (!sender.empty()) {
+            std::lock_guard _(_mx);
+            if (_mailboxes_by_name.find(sender) == _mailboxes_by_name.end()) {
+                _back_path.store_path(sender, listener);
+            }
+        }
+    }
+    return forward_message_internal(listener, msg);
+}
 
-bool BasicMQ::remove_channel_from_listener(std::string_view channel, IListener *listener)
+bool BasicMQ::remove_channel_from_listener_lk(std::string_view channel, IListener *listener)
 {
-    std::lock_guard _(_mx);
     auto iter = _listeners.find(listener);
     if (iter == _listeners.end()) return false;
     auto &lst = iter->second;
@@ -203,7 +214,7 @@ bool BasicMQ::remove_channel_from_listener(std::string_view channel, IListener *
     return true;
 }
 
-void BasicMQ::forward_message(IMQBroker::IListener *listener, const IMQBroker::Message &msg) {
+bool BasicMQ::forward_message_internal(IMQBroker::IListener *listener, const IMQBroker::Message &msg) {
     PChanMapItem ch;
     ChannelID chanid = msg.get_channel();
 
@@ -213,13 +224,23 @@ void BasicMQ::forward_message(IMQBroker::IListener *listener, const IMQBroker::M
         if (miter != _mailboxes_by_name.end()) {
             auto l = miter->second;
             l->on_message(msg,true);
-            return;
+            return true;
+        }
+
+        IListener *bpath = _back_path.find_path(chanid);
+        if (bpath) {
+            bpath->on_message(msg, false);
+            return true;
         }
 
         auto citer = _channels.find(chanid);
         if (citer == _channels.end()) {
-            for (const auto m: _monitors) m->message_dropped(listener, msg);
-            return; //unknown channel, drop message
+            bool r = false;
+            for (const auto m: _monitors) {
+                bool s = m->on_message_dropped(listener, msg);
+                r = r || s;
+            }
+            return r;
         }
         ch = citer->second;
     }
@@ -228,6 +249,7 @@ void BasicMQ::forward_message(IMQBroker::IListener *listener, const IMQBroker::M
     ch->enum_listeners([listener, &msg](IListener *l){
         if (l != listener) l->on_message(msg, false);
     });
+    return true;
 }
 
 void BasicMQ::register_monitor(IMonitor *mon) {
@@ -245,9 +267,9 @@ void BasicMQ::unregister_monitor(const IMonitor *mon) {
 }
 
 
-void BasicMQ::channel_list_updated() {
+void BasicMQ::channel_list_updated_lk() {
     //always under lock
-    for (const auto &m: _monitors) m->channels_update();
+    for (const auto &m: _monitors) m->on_channels_update();
 }
 
 void BasicMQ::get_active_channels(IMQBroker::IListener *listener,
@@ -316,7 +338,6 @@ void BasicMQ::ChanDef::add_listener(IListener *lsn) {
 }
 
 bool BasicMQ::ChanDef::remove_listener(IListener *lsn) {
-    std::lock_guard _(*this);
     auto iter = std::find(_listeners.begin(), _listeners.end(), lsn);
     if (iter != _listeners.end()) {
         *iter = nullptr;
@@ -374,5 +395,64 @@ BasicMQ::MessageDef::MessageDef(std::string_view sender,
     iter = std::copy(message.begin(), message.end(), iter);
     *iter++ = 0;
 }
+
+BasicMQ::BackPathStorage::BackPathStorage(std::pmr::memory_resource &res)
+:_entries(BackPathMap::allocator_type(&res))
+{
+    _root = reinterpret_cast<BackPathItem *>(&_last);
 }
 
+
+void BasicMQ::BackPathItem::remove() {
+    if (prev) prev->next = next;
+    if (next) next->prev = prev;
+
+}
+void BasicMQ::BackPathItem::promote(BackPathItem *root) {
+    if (root != this) {
+        remove();
+        prev = nullptr;
+        next = root;
+        root = this;
+    }
+}
+
+
+void BasicMQ::BackPathStorage::store_path(const ChannelID &chan, IListener *lsn) {
+    auto iter = _entries.find(chan);
+    if (iter == _entries.end()) {
+        mvector<char> name(chan.begin(), chan.end(), mvector<char>::allocator_type(_entries.get_allocator()));
+        std::string_view key(name.data(), name.size());
+        auto iter = _entries.emplace(key, BackPathItem{
+            nullptr, _root, std::move(name), lsn}).first;
+        _root = &iter->second;
+        while (_entries.size() > _limit) {
+            auto *l = _last;
+            l->remove();
+            _entries.erase(std::string_view(l->id.begin(), l->id.end()));
+        }
+    } else {
+        iter->second.l = lsn;
+        iter->second.promote(_root);
+    }
+}
+
+BasicMQ::IListener* BasicMQ::BackPathStorage::find_path(const ChannelID &chan) const {
+    auto iter = _entries.find(chan);
+    if (iter != _entries.end()) return iter->second.l;
+    return nullptr;
+}
+
+void BasicMQ::BackPathStorage::remove_listener(IListener *l) {
+    auto *ptr = _root;
+    while (ptr != reinterpret_cast<BackPathItem *>(&_last)) {
+        auto x = ptr;
+        ptr = ptr->next;
+        if (ptr->l == l) {
+            x->remove();
+            _entries.erase(std::string_view(x->id.begin(), x->id.end()));
+        }
+    }
+}
+
+}

@@ -97,15 +97,18 @@ public:
     public:
         virtual ~IMonitor() = default;
         ///notifies that list of channels has been updated
-        /** Called under lock. You should send a notify to processing thread
-         *  to broadcast a new list of channels. You can use get_active_channels */
-        virtual void channels_update() = 0;
+        /** Called under lock. You should send a notify to a processing thread
+         *  to broadcast a new list of channels. You can use get_active_channels in that thread */
+        virtual void on_channels_update() noexcept = 0;
         ///notifieas that a message to a channel has been dropped because channel doesn't exist
         /** Called under lock. You can send a message to a peer, that nobody is listening
          * @param lsn sender (listener) - can be nullptr
          * @param msg message
+         * @retval true message has been processed
+         * @retval false message was not processed (indicate to caller)
+         *
          * */
-        virtual void message_dropped(IListener *lsn, const Message &msg) = 0;
+        virtual bool on_message_dropped(IListener *lsn, const Message &msg) noexcept = 0;
     };
 
     ///Listener which receives current channel list
@@ -152,8 +155,10 @@ public:
      * @param channel channel
      * @param msg message
      * @param cid conversation identifier, can be 0 if has no meaning
+     * @retval true message has been posted (it doesn't indicate that has been delivered)
+     * @retval false message was not posted (no information about how to route message)
      */
-    virtual void send_message(IListener *listener, ChannelID channel, MessageContent msg, ConversationID cid) = 0;
+    virtual bool send_message(IListener *listener, ChannelID channel, MessageContent msg, ConversationID cid) = 0;
     virtual ~IMQBroker() = default;
 
     //proxy features
@@ -161,9 +166,17 @@ public:
     /**
      * @param listener identification of who forwarding this message.
      * @param msg message to forward. This message should be received by broker of other node
+     * @param subscribe_return_path true value in this field causes that listener is also registered
+     * as return path. This is similar to subscribe on sender, however the broker updates return path
+     * for existing sender instead registering additional paths (as there should be one path per sender).
+     * By setting this flag, the listener is attached to the broker. To detach, you need to call unsubscribe_all()
+     * This flag is ignored if listener is nullptr
+    *
+     * @retval true message has been posted (it doesn't indicate that has been delivered)
+     * @retval false message was not posted (no information about how to route message)
      *
      */
-    virtual void forward_message(IListener *listener, const Message &msg) = 0;
+    virtual bool forward_message(IListener *listener, const Message &msg, bool subscribe_return_path) = 0;
 
     ///Creates a message
     /** Useful to convert network representation of the message to Message object */
@@ -290,8 +303,8 @@ public:
      * @note function subscribes local mailbox for the first time of call with new listener.
      * You need to unsubscribe_all() before listener is destroyed.
      */
-    void send_message(IListener *listener, ChannelID channel, MessageContent message, ConversationID cid = 0) {
-        _ptr->send_message(listener, channel, message, cid);
+    bool send_message(IListener *listener, ChannelID channel, MessageContent message, ConversationID cid = 0) {
+        return _ptr->send_message(listener, channel, message, cid);
     }
 
 
@@ -340,9 +353,18 @@ public:
     /**
      * @param listener identification of who forwarding this message.
      * @param msg message to forward. This message should be received by broker of other node
+     * @param subscribe_return_path true value in this field causes that listener is also registered
+     * as return path. This is similar to subscribe on sender, however the broker updates return path
+     * for existing sender instead registering additional paths (as there should be one path per sender).
+     * By setting this flag, the listener is attached to the broker. To detach, you need to call unsubscribe_all()
+     * This flag is ignored if listener is nullptr
+     *
+     * @retval true message has been posted (it doesn't indicate that has been delivered)
+     * @retval false message was not posted (no information about how to route message)
+
      */
-    void forward_message(IListener *listener, Message msg) {
-        _ptr->forward_message(listener, std::move(msg));
+    bool forward_message(IListener *listener, Message msg, bool subscribe_return_path) {
+        return _ptr->forward_message(listener, std::move(msg), subscribe_return_path);
     }
 
     ///Register broker monitor

@@ -28,8 +28,8 @@ public:
     virtual void subscribe(IListener *listener, ChannelID channel) override;
     virtual void unsubscribe(IListener *listener, ChannelID channel) override;
     virtual void unsubscribe_all(IListener *listener) override;
-    virtual void send_message(IListener *listener, ChannelID channel, MessageContent msg, ConversationID cid) override;
-    virtual void forward_message(IMQBroker::IListener *listener, const IMQBroker::Message &msg) override;
+    virtual bool send_message(IListener *listener, ChannelID channel, MessageContent msg, ConversationID cid) override;
+    virtual bool forward_message(IMQBroker::IListener *listener, const IMQBroker::Message &msg, bool subscribe_return_path) override;
     virtual Message create_message(ChannelID sender, ChannelID channel, MessageContent msg, ConversationID cid) override;
     virtual void get_active_channels(IMQBroker::IListener *listener,
             IMQBroker::IChannelListCallback &&cb) const override;
@@ -43,7 +43,7 @@ public:
 
 
     ///Create local message broker;
-    MQBroker create();
+    static MQBroker create();
 
 protected:
 
@@ -103,6 +103,16 @@ protected:
         unsigned int _del_count = 0; //count of deleted listners(set nullptr);
     };
 
+    struct BackPathItem { // @suppress("Miss copy constructor or assignment operator")
+        BackPathItem *prev = {};
+        BackPathItem *next = {};
+        mvector<char> id = {};
+        IListener *l = {};
+
+        void promote(BackPathItem *root);
+        void remove();
+    };
+
     using PChanMapItem = std::shared_ptr<ChanDef>;
 
     using ListenerToChannelMap = std::unordered_map<IListener *, mvector<ChannelID>,
@@ -117,6 +127,26 @@ protected:
     using MailboxToListenerMap = std::unordered_map<std::string_view, IListener *,
             std::hash<std::string_view>, std::equal_to<std::string_view>,
             std::pmr::polymorphic_allocator<std::pair<const std::string_view , IListener *> > >;
+    using BackPathMap = std::unordered_map<std::string_view, BackPathItem,
+            std::hash<std::string_view>, std::equal_to<std::string_view>,
+            std::pmr::polymorphic_allocator<std::pair<const std::string_view , BackPathItem > > >;
+
+
+    class BackPathStorage {
+    public:
+        BackPathStorage(std::pmr::memory_resource &res);
+        void store_path(const ChannelID &chan, IListener *lsn);
+        IListener *find_path(const ChannelID &chan) const;
+        void remove_listener(IListener *l);
+
+        std::size_t _limit = 128;     //maximum total of entries in _back_path container
+
+    protected:
+        BackPathMap _entries;                 //map of back path routing
+        BackPathItem *_root = {};
+        BackPathItem *_last = {};
+
+    };
 
     mutable std::recursive_mutex _mx;               //recursive mutex
     std::pmr::synchronized_pool_resource _mem_resource; //contains memory resource for messages
@@ -124,8 +154,10 @@ protected:
     ListenerToChannelMap _listeners;        //helps to find subscribed channels
     ListenerToMailboxMap _mailboxes_by_ptr; //maps listener pointer to mailbox name
     MailboxToListenerMap _mailboxes_by_name; //maps mailbox name to listener ptr
+    BackPathStorage _back_path;
     mvector<IMonitor *> _monitors;      //list of monitors
     mutable std::vector<ChannelID> _tmp_channels;    //temporary vector for get_active_channels
+    bool _channel_created = false;  //is set to true when get_channel_lk() must create a new channel
 
     ///removes channel from existing listener.
     /**
@@ -136,12 +168,12 @@ protected:
      *
      * @note if the listener has no more channels, it is removed from map
      */
-    bool remove_channel_from_listener(std::string_view channel, IListener *listener);
+    bool remove_channel_from_listener_lk(std::string_view channel, IListener *listener);
     ///erase mailbox
     /**
      * @param listener listener which mailbox is erased
      */
-    void erase_mailbox(IListener *listener);
+    void erase_mailbox_lk(IListener *listener);
     ///create mailbox address
     /**
      * @param listener listener
@@ -151,19 +183,15 @@ protected:
      */
     std::string_view get_mailbox(IListener *listener);
 
-    ///creates channel, or returns existing
-    /**
-     * @param name name of channel
-     * @return instance
-     */
-    PChanMapItem get_channel(ChannelID name);
 
 
     PChanMapItem get_channel_lk(ChannelID name);
 
-    void channel_list_updated();
+    void channel_list_updated_lk();
 
+    bool forward_message_internal(IListener *listener, const IMQBroker::Message &msg) ;
 
 };
 
 }
+

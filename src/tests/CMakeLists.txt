@@ -12,6 +12,7 @@ set(testFiles
 	dispatcher.cpp
 	stream_merge.cpp
 	structured_ini.cpp
+	mq.cpp
 )   
 
 link_libraries(

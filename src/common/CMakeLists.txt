@@ -18,6 +18,8 @@ add_library (quarkbot_runtime
     read_line.cpp
     console.cpp
     report_ldjson.cpp
+    mq_bridge.cpp
+    console_mq_bridge.cpp
 )
 
 add_dependencies(quarkbot_runtime libjson20_single_header)
