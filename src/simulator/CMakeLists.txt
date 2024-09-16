@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 
 link_libraries(
      quarkbot_runtime
+     quarkbot_mq
     ${STANDARD_LIBRARIES}
 )
 

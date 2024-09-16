@@ -2,6 +2,8 @@
 
 #include <charconv>
 #include <mutex>
+#include <vector>
+#include <iostream>
 namespace quarkbot {
 
 namespace {

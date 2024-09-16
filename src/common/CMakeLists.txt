@@ -7,7 +7,6 @@ add_library (quarkbot_runtime
     basic_context.cpp
     basic_exchange.cpp
     basic_log.cpp
-    basic_mq.cpp
     context_scheduler.cpp
     basic_network.cpp
     websocket_client.cpp
@@ -18,9 +17,7 @@ add_library (quarkbot_runtime
     read_line.cpp
     console.cpp
     report_ldjson.cpp
-    mq_bridge.cpp
-    console_mq_bridge.cpp
 )
 
 add_dependencies(quarkbot_runtime libjson20_single_header)
-
+add_subdirectory(mq)

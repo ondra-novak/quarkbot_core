@@ -7,7 +7,7 @@
 #include "storage.h"
 #include "basic_exchange.h"
 #include "icontrol.h"
-#include "mq.h"
+#include "mq/mq.h"
 
 #include <quarkbot/signal.h>
 

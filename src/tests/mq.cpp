@@ -1,11 +1,13 @@
 #include "check.h"
 
-#include "../common/mq_bridge.h"
-#include "../common/basic_mq.h"
-#include "../common/console_mq_bridge.h"
+#include <algorithm>
+#include "../common/mq/mq_bridge.h"
+#include "../common/mq/basic_mq.h"
+#include "../common/mq/console_mq_bridge.h"
 #include <ext/stdio_filebuf.h>
 #include <future>
 #include <fstream>
+#include <optional>
 #include <thread>
 
 

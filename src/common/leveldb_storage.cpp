@@ -1,4 +1,3 @@
-#include "mq.h"
 
 #include "leveldb_storage.h"
 #include "position_info.h"

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mq.h"
+#include "mq/mq.h"
 #include "read_line.h"
 
 #include <cstddef>

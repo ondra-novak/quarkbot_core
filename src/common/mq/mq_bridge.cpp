@@ -1,5 +1,6 @@
 #include "mq_bridge.h"
 
+#include <algorithm>
 #include <numeric>
 namespace quarkbot {
 

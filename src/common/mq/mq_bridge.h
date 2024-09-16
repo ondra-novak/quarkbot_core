@@ -2,6 +2,7 @@
 
 #include "mq.h"
 
+#include <vector>
 namespace quarkbot {
 
 
