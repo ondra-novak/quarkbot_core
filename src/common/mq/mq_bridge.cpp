@@ -40,11 +40,18 @@ private:
 
 MQAbstractBridge::MQAbstractBridge(MQBroker broker)
         :MQClient(std::move(broker)) {
+
+}
+
+
+
+MQAbstractBridgeAutoMonitor::MQAbstractBridgeAutoMonitor(MQBroker broker)
+        :MQAbstractBridge(std::move(broker)) {
     get_broker().register_monitor(this);
 }
 
 
-MQAbstractBridge::~MQAbstractBridge() {
+MQAbstractBridgeAutoMonitor::~MQAbstractBridgeAutoMonitor() {
     get_broker().unregister_monitor(this);
 }
 
@@ -53,11 +60,17 @@ void MQAbstractBridge::send_mine_channels() {
        auto h = hash_of_channel_list(lst);
        if (h != _chan_hash) {
            _chan_hash = h;
-           on_update_channels(lst);
+           send_channels_to_other_side(lst);
        }
     });
 }
 
+void MQAbstractBridge::send_empty_channels() {
+    if (_chan_hash) {
+        _chan_hash = 0;
+        send_channels_to_other_side({});
+    }
+}
 void MQAbstractBridge::apply_their_channels(ChannelList lst) {
     std::sort(lst.begin(), lst.end());
     std::set_difference(_cur_channels.begin(), _cur_channels.end(),
@@ -87,11 +100,11 @@ void MQAbstractBridge::peer_reset() {
     send_mine_channels();
 }
 
-bool MQAbstractBridge::on_message_dropped(IMQBroker::IListener *,const IMQBroker::Message &) noexcept {
+bool MQAbstractBridgeAutoMonitor::on_message_dropped(IMQBroker::IListener *,const IMQBroker::Message &) noexcept {
     return false;
 }
 
-void MQAbstractBridge::on_channels_update() noexcept {
+void MQAbstractBridgeAutoMonitor::on_channels_update() noexcept {
     send_mine_channels();
 }
 
@@ -100,7 +113,7 @@ MQDirectBridge::MQDirectBridge(MQBroker b1, MQBroker b2)
 
 
 
-void MQDirectBridge::Bridge::on_update_channels(const ChannelList &channels) noexcept {
+void MQDirectBridge::Bridge::send_channels_to_other_side(const ChannelList &channels) noexcept {
     _owner.on_update_chanels(*this, channels);
 }
 

@@ -6,7 +6,7 @@
 
 namespace quarkbot {
 
-class ConsoleMQBridge: public MQAbstractBridge {
+class ConsoleMQBridge: public MQAbstractBridgeAutoMonitor {
 public:
 
     ConsoleMQBridge(MQBroker broker, std::ostream &out);
@@ -16,7 +16,7 @@ public:
 
 
     virtual void on_message(const IMQBroker::Message &message, bool pm) noexcept override;
-    virtual void on_update_channels(
+    virtual void send_channels_to_other_side(
             const quarkbot::MQAbstractBridge::ChannelList &channels) noexcept
                     override;
 

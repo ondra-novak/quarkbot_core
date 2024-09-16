@@ -23,7 +23,7 @@ namespace quarkbot {
  *
  *
  */
-class MQAbstractBridge : public MQClient, public IMQBroker::IMonitor {
+class MQAbstractBridge : public MQClient {
 public:
 
     using Message = IMQBroker::Message;
@@ -35,8 +35,6 @@ public:
      * @param broker broker to connect
      */
     MQAbstractBridge(MQBroker broker);
-    ///Destruct the bridge
-    ~MQAbstractBridge();
 
     ///Abstract bridge is not movable
     MQAbstractBridge(const MQAbstractBridge &broker) = delete;
@@ -52,6 +50,10 @@ public:
      * @note @b mt-safety: this method is not mt-safe
      */
     void send_mine_channels();
+
+    ///Sends empty channel list
+    /** can be useful to disconnect self from peer */
+    void send_empty_channels();
 
     ///Apply list of channels of other/remote broker
     /**
@@ -92,7 +94,7 @@ public:
      * so it depends on context of this call
      *
      */
-    virtual void on_update_channels(const ChannelList &channels) noexcept = 0;
+    virtual void send_channels_to_other_side(const ChannelList &channels) noexcept = 0;
     ///Implement this function to send the message to the other side
     /**
      * @param message message to send
@@ -105,15 +107,6 @@ public:
      *
      */
     virtual void on_message(const Message &message, bool pm) noexcept override = 0;
-    ///Called by broker when list of channels has been changed (channels added or removed)
-    /**
-     * Default implementation calls send_mine_channels(). If the bridge has a processing thread, it is
-     * recommended to use this function to signal the processing thread to call send_mine_channels in
-     * its context
-     *
-     * @note @b mt-safety: this function must be mt-safe
-     */
-    virtual void on_channels_update() noexcept override ;
 
 protected:
 
@@ -124,7 +117,24 @@ protected:
 
     static std::size_t hash_of_channel_list(const ChannelList &list);
 
-    virtual bool on_message_dropped(IMQBroker::IListener *lsn, const IMQBroker::Message &msg) noexcept override;
+
+};
+
+class MQAbstractBridgeAutoMonitor: public MQAbstractBridge, public IMQBroker::IMonitor {
+public:
+    MQAbstractBridgeAutoMonitor(MQBroker broker);
+    ~MQAbstractBridgeAutoMonitor();
+    ///Called by broker when list of channels has been changed (channels added or removed)
+    /**
+     * Default implementation calls send_mine_channels(). If the bridge has a processing thread, it is
+     * recommended to use this function to signal the processing thread to call send_mine_channels in
+     * its context
+     *
+     * @note @b mt-safety: this function must be mt-safe
+     */
+    virtual void on_channels_update() noexcept override ;
+
+    virtual bool on_message_dropped(IListener *l, const Message &msg) noexcept override;
 };
 
 ///Implements direct bridge between two brokers
@@ -147,11 +157,11 @@ public:
 
 protected:
 
-    class Bridge: public MQAbstractBridge { // @suppress("Miss copy constructor or assignment operator")
+    class Bridge: public MQAbstractBridgeAutoMonitor { // @suppress("Miss copy constructor or assignment operator")
     public:
-        Bridge(MQDirectBridge &owner, MQBroker &&b):MQAbstractBridge(std::move(b)),_owner(owner) {}
+        Bridge(MQDirectBridge &owner, MQBroker &&b):MQAbstractBridgeAutoMonitor(std::move(b)),_owner(owner) {}
 
-        virtual void on_update_channels(const ChannelList &channels) noexcept override;
+        virtual void send_channels_to_other_side(const ChannelList &channels) noexcept override;
         virtual void on_message(const Message &message, bool pm) noexcept override;
 
     protected:

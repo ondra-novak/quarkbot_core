@@ -68,7 +68,7 @@ struct ConsoleMQBridge::ReadState {
 
 
 ConsoleMQBridge::ConsoleMQBridge(MQBroker broker, std::ostream &out)
-:MQAbstractBridge(std::move(broker))
+:MQAbstractBridgeAutoMonitor(std::move(broker))
 ,_out(out){}
 
 ConsoleMQBridge::~ConsoleMQBridge() {
@@ -107,7 +107,7 @@ void ConsoleMQBridge::on_message(const Message &message,bool ) noexcept {
     _out.flush();
 }
 
-void ConsoleMQBridge::on_update_channels(const ChannelList &channels) noexcept {
+void ConsoleMQBridge::send_channels_to_other_side(const ChannelList &channels) noexcept {
     _out.put('C');
     for (const ChannelID &chan: channels) {
         write_string(_out, chan);
