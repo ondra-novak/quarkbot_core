@@ -10,6 +10,7 @@
 namespace quarkbot {
 
 
+
 ///Represents date
 struct DateValue {
     int year = 0;
@@ -54,7 +55,11 @@ public:
     virtual std::optional<std::string_view> get_value(std::string_view name) const = 0;
     virtual std::optional<bool> get_value_bool(std::string_view name) const = 0;
     virtual std::optional<std::filesystem::path> get_path(std::string_view name) const = 0;
+    virtual std::optional<std::string_view> get_value(unsigned int index) const = 0;
+    virtual std::optional<bool> get_value_bool(unsigned int index) const = 0;
+    virtual std::optional<std::filesystem::path> get_path(unsigned int index) const = 0;
     virtual bool is_defined(std::string_view name) const = 0;
+    virtual bool is_defined(unsigned int index) const = 0;
     virtual std::string_view get_section_path() const = 0;
     virtual std::vector<std::string_view> list_sections() const = 0;
     virtual std::vector<std::string_view> list_keys() const = 0;
@@ -68,7 +73,11 @@ public:
     virtual std::optional<std::string_view> get_value(std::string_view ) const override {return {};}
     virtual std::optional<bool> get_value_bool(std::string_view ) const override {return {};}
     virtual std::optional<std::filesystem::path> get_path(std::string_view ) const override {return {};}
+    virtual std::optional<std::string_view> get_value(unsigned int ) const override {return {};}
+    virtual std::optional<bool> get_value_bool(unsigned int ) const override {return {};}
+    virtual std::optional<std::filesystem::path> get_path(unsigned int ) const override {return {};}
     virtual bool is_defined(std::string_view ) const override {return false;}
+    virtual bool is_defined(unsigned int) const override {return false;}
     virtual std::string_view get_section_path() const override {return "<empty configuration file>";}
     virtual std::vector<std::string_view> list_sections() const override {return {};}
     virtual std::vector<std::string_view> list_keys() const override {return {};}
@@ -102,6 +111,8 @@ public:
     public:
         NotFound(std::string_view path, std::string_view name)
             :path(path),name(name) {};
+        NotFound(std::string_view path, unsigned int index)
+            :path(path),name("Index:"+std::to_string(index)) {};
 
         const std::string &get_path() const {return path;}
         const std::string &get_name() const {return name;}
@@ -117,55 +128,56 @@ public:
         mutable std::string whatmsg;
     };
 
-    std::string_view get(std::string_view name, std::string_view defval) const {
-        auto v = _ptr->get_value(name);
-        if (v) return *v;
-        return defval;
-    }
-    Decimal get(std::string_view name, Decimal defval) const {
-        auto v = _ptr->get_value(name);
-        if (v) return Decimal(*v);
-        return defval;
-    }
-    DateValue get(std::string_view name, DateValue defval) const {
-        auto v = _ptr->get_value(name);
-        if (v) return DateValue::from_string(*v);
-        return defval;
-    }
-    TimeValue get(std::string_view name, TimeValue defval) const {
-        auto v = _ptr->get_value(name);
-        if (v) return TimeValue::from_string(*v);
-        return defval;
-    }
 
-    bool get(std::string_view name, bool defval) const {
-        auto v = _ptr->get_value_bool(name);
-        if (v) return *v;
-        return defval;
-    }
-
-    template<typename T> requires(std::is_arithmetic_v<T>)
-    T get(std::string_view name, T defval) const {
-        auto v = _ptr->get_value(name);
-        if (v) {
-            std::from_chars(v->begin(),v->end(), defval);
+    template<typename _Name, typename T>
+    requires((std::is_convertible_v<_Name, unsigned int> || std::is_convertible_v<_Name, std::string_view>))
+    auto get(_Name name, T defval) const {
+        if constexpr(std::is_same_v<T, bool>) {
+            auto v = _ptr->get_value_bool(name);
+            if (v) return *v;
+            return defval;
+        } else if constexpr(std::is_same_v<T, std::filesystem::path>) {
+            auto v = _ptr->get_path(name);
+            if (v) return *v;
+            return defval;
+        } else if constexpr(std::is_same_v<T, DateValue>) {
+            auto v = _ptr->get_value(name);
+            if (v) return DateValue::from_string(*v);
+            return defval;
+        } else if constexpr(std::is_same_v<T, TimeValue>) {
+            auto v = _ptr->get_value(name);
+            if (v) return TimeValue::from_string(*v);
+            return defval;
+        }else if constexpr(std::is_constructible_v<T, std::string_view>) {
+            auto v = _ptr->get_value(name);
+            if (v) return T(*v);
+            return defval;
+        }else if constexpr(std::is_constructible_v<T, const char *>) {
+            auto v = _ptr->get_value(name);
+            if (v) return *v;
+            return std::string_view(defval);
+        } else if constexpr(std::is_arithmetic_v<T>) {
+            auto v = _ptr->get_value(name);
+            if (v) {
+                Decimal dv(*v);
+                return static_cast<T>(dv);
+            }
+            return defval;
+        } else {
+            static_assert(assert_error<T>, "Can't convert a config value to T");
+            throw;
         }
-        return defval;
-    }
-
-
-    std::filesystem::path get(std::string_view name, std::filesystem::path defval) const {
-        auto v = _ptr->get_path(name);
-        if (v) return *v;
-        return defval;
-    }
-
-    bool is_defined(std::string_view name) const {
-        return _ptr->is_defined(name);
     }
 
     template<typename T>
-    T get(std::string_view name) const {
+    requires((std::is_convertible_v<T, unsigned int> || std::is_convertible_v<T, std::string_view>))
+    bool is_defined(T name) const {
+        return _ptr->is_defined(name);
+    }
+
+    template<typename T, typename Name>
+    requires((std::is_convertible_v<Name, unsigned int> || std::is_convertible_v<Name, std::string_view>))
+    T get(Name name) const {
         if constexpr(std::is_same_v<T, bool>) {
             auto v = _ptr->get_value_bool(name);
             if (v) return *v;
@@ -205,8 +217,12 @@ public:
         return Config(_ptr->open_section(name));
     }
 
+    template<typename _IndexType>
     struct ValueProxy;
-    ValueProxy operator[](std::string_view s) const;
+
+    template<typename T>
+    requires((std::is_convertible_v<T, unsigned int> || std::is_convertible_v<T, std::string_view>))
+    ValueProxy<T> operator[](T s) const;
 
     ///Retrieve list of sections
     std::vector<std::string_view> list_sections() const {
@@ -222,36 +238,41 @@ protected:
 
 };
 
+template<typename _IndexType>
 struct Config::ValueProxy {
     Config cfg;
-    std::string_view name;
+    _IndexType index;
     template<typename T>
     operator T() const {
-        return cfg.get<T>(name);
+        return cfg.get<T>(index);
+    }
+
+    bool defined() const {
+        return cfg.is_defined(index);
     }
 
     operator Config() const {
-        return cfg.get_section(name);
+        return cfg.get_section(index);
     }
     ValueProxy operator[](std::string_view s) const {
-        return {cfg.get_section(name), s};
+        return {cfg.get_section(index), s};
     }
     ValueProxy operator[](const char *s) const {
-        return {cfg.get_section(name), s};
+        return {cfg.get_section(index), s};
     }
     template<typename T>
     auto operator || (T defval) const {
-        return cfg.get(name, defval);
+        return cfg.get(index, defval);
     }
     template<typename T>
     auto operator | (T defval) const {
-        return cfg.get(name, defval);
+        return cfg.get(index, defval);
     }
 
     template<std::invocable<ValueProxy> Fn>
     auto operator >> (Fn &&function) const { // @suppress("No return")
         using RetVal = std::invoke_result_t<Fn, ValueProxy>;
-        if (cfg.is_defined(name)) {
+        if (cfg.is_defined(index)) {
             return function(*this);
         } else {
             if constexpr(!std::is_void_v<RetVal>) {
@@ -263,7 +284,9 @@ struct Config::ValueProxy {
 };
 
 
-inline Config::ValueProxy Config::operator[](std::string_view s) const {
+template<typename T>
+requires((std::is_convertible_v<T, unsigned int> || std::is_convertible_v<T, std::string_view>))
+inline Config::ValueProxy<T> Config::operator[](T s) const {
     return {*this, s};
 }
 

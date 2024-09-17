@@ -22,7 +22,7 @@ class DecimalPrinter:
 
 def decimal_printer_lookup(val):
     """Lookup function pro zjištění, zda je proměnná instancí quarkbot::Decimal."""
-    if str(val.type) == "quarkbot::Decimal":
+    if "Decimal" in str(val.type):
         return DecimalPrinter(val)
     return None
 

@@ -1,14 +1,22 @@
 #include <quarkbot/strategy_api.h>
 #include <quarkbot/module.h>
-#include <quarkbot/series.h>
+#include <quarkbot/tickdata.h>
+#include <quarkbot/ta/sma.h>
 
 
 using namespace quarkbot;
 
 class Example: public Strategy {
+    Persistent<SMA<Decimal> > _sma;
+
 public:
     virtual ConfigSchema get_config_schema() const override;
-    virtual void on_start() override;
+    virtual coro main() override {
+    }
+
+
+
+
 };
 
 
@@ -16,6 +24,24 @@ EXPORT_STRATEGY(Example);
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
 void Example::on_start() {
     auto vs = get_vars<int>("dummy");
     for (const auto &[key, value]: vs) {
@@ -24,7 +50,7 @@ void Example::on_start() {
     }
 
 }
-
+*/
 
 ConfigSchema Example::get_config_schema() const {
     using namespace quarkbot::params;
@@ -69,4 +95,5 @@ ConfigSchema Example::get_config_schema() const {
         Section("ext3", {}, shown),
     };
 }
+
 

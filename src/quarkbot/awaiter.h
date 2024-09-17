@@ -205,7 +205,7 @@ public:
         bool await_suspend(std::coroutine_handle<> h) {
             _h = h;
             State p = dormant;
-            return _state.compare_exchange(p, awaiting);
+            return _state.compare_exchange_strong(p, awaiting);
         }
         auto await_resume() {
             return std::move(_result).get();
@@ -227,7 +227,7 @@ public:
         };
 
         std::coroutine_handle<> _h = {};
-        std::atomic<State> _state={false};
+        std::atomic<State> _state={State::dormant};
         AsyncResult<T> _result;
 
         void accept(Result &&p) {
@@ -244,7 +244,7 @@ public:
 
         template<typename Fn>
         void charge(Fn &&fn) {
-            fn(Acceptor{{this}});
+            fn(Acceptor{MePtr(this)});
         }
     };
 

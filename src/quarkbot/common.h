@@ -166,4 +166,25 @@ public:
     virtual const char *what() const noexcept override {return "Unsupported feature";}
 };
 
+
+template<typename T>
+concept is_indicator = requires(T x, typename T::value_type val) {
+    ///we need to update indicator
+    {x.update(val)};
+    ///we need to know, how much values must be stored in series
+    {x.max_count()}->std::convertible_to<std::size_t>;
+    ///we need to clear state
+    {x.clear()};
+};
+
+class Strategy;
+
+template<typename T>
+concept is_persistent_indicator = (is_indicator<T> && requires(T x, typename T::value_type val) {
+    {x.get_name()} -> std::same_as<const std::string &>;
+    {x.get_strategy()}->std::same_as<Strategy *>;
+});
+
+
+
 }

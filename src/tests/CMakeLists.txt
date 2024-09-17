@@ -13,6 +13,7 @@ set(testFiles
 	stream_merge.cpp
 	structured_ini.cpp
 	mq.cpp
+	ta.cpp
 )
 
 link_libraries(

@@ -82,7 +82,7 @@ protected: //recommended overrides
      * return value of base implementation
      */
     MT_UNSAFE virtual coro main() {
-        co_return;
+        return {};
     }
 
     ///Called when an uncaught exception is detected
@@ -126,11 +126,13 @@ public:  //context API
      *
      * @note NOT MT SAFE
      */
-    MT_UNSAFE Awaitable<void> started() {
+    MT_UNSAFE Awaitable<void> on_started() {
         if (_started) {
-            return [=](auto fn){fn(AsyncResult<void>());};
+            return [=](auto &&fn){fn(AsyncResult<void>());};
         } else {
-            return on_idle();
+             return [this](auto &&fn){
+                 _start_cbs.register_callback(std::move(fn));
+             };
         }
     }
 
@@ -421,7 +423,7 @@ public:  //context API
      *
      * @return dummy order (can be replaced)
      */
-    MT_UNSAFE Order bind_order(const Account &account, const Instrument &instrument, std::string_view label) const {
+    MT_UNSAFE Order bind_order(const Account &account, const Instrument &instrument, std::string_view label = {}) const {
         return _ctx->bind_order(instrument, account, label);
     }
 
@@ -444,7 +446,7 @@ public:  //context API
      *
      * @return new order
      */
-    MT_UNSAFE Order replace_order(const Order &order, const Order::Setup &setup, std::string_view label)  {
+    MT_UNSAFE Order replace_order(const Order &order, const Order::Setup &setup, std::string_view label = {})  {
         return _ctx->replace(order, setup, label.empty()?order.get_label():label);
     }
 
@@ -780,7 +782,7 @@ public:  //context API
      *
      * @see Series
      */
-    MT_UNSAFE virtual ValueStream<std::string_view> load_series(std::string_view name) const {
+    MT_UNSAFE ValueStream<std::string_view> load_series(std::string_view name) const {
         return _ctx->load_series(name);
     }
 

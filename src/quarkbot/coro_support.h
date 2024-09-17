@@ -29,9 +29,6 @@ namespace _details {
             _result.set_value();
         }
     };
-
-
-
 }
 
 class CoroutineBase {
@@ -51,6 +48,8 @@ template<typename T = void>
 class coro_t: public CoroutineBase {
 public:
 
+    ///you can create empty coroutine handle - which will not run
+    coro_t() = default;
 
     struct promise_type: public _details::CoroutineResult<T> {
         std::coroutine_handle<> _awaiting = {};
@@ -83,14 +82,20 @@ public:
         }
     };
 
-    static constexpr bool await_ready() {return false;}
+    bool await_ready() const {return !_prom || _prom.get_deleter()._ran;}
     std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) {
         _prom->_awaiting = h;
         _prom.get_deleter()._ran = true;
-        return _prom->from_handle();
+        return _prom->get_handle();
     }
     decltype(auto) await_resume() {
+        if (!_prom) throw CanceledException();
         return _prom->_result.get();
+    }
+
+    ///cancels run of coroutine
+    void cancel() {
+        _prom.get_deleter()._ran = true;
     }
 
 protected:
@@ -98,7 +103,7 @@ protected:
     struct Detacher {
         bool _ran = false;
         void operator()(promise_type *p){
-            if (!_ran) p->get_handle().destroy();
+            if (_ran) p->get_handle().destroy();
             else p->get_handle().resume();
         }
     };
@@ -110,6 +115,10 @@ protected:
 };
 
 using coro = coro_t<void>;
+using async = coro_t<void>;
+
+template<typename X>
+using async_result = coro_t<X>;
 
 
 

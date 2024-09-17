@@ -172,6 +172,13 @@ struct Position {
 
 using Positions = std::vector<Position>;
 
+inline Decimal get_position(const Positions &pos) {
+    Decimal z = {};
+    for (const auto &x: pos) z+=x.amount;
+    return z;
+}
+
+
 ///single closed trade (aggregated from fills)
 struct Trade {
 

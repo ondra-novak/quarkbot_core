@@ -215,7 +215,7 @@ public:
 
     ///Converts to stream  of different type
     template<SerializableType U>
-    ValueStream(VarSet<U> &&other):_ptr(std::move(other._ptr)) {}
+    ValueStream(ValueStream<U> &&other):_ptr(std::move(other._ptr)) {}
 
     ///Declares iterator - input iterator
     /** The iterator is copy-able, but keep in mind, that it is input iterator, so
@@ -225,7 +225,7 @@ public:
     public:
         using iterator_category = std::input_iterator_tag;
         ///The iterator returns key a and value. The key is always string
-        using value_type = std::string_view;
+        using value_type = T;
 
         ///empty iterator is marked as invalid
         iterator() = default;

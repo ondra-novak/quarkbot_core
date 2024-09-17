@@ -4,51 +4,66 @@
 #include "ema.h"
 
 namespace quarkbot {
+
+template<typename T = Decimal>
 class EMStDev {
 public:
 
-    constexpr EMStDev(Strategy *s,unsigned int period)
-        :_mean(period), _variance(period) {}
-    constexpr EMStDev(unsigned int mean_period, unsigned int variance_period)
-        :_mean(mean_period), _variance(variance_period) {}
+    using value_type = T;
 
-    constexpr EMStDev(const EMA &mean, const EMA &variance)
-        :_mean(mean),_variance(variance) {}
-
-    constexpr EMStDev operator+(double v) const {
-        EMA new_mean = _mean+v;
-        EMA new_var = _variance + pow2(v - new_mean());
-        return EMStDev(new_mean, new_var);
+    void set_period(unsigned int period) {
+        _mean.set_period(period);
+        _variance.set_period(period);
     }
-    constexpr EMStDev &operator+=(double v)  {
-        _mean += v;
-        _variance += pow2(v - _mean());
-        return *this;
+    void set_period(unsigned int mean_period, unsigned int var_period) {
+        _mean.set_period(mean_period);
+        _variance.set_period(var_period);
+    }
+    void update(T value) {
+        _mean.update(value);
+        auto m = _mean.value();
+        _variance.update(pow2(value - m));
     }
 
-    double get_mean() const {
-        return _mean();
-    }
-    double get_stdev() const {
-        return std::sqrt(_variance());
+    T mean() const {
+        return _mean.value();;
     }
 
-    void set_initial(double value, double variace) {
-        _mean.set_initial(value);
-        _variance.set_initial(pow2(variace));
+    T stdev() const {
+        return static_cast<T>(std::sqrt(static_cast<double>(_variance.value())));
     }
-    double operator()(double x) const {
+
+    std::size_t max_count() const {
+        return 1;
+    }
+
+    auto get_mean() const {
+        return _mean.value();
+    }
+
+    auto get_stdev() const {
+        return _variance.value();
+    }
+
+    auto operator()(T x) const {
         return get_mean() + get_stdev() * x;
     }
 
-protected:
-    EMA _mean;
-    EMA _variance;
+    void set_initial(T mean, T stdev) {
+        _mean.set_initial(mean);
+        _variance.set_initial(pow2(stdev));
+    }
 
-    static constexpr double pow2(double x) {
+
+protected:
+    EMA<T> _mean;
+    EMA<T> _variance;
+
+    static T pow2(T x) {
         return x*x;
     }
 };
 
 
+}
 #endif /* SRC_MAIN_EMSTDEV_H_ */

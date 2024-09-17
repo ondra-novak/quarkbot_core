@@ -197,7 +197,7 @@ namespace Serializer {
 
     template<typename T, typename Iter>
     T from_binary(Iter &&itr, Iter end) {
-        return from_binary(itr, end);
+        return from_binary<T>(itr, end);
     }
 
 
