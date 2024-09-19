@@ -26,8 +26,8 @@ public:
         }
         void request_stop() noexcept {
             if (_stop_requested) return;
-            if (_ent) _ent->request_stop();
             _stop_requested = true;
+            if (_ent) _ent->request_stop();
         }
         virtual void attach(IControlledEntity *ent) {
             _ent = ent;
@@ -53,9 +53,11 @@ public:
             });
         }
         virtual void notify_exit() override {
+            _stopped = true;
             _owner.exchange_exit();
         }
         virtual void notify_fail() override {
+            _stopped = true;
             _owner.exchange_fail();
         }
         virtual Type get_type() const override {return Type::exchange;}
@@ -77,9 +79,11 @@ public:
             });
         }
         virtual void notify_exit() override {
+            _stopped = true;
             _owner.strategy_exit();
         }
         virtual void notify_fail() override {
+            _stopped = true;
             _owner.strategy_fail();
         }
         virtual Type get_type() const override {return Type::strategy;}
@@ -107,7 +111,7 @@ public:
     }
 
     auto get_next_time() const {
-        return _dispatcher.get_nearest_schedule();
+        return std::max(_tp,_dispatcher.get_nearest_schedule());
     }
 
     bool go_next() {
@@ -130,7 +134,9 @@ public:
         if (!_stored_exception) _stored_exception = std::current_exception();
         request_stop();
     }
-    void strategy_exit() {}
+    void strategy_exit() {
+        check_stop();
+    }
     void strategy_fail() {
         if (!_stored_exception) _stored_exception = std::current_exception();
         request_stop();
@@ -138,8 +144,12 @@ public:
 
     void request_stop() {
         for (auto &x: _exchanges) {x->request_stop();}
-        for (auto &x: _exchanges) if (!x->is_stopped()) return ;
         for (auto &x: _strategies) {x->request_stop();}
+        check_stop();
+    }
+
+    void check_stop() {
+        for (auto &x: _exchanges) if (!x->is_stopped()) return ;
         for (auto &x: _strategies) if (!x->is_stopped()) return ;
         _can_exit_now = true;
     }

@@ -137,6 +137,10 @@ public:
             }
         }
 
+        friend std::ostream &operator<<(std::ostream &str, const Reason &res) {
+            str << res.get_reason_as_string() << " " << res.message();
+            return str;
+        }
 
     protected:
         E _reason;
@@ -213,6 +217,7 @@ public:
 
 
         static constexpr Options Default() {return {};}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
     };
 
 
@@ -227,6 +232,7 @@ public:
         Decimal amount;
         Market(Side s, Decimal amount, Options opt = Options::Default())
             :Common{s, opt},amount(amount) {}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
     };
 
     ///Limit order
@@ -235,6 +241,7 @@ public:
         Decimal limit_price;
         Limit(Side s, Decimal amount, Decimal limit_price, Options opt = Options::Default())
             :Common(s, opt),amount(amount), limit_price(limit_price) {}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
     };
 
     ///Limit post only - rejlastected if would immediately match
@@ -243,6 +250,7 @@ public:
         Decimal limit_price;
         LimitPostOnly(Side s, Decimal amount, Decimal limit_price, Options opt = Options::Default())
             :Common(s, opt),amount(amount), limit_price(limit_price) {}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
     };
 
     ///Limit immediate or cancel - rejects when order ends in orderbook (just fill up to limit)
@@ -251,6 +259,7 @@ public:
         Decimal limit_price;
         ImmediateOrCancel(Side s, Decimal amount, Decimal limit_price, Options opt = Options::Default())
             :Common(s, opt),amount(amount), limit_price(limit_price) {}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
 
     };
 
@@ -260,6 +269,7 @@ public:
         Decimal stop_price;
         Stop(Side s, Decimal amount, Decimal stop_price, Options opt = Options::Default())
             :Common(s, opt), amount(amount), stop_price(stop_price) {}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
     };
 
     ///StopLimit order
@@ -277,6 +287,7 @@ public:
         Decimal stop_distance;
         TrailingStop(Side s, Decimal amount, Decimal stop_distance, Options opt = Options::Default())
             :Common(s, opt), amount(amount), stop_distance(stop_distance) {}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
     };
 
     ///Target and StopLoss order (OCO)
@@ -286,12 +297,14 @@ public:
         Decimal limit_price;
         TpSl(Side s, Decimal amount, Decimal stop_price, Decimal limit_price, Options opt = Options::Default())
             :Common(s, opt), amount(amount), stop_price(stop_price), limit_price(limit_price) {}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
     };
     ///Close position order (CFD)
     struct ClosePosition {
         std::string pos_id;
         Decimal remain;
         ClosePosition(const std::string  &pos, Decimal remain = 0):pos_id(pos), remain(remain) {}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
     };
 
     ///Transfer money from one account to other account
@@ -312,6 +325,7 @@ public:
         Decimal amount;
         Transfer(const Account &target, Decimal amount)
             :target(target), amount(amount) {}
+        friend std::ostream &operator<<(std::ostream &str, const Options &opt);
     };
 
     using Setup = std::variant<
@@ -373,22 +387,22 @@ public:
 
 template<typename T>
 concept is_order = requires(T order) {
-    {order.side}->std::same_as<Side>;
-    {order.behavior}->std::same_as<IOrder::Behavior>;
+    {order.side}->std::convertible_to<Side>;
 };
 
 
 
 template<typename T>
 concept order_has_amount = (is_order<T> && requires(T order) {
-    {order.amount};
+    {order.amount} -> std::convertible_to<Decimal>;
 });
 
 
 template<typename T>
 concept order_has_options= (is_order<T> && requires(T order) {
-    {order.options};
+    {order.options} ->std::convertible_to<IOrder::Options>;
 });
+
 
 #endif
 
@@ -451,7 +465,7 @@ public:
     }
 
     static Decimal get_total(const Setup &setup) {
-        return std::visit([](const auto &x){
+        return std::visit([](const auto &x) -> Decimal {
            if constexpr(order_has_amount<decltype(x)>) {
                return x.amount;
            } else {
@@ -622,5 +636,59 @@ inline std::string_view to_string(Order::Behavior b) {
     }
 }
 
+inline std::ostream &operator<<(std::ostream &str, const IOrder::Options &x) {
+    str << to_string(x.behavior);
+    if (x.amend) str << ",amend";
+    if (x.amount_is_volume) str << ",amount_is_volume";
+    if (x.leverage>0) str << ",leverage=" << x.leverage;
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::Market &x) {
+    str << to_string(x.side) << " " << x.amount << " MARKET (" << x.options << ")";
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::Limit &x) {
+    str << to_string(x.side) << " " << x.amount << " LIMIT " << x.limit_price << " (" << x.options << ")";
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::LimitPostOnly &x) {
+    str << to_string(x.side) << " " << x.amount << " LIMIT(post) " << x.limit_price << " (" << x.options << ")";
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::Stop &x) {
+    str << to_string(x.side) << " " << x.amount << " STOP " << x.stop_price << " (" << x.options << ")";
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::StopLimit &x){
+    str << to_string(x.side) << " " << x.amount << " STOP " << x.stop_price << " LIMIT " << x.limit_price << " (" << x.options << ")";
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::TrailingStop &x) {
+    str << to_string(x.side) << " " << x.amount << " STOP trailing=" << x.stop_distance << " (" << x.options << ")";
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::TpSl &x) {
+    str << to_string(x.side) << " " << x.amount << "OCO LIMIT " << x.limit_price << " STOP " << x.stop_price << " (" << x.options << ")";
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::ImmediateOrCancel &x) {
+    str << to_string(x.side) << " " << x.amount << " LIMIT(ioc) " << x.limit_price << " (" << x.options << ")";
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::Transfer &x) {
+    str << " TRANSFER "<< x.amount << " to=" << x.target.get_label();
+    return str;
+}
+inline std::ostream &operator<<(std::ostream &str, const IOrder::ClosePosition &x) {
+    str << "CLOSE " << x.pos_id << " (reduce_to=" << x.remain << ")";
+    return str;
+}
+
+inline std::ostream &operator<<(std::ostream &str, const IOrder::Setup &x) {
+    return std::visit([&](const auto &_x) -> std::ostream &{
+        return str << _x;
+    }, x);
+
+}
 
 }

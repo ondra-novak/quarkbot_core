@@ -149,7 +149,7 @@ namespace Serializer {
                 return out;
             } else if constexpr(std::is_trivially_copy_constructible_v<T>) {
                 union CopyHelper {
-                    char buffer[sizeof(T)];
+                    char buffer[sizeof(T)] = {};
                     T val;
                     CopyHelper() {}
                     ~CopyHelper() {}

@@ -58,7 +58,7 @@ protected:
 
     virtual void on_start() override;
 
-    bool validate_order(const Order::Setup &setup);
+    Order::Reason validate_order(const Order::Setup &setup);
 
     void process_execution(simulator::Matching &m, simulator::Matching::Execution ex);
 

@@ -184,7 +184,7 @@ AsyncResult(X) -> AsyncResult<X>;
  */
 //template<typename T, std::invocable<Function<void(AsyncResult<T>)> > RegFn>
 template<typename T, typename RegFn>
-class AwaitableResult {
+class [[nodiscard]] AwaitableResult {
 public:
 
     using Callback = Function<void(AsyncResult<T>)>;

@@ -50,6 +50,8 @@ public:
         auto ae = a.get_exponent();
         auto bm = b.get_mantisa();
         auto be = b.get_exponent();
+        if (am == 0) return b;
+        if (bm == 0) return a;
         if (ae < be) {
             if (can_dec_exp(bm)) return a + b.adjust_exponent(be-1);
             else return a.adjust_exponent(be) + b;
@@ -307,7 +309,8 @@ public:
         if (expdiff < 0) {
             m = m * pow10(-expdiff);
         } else {
-            m = m / pow10(expdiff);
+            if (expdiff > 19) m = 0;
+            else m = m / pow10(expdiff);
         }
         return Decimal(m, new_exponent);
     }

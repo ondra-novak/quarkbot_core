@@ -185,6 +185,7 @@ void Matching::accept_ticker(const TickData &tk) {
     _cum_volume = tk.cum_volume;
     _index = tk.index;
     _trades = tk.cum_trades;
+    if (dff > 0) _last = tk.last;
 }
 
 }

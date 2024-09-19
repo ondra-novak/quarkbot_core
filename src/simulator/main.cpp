@@ -158,6 +158,11 @@ int main(int argc, char **argv) {
         auto mq = std::make_shared<BasicMQ>();
         configure_context(*context, cfg, aimap);
 
+        if (!scheduler.is_next()) {
+            throw std::runtime_error("No data / No timeline");
+        }
+        scheduler.go_next();
+
         std::vector<std::shared_ptr<IContext> > strategies;
         load_strategies((*inicfg)["strategies"],
                 inicfg, aimap, scheduler, Log(logservice),

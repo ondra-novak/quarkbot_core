@@ -120,10 +120,10 @@ public:
             if (!executor(std::move(*fn))) return false;
             _executing_ident = {};
 
-            if (_tqueue.front()._tp > tp) {
-                _near_tp = _tqueue.front()._tp;
-            } else {
+            if (_tqueue.empty()) {
                 _near_tp = TimePoint::max();
+            } else {
+                _near_tp = _tqueue.front()._tp;
             }
 
             return true;

@@ -196,6 +196,8 @@ Order BasicContext::place(const Instrument &instrument, const Account &account, 
     auto ord = e.create_order(instrument, account, setup, label);
     if (!ord.discarded()) {
         _exchanges[ex]._batch_place.push_back(ord);
+    } else {
+        _logger.info("Order discarded: {} / {} : {} : {}", instrument.get_id(), account.get_id(), setup, ord.get_reason());
     }
     return ord;
 }
@@ -207,6 +209,8 @@ Order BasicContext::replace(const Order &order, const Order::Setup &setup, std::
     auto ord = e.create_order_replace(order, setup, label);
     if (!ord.discarded()) {
         _exchanges[ex]._batch_place.push_back(ord);
+    } else {
+        _logger.info("Order discarded: {} / {} : {} : {} ", order.get_instrument().get_id(), order.get_account().get_id(), setup, ord.get_reason());
     }
     return Order(ord);
 }
@@ -222,7 +226,7 @@ void BasicContext::cancel(const Order &order) {
 void BasicContext::set_timer(Timestamp at, TimerEventCB fnptr, TimerID id) {
 
     std::lock_guard _(_queue_mx);
-    if (_queue.post_timed(id, at, std::move(fnptr))) {
+    if (_queue.post_timed(id, at, EvCall{std::move(fnptr)})) {
         notify_queue();
     }
 }
@@ -431,6 +435,7 @@ void BasicContext::on_scheduled(Timestamp tp) noexcept {
         std::visit([&](auto &&fn) {
             call_strategy(std::move(fn));
         }, ev);
+        ev.template emplace<EvNoop>();
         lk.lock();
         return true;
     };
@@ -585,6 +590,10 @@ void BasicContext::on_orders_restored(Function<void(AsyncResult<std::span<Order>
 }
 void BasicContext::on_mq_message(Function<void(AsyncResult<Message>)> &&callback) {
     _on_mq_message.register_callback(std::move(callback));
+}
+
+void BasicContext::EvCall::operator()() {
+    _fn();
 }
 
 }

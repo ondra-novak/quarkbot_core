@@ -63,13 +63,13 @@ public:
                     if (can_place_order(sell, p)) {
                         Decimal amount = calc_amount(Side::sell, instr_cfg, p);
                         if (amount) {
-                            buy = replace_order(sell, IOrder::Limit(Side::buy,amount,p));
+                            sell = replace_order(sell, IOrder::Limit(Side::buy,amount,p));
                             process_fills(sell);
                         }
                     }
                 }
             }
-            wait_until(cur_time+std::chrono::minutes(1), 0);
+            co_await wait_until(cur_time+std::chrono::minutes(1), 0);
         }
     }
 
@@ -85,6 +85,7 @@ public:
     }
 
     bool can_place_order(Order &ord, Decimal price) const {
+        if (price <= 0) return false;
         if (ord.done()) return true;
         const auto &st = ord.get_setup();
         if (std::holds_alternative<Order::Limit>(st)) {

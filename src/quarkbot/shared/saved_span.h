@@ -24,6 +24,7 @@ public:
             std::size_t idx = 0;
             for (auto &item: s) {
                 std::construct_at(_ptr+idx, std::move(item));
+                ++idx;
             }
         }
         _count = s.size();
@@ -48,8 +49,8 @@ public:
     }
 
     constexpr SavedSpan(SavedSpan &&other):_ptr(other._ptr),_count(other._count) {
-        _ptr = nullptr;
-        _count = 0;
+        other._ptr = nullptr;
+        other._count = 0;
     }
 
     constexpr SavedSpan &operator=(SavedSpan &&other) {

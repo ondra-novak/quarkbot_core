@@ -129,6 +129,10 @@ protected:
         bool operator==(const MarketEventItem &) const = default;
     };
 
+    struct EvNoop {
+        void operator()() {}
+    };
+
 
     struct EvStart {
         BasicContext *me;
@@ -190,9 +194,13 @@ protected:
         void operator()();
     };
 
-    using EvCall = Function<void()>;
+    struct EvCall {
+        TimerEventCB _fn;
+        void operator()();
+    };
 
     using QueueItem = std::variant<
+            EvNoop,
             EvStart,
             EvUpdateAccount,
             EvMarketEventItem,
@@ -201,7 +209,8 @@ protected:
             EvMQ,
             EvRestoreOrders,
             EvUpdateMarket,
-            TimerEventCB
+            EvStopRequest,
+            EvCall
             >;
 
     struct QueueItemHasher {

@@ -89,15 +89,17 @@ std::string BasicExchangeContext::get_label() const {
 void BasicExchangeContext::update_account(IEventTarget *target, const Account &account) {
     std::lock_guard _(_mx);
     auto &lst = _account_update_waiting[account];
-    if (lst.empty()) _ptr->update_account(account);
+    bool e = lst.empty();
     lst.set(target);
+    if (e) _ptr->update_account(account);
 }
 
 void BasicExchangeContext::update_instrument(IEventTarget *target, const Instrument &instrument) {
     std::lock_guard _(_mx);
     auto &lst = _instrument_update_waiting[instrument];
-    if (lst.empty()) _ptr->update_instrument(instrument);
+    bool e = lst.empty();
     lst.set(target);
+    if (e) _ptr->update_instrument(instrument);
 }
 
 void BasicExchangeContext::object_updated(const Account &account, AsyncResult<void> st) {
@@ -186,8 +188,9 @@ void BasicExchangeContext::update_market(IEventTarget *target, const Instrument 
 {
     std::lock_guard _(_mx);
     auto &lst = _market_updates[Subscription{type,i}];
-    if (lst.empty()) _ptr->update_market(i, type);
+    bool e = lst.empty();
     lst.set(target);
+    if (e) _ptr->update_market(i, type);
 }
 
 

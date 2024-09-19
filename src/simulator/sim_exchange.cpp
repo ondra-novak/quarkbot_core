@@ -85,7 +85,7 @@ void SimExchange::update_instrument(const Instrument &i) {
 }
 
 void SimExchange::update_market(const Instrument &i, MarketEventType type) {
-    if (type != MarketEventType::tickdata) {
+    if (type == MarketEventType::tickdata) {
         auto me = SimInstrument::get_matching(i).lock_shared()->get_ticker(_cur_sim_time);
         object_updated(i, type, std::move(me));
     } else {
@@ -109,19 +109,21 @@ std::optional<IExchangeInfo::Icon> SimExchange::get_icon() const {
 Order SimExchange::create_order(const Instrument &instrument,
         const Account &account, const Order::Setup &setup,
         std::string_view label) {
-    if (validate_order(setup)) {
+    auto r = validate_order(setup);
+    if (r == Order::Reason::no_reason) {
         return Order(std::make_shared<SimOrder>(instrument, account, setup, label, Order::Origin::strategy));
     } else {
-        return order_error(instrument, account, setup, label, Order::Reason::unsupported);
+        return order_error(instrument, account, setup, label, r);
     }
 }
 
 Order SimExchange::create_order_replace(const Order &replace,
         const Order::Setup &setup, std::string_view label) {
-    if (validate_order(setup)) {
+    auto r = validate_order(setup);
+    if (r == Order::Reason::no_reason) {
         return Order(std::make_shared<SimOrder>(replace, setup, label, Order::Origin::strategy));
     } else {
-        return order_error(replace.get_instrument(), replace.get_account(), setup, label, Order::Reason::unsupported);
+        return order_error(replace.get_instrument(), replace.get_account(), setup, label, r);
     }
 }
 
@@ -347,11 +349,37 @@ void SimExchange::replay_accept(std::string_view symbol, TickData &&ticker, Time
     }
 }
 
-bool SimExchange::validate_order(const Order::Setup &setup) {
+Order::Reason SimExchange::validate_order(const Order::Setup &setup) {
     auto opt = Order::get_options(setup);
-    if (opt && opt->amount_is_volume) return false;
-    return !(std::holds_alternative<Order::Transfer>(setup)
-            || std::holds_alternative<IOrder::Undefined>(setup));
+    if (opt && opt->amount_is_volume) return Order::Reason::unsupported;
+    return std::visit([&](const auto &x) -> Order::Reason{
+        using T = std::decay_t<decltype(x)>;
+        if constexpr(std::is_same_v<T, IOrder::Transfer> || std::is_same_v<T, IOrder::Undefined>) {
+           return Order::Reason::unsupported;
+        }
+        if constexpr(order_has_amount<T>) {
+            if (x.amount <= 0) return Order::Reason(Order::Reason::invalid_params, "amount <= 0");
+        }
+        if constexpr(std::is_same_v<T, IOrder::Limit>
+                     || std::is_same_v<T, IOrder::LimitPostOnly>
+                     || std::is_same_v<T, IOrder::TpSl>
+                     || std::is_same_v<T, IOrder::StopLimit>) {
+            if (x.limit_price <= 0) return Order::Reason(Order::Reason::invalid_params, "limit_price <= 0");
+        }
+        if constexpr(std::is_same_v<T, IOrder::Stop>
+                     || std::is_same_v<T, IOrder::StopLimit>
+                     || std::is_same_v<T, IOrder::TpSl>) {
+            if (x.stop_price <= 0) return Order::Reason(Order::Reason::invalid_params, "stop_price <= 0");
+        }
+        if constexpr(std::is_same_v<T, IOrder::TrailingStop>) {
+            if (x.stop_distance <= 0) return Order::Reason(Order::Reason::invalid_params, "stop_distance <= 0");
+        }
+        if constexpr(std::is_same_v<T, IOrder::ClosePosition>) {
+            if (x.remain < 0) return Order::Reason(Order::Reason::invalid_params, "remain < 0");
+        }
+        return Order::Reason::no_reason;
+    }, setup);
+
 }
 
 void SimExchange::restore_orders(const Account &acc, std::span<SerializedOrder> orders,

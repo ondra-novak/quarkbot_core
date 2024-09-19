@@ -12,6 +12,7 @@ class Example: public Strategy {
 public:
     virtual ConfigSchema get_config_schema() const override;
     virtual coro main() override {
+        return {};
     }
 
 
