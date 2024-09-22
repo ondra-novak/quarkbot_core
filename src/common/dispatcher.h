@@ -1,5 +1,5 @@
 #pragma once
-#include "shared/cluster_alloc.h"
+#include <quarkbot/shared/cluster_alloc.h>
 #include <list>
 #include <unordered_set>
 #include <chrono>

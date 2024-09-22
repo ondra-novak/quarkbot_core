@@ -1,4 +1,4 @@
-#include "../common/shared/cluster_alloc.h"
+#include <quarkbot/shared/cluster_alloc.h>
 #include <list>
 
 std::list<int, ClusterAlloc<int> > intlist = {};

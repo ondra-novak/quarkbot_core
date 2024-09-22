@@ -14,6 +14,8 @@ set(testFiles
 	structured_ini.cpp
 	mq.cpp
 	ta.cpp
+	root.cpp
+	integral.cpp
 )
 
 link_libraries(
