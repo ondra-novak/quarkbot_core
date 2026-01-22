@@ -9,3 +9,6 @@
 	path = src/libs/libcoro
 	url = https://github.com/ondra-novak/libcoro.git
     shallow = true
+[submodule "src/coro"]
+	path = src/coro
+	url = https://github.com/ondra-novak/basic_coro
