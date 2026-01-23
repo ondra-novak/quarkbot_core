@@ -116,9 +116,9 @@ protected:
     std::size_t _chan_hash = 0;
 
     static std::size_t hash_of_channel_list(const ChannelList &list);
-
-
 };
+
+
 
 class MQAbstractBridgeAutoMonitor: public MQAbstractBridge, public IMQBroker::IMonitor {
 public:

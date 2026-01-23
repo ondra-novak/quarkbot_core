@@ -2,6 +2,7 @@
 /.current_profile.mk
 /.cproject
 /.project
+/.cache
 /.settings
 /html
 /latex
