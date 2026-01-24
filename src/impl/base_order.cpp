@@ -1,4 +1,5 @@
 #include "base_order.hpp"
+#include "ifc/execution_worker.hpp"
 
 namespace quarkbot {
 
@@ -41,14 +42,14 @@ coro::awaitable<bool> BaseOrder::wait_event()  {
         } else if (BaseOrder::is_done()) {  //empty and done
             return res(false);          //report it is done
         } else { //empty and not done, register result with dispatcher
-            _event_waiter = CoroDispatchProxy<bool>(std::move(res));                    
+            _event_waiter = IExecutionWorker::proxy_result(std::move(res));                    
             return coro::prepared_coro{};   //nothing to resume
         }
     };
 }
 
 double BaseOrder::get_remaining_amount() const  {
-    return _params.amount - _filled_amount;
+    return _params.amount.value - _filled_amount;
 }
 
 bool BaseOrder::any_fill() const  {

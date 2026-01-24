@@ -2,7 +2,7 @@
 
 #include "market_instrument.hpp"
 #include "order.hpp"
-#include "../utils/function_view.hpp"
+#include "utils/function_view.hpp"
 #include "storage.hpp"
 #include <chrono>
 namespace quarkbot {

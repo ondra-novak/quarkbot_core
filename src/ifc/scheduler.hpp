@@ -45,10 +45,8 @@ public:
        This also serves as a signal to the sleeping coroutine.
 
      * @param alert_flag alert flag used to identify sleeping awaitables
-     * @return prepared coroutine which can be resumed to perform the interruption. When coroutine
-        is interrupted, associated awaitable returns with canceled status.
      */
-    virtual coro::prepared_coro interrupt(coro::alert_flag &alert_flag) = 0;
+    virtual void interrupt(coro::alert_flag *alert_flag) = 0;
 
 };
 

@@ -3,6 +3,7 @@
 
 #include "defs.hpp"
 #include <optional>
+#include "exchange.hpp" 
 namespace quarkbot {
 
 class IUnderlyingCurrency {

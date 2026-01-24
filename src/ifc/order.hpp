@@ -3,6 +3,7 @@
 #include "defs.hpp"
 #include <chrono>
 #include <optional>
+#include "utils/round.hpp"
 namespace quarkbot {
 
 
@@ -35,13 +36,13 @@ struct OrderParameters {
     ///order type
     OrderType type;
     ///amount (positive number)
-    RoundedNumber amount; //mandatory
+    Rounded amount; //mandatory
     ///limit price (for limit orders)
-    RoundedNumber limit_price = {};
+    Rounded limit_price = {};
     ///stop price (for stop orders)
-    RoundedNumber stop_price = {};
+    Rounded stop_price = {};
     ///trailing offset - round strategy is applied to final price
-    RoundedNumber trailing_offset = {};
+    Rounded trailing_offset = {};
     ///max leverage (0 = disabled)
     double leverage = 0;
     

@@ -1,7 +1,7 @@
 #pragma once
-#include "../ifc/stream.hpp"
+#include "ifc/stream.hpp"
 #include "ifc/defs.hpp"
-#include "utils/coro_dispatch.hpp"
+#include "ifc/execution_worker.hpp"
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -56,7 +56,7 @@ namespace quarkbot {
     protected:
         std::shared_ptr<StreamServer<T> > _server;
         std::size_t _tick_counter = 0;
-        CoroDispatchProxy<Event> _result;
+        IExecutionWorker::proxy_result<Event> _result;
 
 
     };

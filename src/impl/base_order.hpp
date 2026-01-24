@@ -1,10 +1,8 @@
-#include "../ifc/order.hpp"
-#include "coro/src/basic_coro/prepared_coro.hpp"
+#include "ifc/order.hpp"
 #include "ifc/defs.hpp"
-#include "utils/coro_dispatch.hpp"
 #include "utils/spin_mutex.hpp"
+#include "ifc/execution_worker.hpp"
 #include <memory>
-#include <mutex>
 #include <deque>
 #include <optional>
 #include <variant>
@@ -52,7 +50,7 @@ protected:
     OrderStatus _status = OrderStatus::sent;
     mutable spin_mutex _mx;
     EventQueue _events = {};
-    CoroDispatchProxy<bool> _event_waiter = {};
+    IExecutionWorker::proxy_result<bool> _event_waiter = {};
 
     void flush_statuses();
 
