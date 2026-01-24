@@ -3,7 +3,6 @@
 
 #include <concepts>
 #include <deque>
-#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.hpp"
-#include "ifc/tradable_instrument.hpp"
 #include <chrono>
 #include <optional>
 namespace quarkbot {
@@ -36,13 +35,21 @@ struct OrderParameters {
     ///order type
     OrderType type;
     ///amount (positive number)
-    double amount; //mandatory
+    RoundedNumber amount; //mandatory
     ///limit price (for limit orders)
-    double limit_price = 0;
+    RoundedNumber limit_price = {};
     ///stop price (for stop orders)
-    double stop_price = 0;
-    ///reserved for future use
-    double reserved[4] = {}; 
+    RoundedNumber stop_price = {};
+    ///trailing offset - round strategy is applied to final price
+    RoundedNumber trailing_offset = {};
+    ///max leverage (0 = disabled)
+    double leverage = 0;
+    
+    ///reduce or close position
+    bool reduce_only = false;
+    ///create or increase to hedge side - can open reverse position if supported on exchange
+    bool hedge = false;
+
 };
 
 enum class OrderStatus {

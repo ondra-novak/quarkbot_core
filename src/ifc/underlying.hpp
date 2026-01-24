@@ -1,10 +1,8 @@
 #pragma once
 
 
-#include "coro/src/basic_coro/when_all.hpp"
 #include "defs.hpp"
 #include <optional>
-#include "exchange.hpp"
 namespace quarkbot {
 
 class IUnderlyingCurrency {
@@ -22,7 +20,7 @@ public:
         @param other The currency to which the ratio is calculated (awaitable - co_await)
         @return The ratio of this currency to the other currency. Returns 0 if ratio is not available.
      */
-    virtual Awaitable<double> get_ratio_to(const PUnderlyingCurrency &other) const = 0;
+    virtual awaitable<double> get_ratio_to(const PUnderlyingCurrency &other) const = 0;
     virtual PExchange get_exchange() const = 0;
 
 
@@ -33,7 +31,7 @@ public:
     @return async awaitable return ratio from * ratio = to. If ration cannot be determined,
     return zero. If currencies are from different exchanges, it uses intermediate currency for conversion
      */
-    friend Awaitable<double> get_ratio(const PUnderlyingCurrency &from, const PUnderlyingCurrency &to) {
+    friend awaitable<double> get_ratio(const PUnderlyingCurrency &from, const PUnderlyingCurrency &to) {
 
         //same iso code, same rate
         if (from->get_ISO_code() == to->get_ISO_code()) return 1.0;
@@ -44,7 +42,7 @@ public:
         if (ex_from == ex_to) return from->get_ratio_to(to);
     
         //initiate coroutine to perform intermediate conversion
-        constexpr auto async_coro =  [](const PUnderlyingCurrency &from, const PUnderlyingCurrency &to)->Awaitable<double> {
+        constexpr auto async_coro =  [](const PUnderlyingCurrency &from, const PUnderlyingCurrency &to)->awaitable<double> {
             auto ex_from = from->get_exchange();
             auto ex_to = to->get_exchange();
             auto lst_from = ex_from->get_all_iso_currencies();

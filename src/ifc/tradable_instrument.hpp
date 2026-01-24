@@ -1,15 +1,28 @@
 #pragma once
 
-#include "defs.hpp"
+#include "market_instrument.hpp"
 #include "order.hpp"
 #include "../utils/function_view.hpp"
 #include "storage.hpp"
 #include <chrono>
 namespace quarkbot {
 
-class ITradableInstrument {
+
+
+class ITradableInstrument : public IMarketInstrument{
 public:
     virtual ~ITradableInstrument() = default;
+
+    struct RiskLimits {
+        ///allocated equity for this instrument (in counter underlying)
+        double allocated_equity = 0;
+        ///max allowed leverage
+        double max_leverage = 0;
+        ///max allowed position (short/long)
+        double max_position = 0;
+        ///allowed trading size (buy - long, sell - short, otherwise unlimited)
+        Side allowed_side = Side::undetermined;
+    };
 
 
     ///Place an order on the instrument
@@ -69,12 +82,10 @@ public:
     */
     virtual coro::awaitable<std::span<const IStorage::Fill> > get_last_fills(std::span<IStorage::Fill> space) = 0;
 
-    ///Get associated exchange
-    virtual PExchange get_exchange() = 0;
     ///Get associated account
-    virtual PAccount get_account() = 0;
-    ///Get associated market instrument
-    virtual PMarketInstrument get_instrument() = 0;    
+    virtual PAccount get_account() const = 0;
+
+    virtual RiskLimits get_limits() const = 0;
 };
 
 
