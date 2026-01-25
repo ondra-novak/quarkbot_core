@@ -22,7 +22,7 @@ public:
         @param time_point time point until which to sleep
         @param alert_flag_ptr optional pointer to alert flag. If provided, it serves as
         identification and also helps to properly interrupt sleep. Use interrupt function
-        to alert the sleep. If this flag is set to true when function is called, the function
+        to alert the flag. If this flag is set to true when function is called, the function
         returns immediately canceled awaitable.
         @return awaitable which completes when time point is reached or alert flag is set
      */
@@ -32,7 +32,7 @@ public:
         @param duration duration to sleep
         @param alert_flag_ptr optional pointer to alert flag. If provided, it serves as
         identification and also helps to properly interrupt sleep. Use interrupt function
-        to alert the sleep. If this flag is set to true when function is called, the function
+        to alert the flag. If this flag is set to true when function is called, the function
         returns immediately canceled awaitable.
         @return awaitable which completes when duration elapses or alert flag is set
      */

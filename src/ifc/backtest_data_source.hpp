@@ -15,6 +15,7 @@ class IBacktestDataSource {
 
     struct Event {
         EventType type;
+        std::string instrument;
         std::chrono::system_clock::time_point time;
     };
 

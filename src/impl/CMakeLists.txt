@@ -8,5 +8,7 @@ add_library (quarkbot_impl
     worker_base.cpp
     scheduler_rt.cpp
     backtest_worker.cpp
+    backtest_exchange.cpp
+    data_source_base.cpp
 )
 

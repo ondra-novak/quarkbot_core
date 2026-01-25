@@ -19,7 +19,6 @@ public:
     virtual WalletInfo get_margin_equity() const = 0;
 
     virtual std::string_view get_name() const = 0;
-
 };
 
 

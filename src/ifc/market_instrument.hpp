@@ -1,8 +1,8 @@
 #pragma once
 
 #include "defs.hpp"
+#include "ifc/stream.hpp"
 #include <memory>
-#include <typeinfo>
 namespace quarkbot {
 
 
@@ -35,8 +35,15 @@ public:
 
 
     ///Internal
-    virtual std::shared_ptr<void> subscribe_stream_internal(const std::type_info &type) = 0;
+    virtual std::shared_ptr<IMarketEventStreamBase> subscribe_stream_internal(std::string_view type) const = 0;
     
+    ///Create tradable instrument from the instrument
+    /**
+      @param account associated account
+      @return reference to tradable instrument, can be nullptr if not available for trading with this account
+     */
+    virtual awaitable<PTradableInstrument> create_tradable_instrument(PAccount account) const = 0;
+
 
     ///Subscribe market event stream
     /**
@@ -48,8 +55,8 @@ public:
     just destroy the pointer or call close() on the stream.
      */
     template<StreamType T>
-    PMarketEventStream<T> subscribe() {
-        return std::static_pointer_cast<IMarketEventStream<T> >(subscribe_stream_internal(typeid(T)));
+    PMarketEventStream<T> subscribe() const {
+        return std::static_pointer_cast<IMarketEventStream<T> >(subscribe_stream_internal(T::type));
     }
 
     virtual std::string_view get_name() const = 0;
