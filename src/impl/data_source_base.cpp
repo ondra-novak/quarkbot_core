@@ -5,32 +5,32 @@
 
 namespace quarkbot {
 
-bool DataSourceBase::post(const Key &topic, const StreamTypeItem &data) {
+void DataSourceBase::post(const Key &topic, const StreamTypeItem &data) {
     std::unique_lock lk(_mx);
     auto iter =  _map.find(topic);
     if (iter == _map.end()) {
-        return false;
+        disable_stream(topic.topic, topic.type);        
+    } else {
+        if (broadcast(lk,iter->second,  0, 0, data)) {
+            lk.lock();
+            if (iter->second.empty()) {
+                _map.erase(iter);
+                disable_stream(topic.topic, topic.type);
+            }
+        }
     }
-    return broadcast(lk, iter, 0, 0, data);    
+
 }
 
 constexpr std::size_t count_of_receivers_in_block = 32;
 
-bool DataSourceBase::broadcast(std::unique_lock<std::mutex> &lk,
-        Map::iterator iter, std::size_t rd_pos, std::size_t wr_pos, 
+bool DataSourceBase::broadcast(std::unique_lock<std::mutex> &lk, Targets &tgs, std::size_t rd_pos, std::size_t wr_pos, 
          const StreamTypeItem &data) {
-    Targets &tgs = iter->second;
     if (rd_pos >= tgs.size()) {
-        bool b = true;
-        if (wr_pos) {
-            tgs.resize(wr_pos);        
-            b = true;
-        } else {        
-            _map.erase(iter);
-            b = false;
-        }        
+        tgs.resize(wr_pos);        
+        bool e = tgs.empty();
         lk.unlock();
-        return b;
+        return e;
     }
 
     std::shared_ptr<IDataReceiver> receives[count_of_receivers_in_block];
@@ -48,7 +48,7 @@ bool DataSourceBase::broadcast(std::unique_lock<std::mutex> &lk,
         receives[rcsz] = std::move(lk);
         ++rcsz;
     }
-    bool b = broadcast(lk, iter, rd_pos, wr_pos, data);
+    bool b = broadcast(lk, tgs, rd_pos, wr_pos, data);
     for (std::size_t p = 0; p < rcsz; ++p) {
         receives[p]->on_data_received(data);
     }    

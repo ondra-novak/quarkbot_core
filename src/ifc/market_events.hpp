@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.hpp"
 #include "utils/fixed.hpp"
+#include "utils/ref_count.hpp"
 #include <chrono>
 
 namespace quarkbot {
@@ -24,15 +25,36 @@ struct Trade : StreamTypeItem {
 
 struct OrderBookEntry : StreamTypeItem {
   static constexpr Type type = "orderbook_increment";
-  Fixed price; //price level
-  Fixed size;  //new size (if <= 0 then remove the level)
+  Fixed price = {}; //price level
+  Fixed size = {};  //new size (if <= 0 then remove the level)
 };
 
-struct OrderBook : StreamTypeItem {
+struct OrderBookSnapshot : StreamTypeItem {
+  static constexpr std::size_t max_depth = 50;
+  mutable std::atomic<int> _ref_count = {};
+  std::array<OrderBookEntry, max_depth> bids;
+  std::array<OrderBookEntry, max_depth> asks;
+  std::chrono::system_clock::time_point time;  
+};
+
+struct OrderBookSnapshotDeleter {
+  void (*deleter)(const OrderBookSnapshot *ptr);
+  void operator()(const OrderBookSnapshot *ptr) {deleter(ptr);}
+};
+
+class OrderBook: public refcnt_ptr<const OrderBookSnapshot, OrderBookSnapshotDeleter>, public StreamTypeItem {
+public:
+  using refcnt_ptr<const OrderBookSnapshot, OrderBookSnapshotDeleter>::refcnt_ptr;
   static constexpr Type type = "orderbook_snapshot";
-  std::vector<OrderBookEntry> bids;
-  std::vector<OrderBookEntry> asks;
-  std::chrono::system_clock::time_point time;
+
+  static bool bids_sort(const OrderBookEntry &a, const OrderBookEntry &b) {
+      return a.price > b.price;
+  }
+  static bool asks_sort(const OrderBookEntry &a, const OrderBookEntry &b) {
+      if (a.price <= 0) return false;
+      if (b.price <= 0) return true;      
+      return a.price < b.price;
+  }
 };
 
 } // namespace quarkbot

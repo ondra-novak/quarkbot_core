@@ -4,7 +4,8 @@
 #include "ifc/market_events.hpp"
 #include "ifc/market_instrument.hpp"
 #include "ifc/stream.hpp"
-#include "impl/stream_impl.hpp"
+#include "stream_impl.hpp"
+
 #include <memory>
 namespace quarkbot {
 
@@ -35,7 +36,6 @@ public:
         if (type == Quote::type) return this->subscribe(_quote_server);
         if (type == Trade::type) return this->subscribe(_trade_server);
         if (type == OrderBook::type) return this->subscribe(_orderbook_server);
-        if (type == OrderBookEntry::type) return this->subscribe(_orderbook_increment_server);
         return {};
     }
 
@@ -48,7 +48,6 @@ protected:
   mutable std::atomic<std::weak_ptr<MyServer<Quote> > > _quote_server;
   mutable std::atomic<std::weak_ptr<MyServer<Trade> > > _trade_server;
   mutable std::atomic<std::weak_ptr<MyServer<OrderBook> > >_orderbook_server;
-  mutable std::atomic<std::weak_ptr<MyServer<OrderBookEntry> > >_orderbook_increment_server;
 
   template<StreamType T>
   std::shared_ptr<IMarketEventStreamBase> subscribe(std::atomic<std::weak_ptr<MyServer<T> > > &wkref) const {    

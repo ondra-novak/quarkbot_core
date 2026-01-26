@@ -21,12 +21,22 @@ public:
 
     ///post
     /**
-    @retval true posted
-    @retval false no subscribers
-    @note keep in mind order of operations. Function can return false, but enable_stream can be called before the result is checked
+    post update
+    @param topic topic
+    @param data data
+    @note not MT safe
+    @note disable_stream can be called under lock
+    
     */
-    bool post(const Key &topic, const StreamTypeItem &data);
+    void post(const Key &topic, const StreamTypeItem &data);
 
+    ///Subscribe receiver
+    /**
+    @param topic
+    @param receiver
+
+    @note You need to keep reference to subscriber. Once reference is dropped, unsubscribe operation is performed. 
+    */
     virtual bool subscribe(std::string_view topic, std::shared_ptr<IDataReceiver> receiver);
     
 
@@ -41,6 +51,14 @@ protected:
     @note called under lock, when subscribe is called by the strategy
      */
     virtual bool enable_stream(std::string_view topic, StreamTypeItem::Type type) = 0;
+
+    ///implementation disables stream 
+    /**
+     * @param topic topic/Instrument
+     * @param type data type
+     * @note it is called under a lock, and probably in context of post() function
+     */
+    virtual bool disable_stream(std::string_view topic, StreamTypeItem::Type type) = 0;
 
 
 protected:  
@@ -59,8 +77,7 @@ protected:
     std::mutex _mx;
     Map _map;
 
-    bool broadcast(std::unique_lock<std::mutex> &lk,
-        Map::iterator iter, std::size_t rd_pos, std::size_t wr_pos, 
+    bool broadcast(std::unique_lock<std::mutex> &lk, Targets &tgs,  std::size_t rd_pos, std::size_t wr_pos, 
          const StreamTypeItem &data);
 };
 

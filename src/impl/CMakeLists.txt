@@ -10,5 +10,6 @@ add_library (quarkbot_impl
     backtest_worker.cpp
     backtest_exchange.cpp
     data_source_base.cpp
+    update_orderbook.cpp
 )
 
