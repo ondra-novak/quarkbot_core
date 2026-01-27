@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/src/basic_coro/awaitable.hpp"
 #include "market_instrument.hpp"
 #include "order.hpp"
 #include "utils/function_view.hpp"
@@ -34,7 +35,7 @@ public:
     even if replace fails.
     @param name order name, any arbitrary text which helps to strategy to identify the order
      */
-    virtual POrder place_order(const OrderParameters &params, POrder order_to_replace = {}, std::string_view name = {});
+    virtual POrder place_order(const OrderRequest &params, POrder order_to_replace = {}, std::string_view name = {});
 
     ///Attach storage/database and restore stored orders
     /**
@@ -80,10 +81,20 @@ public:
     are more fills than space, only most recent fills are returned (ordered from oldest to newest)
     @return span containing actually retrieved fills (asynchronous)
     */
-    virtual coro::awaitable<std::span<const IStorage::Fill> > get_last_fills(std::span<IStorage::Fill> space) = 0;
+    virtual coro::awaitable<std::span<const Fill> > get_last_fills(std::span<Fill> space) = 0;
 
     ///Get associated account
     virtual PAccount get_account() const = 0;
+
+    ///Retrieves last know position
+    /**
+        @return current position on the instrument
+        @note on spot market, it returns exactly same value as query to wallet with underlying asset. On futures or derivates,
+        it returns count of held contracts.
+
+        @note function is asynchronous. It is much faster to count position from fills.
+    */
+    virtual coro::awaitable<Fixed> get_position() const = 0;
 
     virtual RiskLimits get_limits() const = 0;
 };

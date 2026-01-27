@@ -1,5 +1,7 @@
 #include "base_order.hpp"
 #include "ifc/execution_worker.hpp"
+#include "ifc/order.hpp"
+#include <variant>
 
 namespace quarkbot {
 
@@ -27,7 +29,7 @@ coro::prepared_coro BaseOrder::post_update(OrderStatus status) {
     }
 }
 
-coro::prepared_coro BaseOrder::post_update(OrderFill fill) {
+coro::prepared_coro BaseOrder::post_update(Fill fill) {
     std::lock_guard _(_mx);
     _events.push_back(fill);
     return _event_waiter(true);
@@ -48,28 +50,25 @@ coro::awaitable<bool> BaseOrder::wait_event()  {
     };
 }
 
-double BaseOrder::get_remaining_amount() const  {
-    return _params.amount.value - _filled_amount;
-}
 
 bool BaseOrder::any_fill() const  {
     std::lock_guard lock(_mx);
     auto iter = std::find_if(_events.begin(), _events.end(), [](const Event &ev){
-        return std::holds_alternative<OrderFill>(ev);
+        return std::holds_alternative<Fill>(ev);
     });
     return iter != _events.end();
 }
-std::optional<OrderFill> BaseOrder::read_fill()  {
+std::optional<Fill> BaseOrder::read_fill()  {
     std::lock_guard lock(_mx);
     flush_statuses();
-    std::optional<OrderFill> res;
+    std::optional<Fill> res;
     if (_events.empty()) return res;
-    res.emplace(std::move(std::get<OrderFill>(_events.front())));
+    res.emplace(std::move(std::get<Fill>(_events.front())));
     _filled_amount += res->amount;
     return res;
 }
 
-OrderParameters BaseOrder::get_parameters() const {
+const OrderParameters &BaseOrder::get_parameters() const {
     return _params;
 }
 OrderStatus BaseOrder::get_status() const {
@@ -90,10 +89,19 @@ POrder BaseOrder::get_replaced_order() const  {
 }
 
 void BaseOrder::flush_statuses() {
-        while (!_events.empty() && std::holds_alternative<OrderStatus>(_events.front())) {
-            auto &st = std::get<OrderStatus>(_events.front());
-            _status = st;
-            _events.pop_front();
+        while (!_events.empty()) {
+            auto &ev = _events.front();
+            if (std::holds_alternative<OrderStatus>(ev)) {
+                auto &st = std::get<OrderStatus>(ev);
+                _status = st;
+            } else if (std::holds_alternative<Rejection>(ev)) {
+                auto &rj = std::get<Rejection>(ev);
+                _status = OrderStatus::rejected;
+                _rejection_reason = rj.reason;
+                _rejection_message = rj.text;
+            } else {
+                break;
+            }
         }
     }
 

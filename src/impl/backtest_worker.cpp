@@ -8,11 +8,17 @@ namespace quarkbot {
 std::chrono::system_clock::time_point BacktestExecutionWorker::now() const {
     return _cur_time.load();
 }
+
+void BacktestExecutionWorker::resume(std::coroutine_handle<> h) noexcept {
+    std::lock_guard _(_mx);
+    _microtask_queue.push(h);
+}
+
 awaitable<void> BacktestExecutionWorker::sleep_until(std::chrono::system_clock::time_point time_point, alert_flag *alert_flag_ptr) {
     return [&](awaitable<void>::result prom) mutable {
         std::lock_guard _(_mx);
         if (alert_flag_ptr && *alert_flag_ptr) return prom.set_empty();
-        _sch_queue.push(std::move(prom), time_point, alert_flag_ptr);
+        _sch_queue.push(IExecutionWorker::proxy_result(std::move(prom)), time_point, alert_flag_ptr);
         return coro::prepared_coro{};
     };
 
@@ -25,18 +31,27 @@ void BacktestExecutionWorker::interrupt(coro::alert_flag *alert_flag) {
     auto iter = _sch_queue.find(alert_flag);
     if (alert_flag) alert_flag->set();
     if (iter != _sch_queue.end()) {
-        post([p = std::move(_sch_queue.mutable_ref(iter)->value)]{});
+        resume(_sch_queue.mutable_ref(iter)->value());
         _sch_queue.erase(iter);
     } 
 }
-PExecutionWorker BacktestExecutionWorker::spawn() {
+PExecutionWorker BacktestExecutionWorker::spawn() noexcept {
     return shared_from_this();
 
 }
+
 void BacktestExecutionWorker::set_current_time(std::chrono::system_clock::time_point tp) {    
+    IExecutionWorker::_current_worker = weak_from_this();
     while (true) {
-        while (dispatch()); //flush microqueue
         std::unique_lock lk(_mx);
+        while (!_microtask_queue.empty()) {
+            auto h = std::move(_microtask_queue.front());
+            _microtask_queue.pop();
+            lk.unlock();
+            h.resume();
+            lk.lock();
+        }
+
         if (_sch_queue.empty() || _sch_queue.top().time > tp) {
             _cur_time = tp;
             return;
@@ -45,7 +60,8 @@ void BacktestExecutionWorker::set_current_time(std::chrono::system_clock::time_p
             auto p = std::move(itm.value);
             _cur_time = itm.time;
             _sch_queue.pop();
-            post([r = p()]{});            
+            lk.unlock();
+            p();
         }
     }
 }

@@ -1,17 +1,14 @@
 #pragma once
 
+#include "types.hpp"
 #include "defs.hpp"
 #include <chrono>
+#include <cstdint>
 #include <optional>
 #include "utils/round.hpp"
+
 namespace quarkbot {
 
-
-enum class Side {
-    buy = 1,
-    sell = -1,
-    undetermined = 0
-};
 
 enum class OrderType {
     ///market order - amount is mandarory
@@ -30,19 +27,20 @@ enum class OrderType {
     oco
 };
 
-struct OrderParameters {
+template<typename NumberType>
+struct OrderParametersGen {
     ///order side
     Side side;
     ///order type
     OrderType type;
     ///amount (positive number)
-    Rounded amount; //mandatory
+    NumberType amount; //mandatory
     ///limit price (for limit orders)
-    Rounded limit_price = {};
+    NumberType limit_price = {};
     ///stop price (for stop orders)
-    Rounded stop_price = {};
+    NumberType stop_price = {};
     ///trailing offset - round strategy is applied to final price
-    Rounded trailing_offset = {};
+    NumberType trailing_offset = {};
     ///max leverage (0 = disabled)
     double leverage = 0;
     
@@ -50,10 +48,12 @@ struct OrderParameters {
     bool reduce_only = false;
     ///create or increase to hedge side - can open reverse position if supported on exchange
     bool hedge = false;
-
 };
 
-enum class OrderStatus {
+using OrderParameters = OrderParametersGen<Fixed>;
+using OrderRequest = OrderParametersGen<Rounded>;
+
+enum class OrderStatus : uint8_t {
     ///order sent, not confirmed yet
     sent,
     ///order is active, open, waiting in orderbook
@@ -70,6 +70,43 @@ enum class OrderStatus {
     restored
 };
 
+enum class OrderRejectionReason : uint8_t{
+    //no reason given
+    none,
+    //instrument not tradable
+    not_tradable,
+    //order is too large
+    too_large,
+    //order is too small
+    too_small,    
+    //no funds
+    insufficient_funds,
+    //invalid parameters
+    invalid_params,
+    //price is not allowed range
+    price_range,
+    //post only order would take liquidity
+    post_only_taker,
+    //minimum order volume
+    min_volume,
+    //exchange is overloaded
+    overloaded,
+    //exchange rate limit implemented
+    rate_limited,
+    //denied by exchange 
+    permission_denied,
+    //order configuration is not supported by this exchange
+    unsupported,
+    //order was not posted to exchange - connection stalled
+    timeout,
+    //order expired before delivered
+    expired,
+    //internal error  (probably adapter error, connection, etc)
+    internal_error,
+    //other reason (textural),
+    other
+};
+
 inline constexpr bool is_done_status(OrderStatus status) {
     return status == OrderStatus::filled ||
            status == OrderStatus::canceled ||
@@ -78,21 +115,11 @@ inline constexpr bool is_done_status(OrderStatus status) {
 }
 
 
-struct OrderFill {
-    std::string id;
-    std::chrono::system_clock::time_point time;
-    Side side;
-    double price;
-    double amount;  ///<amount always absolute
-    double fee;
-    PUnderlyingCurrency fee_currency;    
-};
-
 class IOrder {
 public:
     virtual ~IOrder() = default;
 
-    virtual OrderParameters get_parameters() const = 0;
+    virtual const OrderParameters &get_parameters() const = 0;
     ///Returns order status
     /**
         @return OrderStatus enumeration
@@ -101,6 +128,11 @@ public:
         update status. This should be done in strategy's thread
     */
     virtual OrderStatus get_status() const = 0;
+
+    ///Retrieve order's rejection reason. It can appear only when reject status
+    virtual OrderRejectionReason get_rejection_reason() const = 0;
+    ///Get rejection message
+    virtual std::string_view get_rejection_message() const = 0;
     
     ///Returns true, if order is done
 
@@ -110,7 +142,7 @@ public:
     The function removes unprocessed fill from the queue and returns it. If there
     is no fill, returns nullopt. You will not receive fills twice, so you need to store fill somewhere
      */
-    virtual std::optional<OrderFill> read_fill() = 0;
+    virtual std::optional<Fill> read_fill() = 0;
     ///Determine if there is an equeued fill
     /**
         The function doesn't change status or anything in the queue. It is better to call read_fill() and check
@@ -138,8 +170,7 @@ public:
     virtual PTradableInstrument get_instrument() const = 0;
     ///Get order name (assigned by strategy)
     virtual std::string_view get_name() const = 0;
-    ///Get remaining amount to be filled
-    virtual double get_remaining_amount() const = 0;
+    virtual Fixed get_filled_amount() const = 0;
 
     ///Retrieves order which has been replaced by this order
     /**
@@ -165,7 +196,7 @@ public:
     @param callback function is called for every fill
     @return (asynchronous) returns final status of the order
      */
-    template<std::invocable<OrderFill> Fn>
+    template<std::invocable<Fill> Fn>
     awaitable<OrderStatus> run(Fn callback) {
         while (co_await this->wait_event()) {
             auto f = this->read_fill();

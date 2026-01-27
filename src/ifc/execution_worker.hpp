@@ -1,7 +1,9 @@
 #pragma once
 
 #include "coro/src/basic_coro/awaitable.hpp"
+#include "coro/src/basic_coro/prepared_coro.hpp"
 #include "defs.hpp"
+#include <coroutine>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -14,41 +16,8 @@ public:
     virtual ~IExecutionWorker() = default;
 
 
-    ///Post task to the worker
-    /**
-        @param fn function to execute in context of the worker
-        @note the execution is asynchronous, function returns immediately regardless on
-        whether posted function was executed
-    */
-    template<std::invocable<> Fn>
-    requires (std::is_move_constructible_v<Fn>)
-    void post(Fn fn) {
-        auto exec_fn = [](void *ctx) noexcept {
-                Fn *ptr = static_cast<Fn *>(ctx);
-                std::invoke(*ptr);
-                std::destroy_at(ptr);
-        };
-        if constexpr(std::is_trivially_copyable_v<Fn>) {
-            enqueue(exec_fn, &fn, sizeof(fn));
-        } else {
-            enqueue(exec_fn, &fn, sizeof(fn), [](void *src, void *trg){
-                Fn *src_ptr = static_cast<Fn *>(src);
-                Fn *trg_ptr = static_cast<Fn *>(trg);
-                std::construct_at(trg_ptr, std::move(*src_ptr));
-            });
-        }
-    }
-
-    ///Create new execution worker
-    /**
-        In most cases, it starts a new thread. The thread run if there is a reference
-        or a work to execute
-
-        @note Backtest probably doesn't spawn a new thread, it simply just creates a new reference
-    */
-    virtual PExecutionWorker spawn() = 0;
-
-
+    virtual void resume(std::coroutine_handle<> h) noexcept = 0;
+    void resume(coro::prepared_coro h) {h.release();}
     ///Run a coroutine in this executable worker
     /**
         The coroutine runs in new worker detached from current worker
@@ -60,9 +29,20 @@ public:
 
     */
     void run(coroutine coro) {
-        post([coro = std::move(coro)]{});
+        resume(coro.release());
         
     }
+
+    ///Create new execution worker
+    /**
+        In most cases, it starts a new thread. The thread run if there is a reference
+        or a work to execute
+
+        @note Backtest probably doesn't spawn a new thread, it simply just creates a new reference
+    */
+    virtual PExecutionWorker spawn() noexcept = 0;
+
+
 
     ///Returns this thread's execution worker
     /**
@@ -93,7 +73,7 @@ public:
         requires (std::is_invocable_v<coro::awaitable_result<T>, Ts...>)
         coro::prepared_coro operator()(Ts && ... args) {
             auto p = _p(std::forward<Ts>(args)...);
-            if (p) _wrk->post([p = std::move(p)]{});
+            if (p) _wrk->resume(std::move(p));
             return {};
         }
 
@@ -105,11 +85,6 @@ public:
 
 protected:
 
-    using ExecutionFn = void (*)(void *);
-    using CreateFn = void (*)(void *, void *);
-
-    virtual void enqueue(ExecutionFn exec_fn, void *closure_ptr,  std::size_t closure_size) = 0;
-    virtual void enqueue(ExecutionFn exec_fn, void *closure_ptr,  std::size_t closure_size, CreateFn create_fn) = 0;
 
     static thread_local std::weak_ptr<IExecutionWorker> _current_worker;
 

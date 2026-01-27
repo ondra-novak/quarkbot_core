@@ -1,37 +1,40 @@
 #pragma once
 
 #include "defs.hpp"
+#include "types.hpp"
 #include "ifc/stream.hpp"
 #include <memory>
 namespace quarkbot {
 
 
 
+
 class IMarketInstrument {
 public:
 
-    struct FillInfo {
-        double multiplier = 1.0;            //to calculate amount, use size and multiply by this number
-        bool inverse_pricing = false;       //use inverse price to calculate pnl
-    };
 
-    struct Info : FillInfo{
+    struct Info : ContractInfo {
         std::string unique_id = {};
-        double min_lot_size = 0.0;
+        Fixed min_lot_size = {};
+        Fixed lot_size_increment = {};
+        Fixed price_increment = {};
         double min_volume = 0.0;
-        double lot_size_increment = 0.0;
-        double price_increment = 0.0;
         double fee_rate_maker = 0.0;
         double fee_rate_taker = 0.0;
     };
 
 
     virtual ~IMarketInstrument() = default;
-    virtual PUnderlyingCurrency get_underlying_currency() const = 0;
+    ///Retrieves quote currency (price)
+    virtual PUnderlyingCurrency get_quote_currency() const = 0;
     ///Returns the asset currency of the market instrument, This can be NULL for contracts that do not have an asset currency
     virtual PUnderlyingCurrency get_asset() const = 0;
+    ///Retrieves currency of PnL. It can be different for inverse contracts. For normal contracts, it returns get_quote_currency
+    virtual PUnderlyingCurrency get_pnl_currency() const = 0;
+
     virtual PExchange get_exchange() const = 0;
-    virtual Info get_info() const = 0;
+
+    virtual std::shared_ptr<Info> get_info() const = 0;
 
 
     ///Internal

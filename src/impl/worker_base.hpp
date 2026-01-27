@@ -12,12 +12,11 @@ namespace quarkbot {
 public:
     virtual ~WorkerBase();
     virtual PExecutionWorker spawn();
+    virtual void resume(std::coroutine_handle<> h) override;
 
     void attach();
     bool dispatch();
 
-    virtual void enqueue(ExecutionFn exec_fn, void *closure_ptr,  std::size_t closure_size);
-    virtual void enqueue(ExecutionFn exec_fn, void *closure_ptr,  std::size_t closure_size, CreateFn create_fn);
 protected:
     std::stop_source _stop;
     std::mutex _mx;

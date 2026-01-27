@@ -116,8 +116,16 @@ public:
     constexpr friend int sgn(const Fixed &f) {return f._number < 0?-1:f._number>0?1:0;}
     constexpr friend Fixed abs(const Fixed &f) {return Fixed(f.raw()<0?-f.raw():f.raw(), f.scale());}
 
+    constexpr static Fixed max() {
+        return Fixed(compose(0x07FFFFFFFFFFFFFFLL, 0));
+    }
+    constexpr static Fixed min() {
+        return Fixed(compose(-0x07FFFFFFFFFFFFFFLL, 0));
+    }
+
 protected:
     constexpr Fixed(double val, unsigned int scale):_number(compose_d(val, scale)) {};
+    constexpr Fixed(int64_t n):_number(n) {};
 
     static constexpr auto table_mult = generate_mult_table(10.0);
     static constexpr auto table_div = generate_mult_table(0.1);

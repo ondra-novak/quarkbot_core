@@ -8,25 +8,25 @@ namespace quarkbot {
 
 
 struct Quote : StreamTypeItem {
-  static constexpr Type type = "quote";
   Fixed bid;
   Fixed bid_size;
   Fixed ask;
   Fixed ask_size;
   std::chrono::system_clock::time_point time;
+  static constexpr Type type = "quote";
 };
 
 struct Trade : StreamTypeItem {
-  static constexpr Type type = "trade";
   Fixed price;
   Fixed size;
   std::chrono::system_clock::time_point time;
+  static constexpr Type type = "trade";
 };
 
 struct OrderBookEntry : StreamTypeItem {
-  static constexpr Type type = "orderbook_increment";
   Fixed price = {}; //price level
   Fixed size = {};  //new size (if <= 0 then remove the level)
+  static constexpr Type type = "orderbook_increment";
 };
 
 struct OrderBookSnapshot : StreamTypeItem {
@@ -51,10 +51,23 @@ public:
       return a.price > b.price;
   }
   static bool asks_sort(const OrderBookEntry &a, const OrderBookEntry &b) {
-      if (a.price <= 0) return false;
-      if (b.price <= 0) return true;      
+      if (a.price == Fixed{}) return false;
+      if (b.price == Fixed{}) return true;      
       return a.price < b.price;
   }
+};
+
+
+struct TradeCounter: public StreamTypeItem {
+    static constexpr Type type = "trade_counters";
+    ///total count of trades
+    std::uint64_t trades = 0;
+    ///total volume - it can reset when stream is reopened
+    long double volume = 0.0;
+    ///last price
+    Fixed last_price;
+    
+    std::chrono::system_clock::time_point time;
 };
 
 } // namespace quarkbot
