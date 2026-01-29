@@ -8,7 +8,7 @@
 namespace quarkbot {
 
 
-struct Test: StreamTypeItem {
+struct Test: MarketStreamTypeItem {
     static constexpr Type type = "test";
     int x;
 };

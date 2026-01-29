@@ -15,6 +15,8 @@ public:
     virtual awaitable<WalletInfo> get_balance(PUnderlyingCurrency currency) const override;
     virtual awaitable<WalletInfo> get_total_equity(PUnderlyingCurrency currency) const override;
     virtual awaitable<bool> transfer(PUnderlyingCurrency currency, PAccount to_account, Fixed amount) const override;
+protected:
+    std::string _name;
 };
 
 class BacktestExchange: public IExchange {

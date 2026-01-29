@@ -56,6 +56,8 @@ public:
     virtual PTradableInstrument get_instrument() const override;    
     virtual std::string_view get_name() const override ;
     virtual POrder get_replaced_order() const override ;
+    virtual OrderRejectionReason get_rejection_reason() const override {return _rejection_reason;}
+    virtual std::string_view get_rejection_message() const override {return _rejection_message;}
 
 
 protected:

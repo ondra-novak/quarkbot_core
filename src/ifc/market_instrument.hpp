@@ -14,7 +14,6 @@ public:
 
 
     struct Info : ContractInfo {
-        std::string unique_id = {};
         Fixed min_lot_size = {};
         Fixed lot_size_increment = {};
         Fixed price_increment = {};
@@ -34,11 +33,11 @@ public:
 
     virtual PExchange get_exchange() const = 0;
 
-    virtual std::shared_ptr<Info> get_info() const = 0;
+    virtual Info get_info() const = 0;
 
 
     ///Internal
-    virtual std::shared_ptr<IMarketEventStreamBase> subscribe_stream_internal(std::string_view type) const = 0;
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type) const = 0;
     
     ///Create tradable instrument from the instrument
     /**
@@ -57,7 +56,7 @@ public:
     @note The stream is returned already subscribed. You can start reading from it immediately. To unsubscribe, 
     just destroy the pointer or call close() on the stream.
      */
-    template<StreamType T>
+    template<MarketStreamType T>
     PMarketEventStream<T> subscribe() const {
         return std::static_pointer_cast<IMarketEventStream<T> >(subscribe_stream_internal(T::type));
     }

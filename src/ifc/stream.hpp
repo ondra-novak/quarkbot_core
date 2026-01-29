@@ -6,9 +6,9 @@
 
 namespace quarkbot {
 
-class IMarketEventStreamBase {
+class IEventStreamBase {
 public:
-    virtual ~IMarketEventStreamBase() = default;
+    virtual ~IEventStreamBase() = default;
    ///Close the stream
     /**
        If there is pending read, it is immediately finished with nullopt
@@ -21,9 +21,9 @@ public:
 @tparam T type of event data
  */
 template<StreamType T>
-class IMarketEventStream : public IMarketEventStreamBase{
+class IEventStream : public IEventStreamBase{
 public:
-    virtual ~IMarketEventStream();
+    virtual ~IEventStream();
 
     ///Event structure
     struct Event {
@@ -45,6 +45,8 @@ public:
  
 };
 
+
+
 ///Base class for generic data source receiver
 /**
 Data sources are used internally to listen various streams containing multiple instruments and events.
@@ -54,12 +56,12 @@ class IDataReceiver {
 public:
     virtual ~IDataReceiver() = default;
     ///Retrieve type of stream for this instance
-    virtual StreamTypeItem::Type get_type() const noexcept = 0;
+    virtual MarketStreamTypeItem::Type get_type() const noexcept = 0;
     ///called when data arrived
     /**
     @note data are probably broadcasted synchronously and the function is called in context of stream's thread
     */    
-    virtual void on_data_received(const StreamTypeItem &data) noexcept = 0;
+    virtual void on_data_received(const MarketStreamTypeItem &data) noexcept = 0;
 
 };
 

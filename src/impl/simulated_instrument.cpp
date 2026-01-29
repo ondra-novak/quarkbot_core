@@ -1,10 +1,10 @@
 #include "simulated_instrument.hpp"
-#include "coro/src/basic_coro/prepared_coro.hpp"
+#include "ifc/types.hpp"
+#include "simulated_order.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/market_events.hpp"
 #include "ifc/order.hpp"
 #include "instrument_base.hpp"
-#include "base_order.hpp"
 #include "utils/spin_mutex.hpp"
 #include "utils/uuid.hpp"
 #include <algorithm>
@@ -20,7 +20,7 @@ namespace quarkbot {
 class QuoteServer: public SimulatedInstrument::MyServer<Quote> {    
 public:
 
-    virtual void on_data_received(const StreamTypeItem &data) noexcept override {
+    virtual void on_data_received(const MarketStreamTypeItem &data) noexcept override {
         std::unique_lock lk(_mx);
         const Quote &q = static_cast<const Quote &>(data);
         if (order_quote) {
@@ -59,14 +59,14 @@ SimulatedInstrument::SimulatedInstrument(
         PUnderlyingCurrency asset, 
         PUnderlyingCurrency pnl, 
         PExchange exchange
-    ) :_info(std::make_shared<Info>(info))
+    ) :_info(info)
       ,_quote_currency(std::move(quote))
       ,_asset_currency(std::move(asset))
       ,_pnl_currency(std::move(pnl))
       ,_exchange(std::move(exchange)) {}
 
 
-std::shared_ptr<IMarketEventStreamBase> SimulatedInstrument::subscribe_stream_internal(StreamTypeItem::Type type) const {
+std::shared_ptr<IEventStreamBase> SimulatedInstrument::subscribe_stream_internal(MarketStreamTypeItem::Type type) const {
     if (type == Quote::type) {
         return this->subscribe<Quote, MyServer<Quote>, QuoteServer>(this->_quote_server);
     } else {
@@ -74,14 +74,13 @@ std::shared_ptr<IMarketEventStreamBase> SimulatedInstrument::subscribe_stream_in
     }
 }
 
-void SimulatedInstrument::place_order(std::shared_ptr<BaseOrder> order) {
+void SimulatedInstrument::place_order(std::shared_ptr<SimulatedOrder> order) {
     auto &params = order->get_parameters();
     if (params.hedge || params.reduce_only) {
         order->reject(OrderRejectionReason::unsupported);
         return;
     }
-    const auto &info = *_info;
-    if (params.amount < info.min_lot_size) {
+    if (params.amount < _info.min_lot_size) {
         order->reject(OrderRejectionReason::too_small);
         return ;
     }
@@ -96,11 +95,29 @@ void SimulatedInstrument::place_order(std::shared_ptr<BaseOrder> order) {
         }
     }
     std::lock_guard _(_mx);
-    _orders.push_back(OrderRecord {order,true, {}});
+    auto replace_req = order->get_replaced_order();
+    if (replace_req) {
+        auto iter = std::find_if(_orders.begin(), _orders.end(), [&](const OrderRecord &rc){
+            return rc.order == replace_req;
+        });
+        if (iter == _orders.end()) {
+            order->reject(OrderRejectionReason::order_not_found);
+            return;
+        }
+        if (iter->fill_amount >= params.amount) {
+            order->reject(OrderRejectionReason::invalid_replace);            
+        }
+        auto replaced_order = iter->order;
+        iter->order = order;
+        replaced_order->post_update(OrderStatus::replaced);
+    } else {
+        _orders.push_back(OrderRecord {order,true, {}});
+    }
+    order->post_update(OrderStatus::open);
     run_matching(std::nullopt);
 }
 
-void SimulatedInstrument::cancel_order(std::shared_ptr<BaseOrder> order) {
+void SimulatedInstrument::cancel_order(std::shared_ptr<SimulatedOrder> order) {
     std::unique_lock lk(_mx);
     auto iter = std::find_if(_orders.begin(), _orders.end(), [&](const OrderRecord &rc) {
         return order == rc.order;
@@ -124,9 +141,9 @@ void SimulatedInstrument::run_matching(Param trade) {
         auto full_fill = [&]{
             auto amount = params.amount - rc.fill_amount;
             if (params.side == Side::buy) 
-                rc.order->post_update(create_fill(_last_quote->ask, amount, params.side, _last_quote->time));
+                rc.order->post_update(create_fill(_last_quote->ask, amount, params.side, _last_quote->time, rc.order->get_name()));
             else 
-                rc.order->post_update(create_fill(_last_quote->bid, amount, params.side, _last_quote->time));
+                rc.order->post_update(create_fill(_last_quote->bid, amount, params.side, _last_quote->time,rc.order->get_name()));
             rc.order->post_update(OrderStatus::filled);
         };
 
@@ -154,13 +171,13 @@ void SimulatedInstrument::run_matching(Param trade) {
                 if (params.side == Side::buy) {
                     if (trade.price <= params.limit_price) {
                         amount = std::min(amount, trade.size);
-                        rc.order->post_update(create_fill(trade.price, amount, params.side, trade.time));    
+                        rc.order->post_update(create_fill(trade.price, amount, params.side, trade.time, rc.order->get_name()));    
                         rc.fill_amount += amount;
                     }
                 }  else {
                     if (trade.price >= params.limit_price) {
                         amount = std::min(amount, trade.size);
-                        rc.order->post_update(create_fill(trade.price, amount, params.side, trade.time));    
+                        rc.order->post_update(create_fill(trade.price, amount, params.side, trade.time, rc.order->get_name()));    
                         rc.fill_amount += amount;
                     }
                 }
@@ -169,14 +186,14 @@ void SimulatedInstrument::run_matching(Param trade) {
             if (params.side == Side::buy) {                
                 if (params.limit_price >= _last_quote->ask) {
                     if (params.limit_price == _last_quote->ask) amount = std::min(amount, _last_quote->ask_size);
-                    rc.order->post_update(create_fill(_last_quote->ask, amount, params.side, _last_quote->time));
+                    rc.order->post_update(create_fill(_last_quote->ask, amount, params.side, _last_quote->time, rc.order->get_name()));
                     rc.fill_amount += amount;
                 }
                 
             } else {
                 if (params.limit_price <= _last_quote->bid) {
                     if (params.limit_price == _last_quote->ask) amount = std::min(amount, _last_quote->bid_size);
-                    rc.order->post_update(create_fill(_last_quote->ask, amount, params.side, _last_quote->time));
+                    rc.order->post_update(create_fill(_last_quote->ask, amount, params.side, _last_quote->time, rc.order->get_name()));
                     rc.fill_amount += amount;
                 }
             }
@@ -248,17 +265,19 @@ void SimulatedInstrument::run_matching(Param trade) {
     }
 }
 
-Fill SimulatedInstrument::create_fill(Fixed price, Fixed amount, Side side, std::chrono::system_clock::time_point tm) {
-    Fill f;
-    f.id = generate_random_string();
-    f.contract = *_info;
-    f.amount = amount;
-    f.price = price;
-    f.side = side;
-    f.fee_rate = 1.0 ;//todo
-    f.fees = 0.0;   //todo
-    f.time = tm;
-    return f;
+Fill SimulatedInstrument::create_fill(Fixed price, Fixed amount, Side side, std::chrono::system_clock::time_point tm, std::string_view name) {
+    return Fill {
+        generate_random_string(),
+        std::string(name),
+        tm,
+        _info,
+        side,
+        ExecutionReason::strategy_order,
+        amount,
+        price,
+        0.0, //todo
+        1.0 //todo
+    };
 }
 
 void SimulatedInstrument::on_data(const Quote &x){
@@ -271,8 +290,8 @@ void SimulatedInstrument::on_data(const Quote &x){
 void SimulatedInstrument::on_data(const Trade &x) {
     std::unique_lock lk(_mx);
     run_matching<const Trade &>(x);
-
 }
+
 
 void SimulatedInstrument::connect(std::shared_ptr<IDataSource> data_src,  std::string_view stream_topic) {
     InstrumentBase::connect(data_src, stream_topic);

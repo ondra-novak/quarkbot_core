@@ -14,7 +14,7 @@ public:
 
     struct Key {
         std::string topic;
-        StreamTypeItem::Type type;        
+        MarketStreamTypeItem::Type type;        
         constexpr bool operator==(const Key &other) const = default;
     };
 
@@ -28,7 +28,7 @@ public:
     @note disable_stream can be called under lock
     
     */
-    void post(const Key &topic, const StreamTypeItem &data);
+    void post(const Key &topic, const MarketStreamTypeItem &data);
 
     ///Subscribe receiver
     /**
@@ -50,7 +50,7 @@ protected:
     @retval flase unsupported topic
     @note called under lock, when subscribe is called by the strategy
      */
-    virtual bool enable_stream(std::string_view topic, StreamTypeItem::Type type) = 0;
+    virtual bool enable_stream(std::string_view topic, MarketStreamTypeItem::Type type) = 0;
 
     ///implementation disables stream 
     /**
@@ -58,7 +58,7 @@ protected:
      * @param type data type
      * @note it is called under a lock, and probably in context of post() function
      */
-    virtual bool disable_stream(std::string_view topic, StreamTypeItem::Type type) = 0;
+    virtual bool disable_stream(std::string_view topic, MarketStreamTypeItem::Type type) = 0;
 
 
 protected:  
@@ -78,7 +78,7 @@ protected:
     Map _map;
 
     bool broadcast(std::unique_lock<std::mutex> &lk, Targets &tgs,  std::size_t rd_pos, std::size_t wr_pos, 
-         const StreamTypeItem &data);
+         const MarketStreamTypeItem &data);
 };
 
 } 

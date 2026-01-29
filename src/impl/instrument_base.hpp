@@ -23,13 +23,13 @@ public:
     }        
 
 
-    template<StreamType T>
+    template<MarketStreamType T>
     class MyServer: public StreamServer<T>, public IDataReceiver {
     public:
-        virtual StreamTypeItem::Type get_type() const noexcept override {
+        virtual MarketStreamTypeItem::Type get_type() const noexcept override {
             return T::type;
         }
-        virtual void on_data_received(const StreamTypeItem &data) noexcept override {
+        virtual void on_data_received(const MarketStreamTypeItem &data) noexcept override {
             this->post(static_cast<const T &>(data));
         }
     };
@@ -37,11 +37,11 @@ public:
     template<>
     class MyServer<TradeCounter> : public StreamServer<TradeCounter>, public IDataReceiver {
     public:        
-        virtual StreamTypeItem::Type get_type() const noexcept override {
+        virtual MarketStreamTypeItem::Type get_type() const noexcept override {
             return Trade::type;
         }
 
-        virtual void on_data_received(const StreamTypeItem &data) noexcept override {
+        virtual void on_data_received(const MarketStreamTypeItem &data) noexcept override {
             const Trade &t = static_cast<const Trade &>(data);
             accum.trades += 1;
             accum.last_price = t.price;
@@ -54,7 +54,7 @@ public:
         TradeCounter accum;
     };
     
-    virtual std::shared_ptr<IMarketEventStreamBase> subscribe_stream_internal(StreamTypeItem::Type type) const {
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(MarketStreamTypeItem::Type type) const {
         if (type == Quote::type) return this->subscribe<Quote>(_quote_server);
         if (type == Trade::type) return this->subscribe<Trade>(_trade_server);
         if (type == OrderBook::type) return this->subscribe<OrderBook>(_orderbook_server);
@@ -71,8 +71,8 @@ protected:
   mutable std::atomic<std::weak_ptr<MyServer<OrderBook> > >_orderbook_server;
   mutable std::atomic<std::weak_ptr<MyServer<TradeCounter> > >_trade_counter_server;
 
-  template<StreamType T, typename ServerRef, typename ServerType = ServerRef>
-  std::shared_ptr<IMarketEventStreamBase> subscribe(std::atomic<std::weak_ptr<ServerRef> > &wkref) const {    
+  template<MarketStreamType T, typename ServerRef, typename ServerType = ServerRef>
+  std::shared_ptr<IEventStreamBase> subscribe(std::atomic<std::weak_ptr<ServerRef> > &wkref) const {    
     std::weak_ptr<ServerRef> wk = wkref.load();    
     std::shared_ptr<ServerRef> server = wk.lock();
     while (!server) {        

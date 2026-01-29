@@ -2,7 +2,6 @@
 
 #include "types.hpp"
 #include "defs.hpp"
-#include <chrono>
 #include <cstdint>
 #include <optional>
 #include "utils/round.hpp"
@@ -83,6 +82,10 @@ enum class OrderRejectionReason : uint8_t{
     insufficient_funds,
     //invalid parameters
     invalid_params,
+    //order cannot be replaced (incompatible settings)
+    invalid_replace,
+    //order cannot be replaced, because old order was not found (is probably done)
+    order_not_found,
     //price is not allowed range
     price_range,
     //post only order would take liquidity
@@ -93,6 +96,8 @@ enum class OrderRejectionReason : uint8_t{
     overloaded,
     //exchange rate limit implemented
     rate_limited,
+    //risk limit reached
+    too_risky,
     //denied by exchange 
     permission_denied,
     //order configuration is not supported by this exchange

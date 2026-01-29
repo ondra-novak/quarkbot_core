@@ -11,5 +11,6 @@ add_library (quarkbot_impl
     data_source_base.cpp
     update_orderbook.cpp
     simulated_instrument.cpp
+    simulated_tradable_instrument.cpp
 )
 

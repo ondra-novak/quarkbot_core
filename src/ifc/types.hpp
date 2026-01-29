@@ -2,16 +2,17 @@
 
 #include "utils/fixed.hpp"
 #include <chrono>
+#include <cstdint>
 namespace quarkbot {
 
 
-enum class Side {
+enum class Side : int8_t{
     buy = 1,
     sell = -1,
     undetermined = 0
 };
 
-enum class InstrumentType {
+enum class InstrumentType: int8_t {
     ///spot instrument, you exchange one asset to another
     spot,
     ///contract - underlying currency is used to hold margin and position loss
@@ -26,15 +27,36 @@ struct ContractInfo {
     double tick_scale;      ///price multiplier
 };
 
+enum class ExecutionReason : int8_t{
+    ///normal strategy order
+    strategy_order,
+    ///probably manual order from UI (not matching order found)
+    manual_order,
+    ///liquidation event
+    liquidation,
+    ///ADL event
+    adl,
+    ///close because contract expiration (settlement)
+    settlement,
+    ///automatic rollover, closed position on this contract
+    rollover_close,
+    ///automatic rollover, open position on new contract
+    rollover_open
+};
+
 struct Fill {
     ///internal fill identifier (don't need to be unique!)
     std::string id;
+    ///name of order responsible for this fill
+    std::string order_name;
     ///time when fill happened
     std::chrono::system_clock::time_point time;
     ///contract information
     ContractInfo contract;
     ///fill side
     Side side;
+    ///Execution reason
+    ExecutionReason reason;
     ///fill amount
     Fixed amount;
     ///fill price

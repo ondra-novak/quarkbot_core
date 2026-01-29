@@ -1,6 +1,8 @@
 #pragma once
 
 #include "coro/src/basic_coro/awaitable.hpp"
+#include "ifc/defs.hpp"
+#include "ifc/stream.hpp"
 #include "market_instrument.hpp"
 #include "order.hpp"
 #include "utils/function_view.hpp"
@@ -97,6 +99,25 @@ public:
     virtual coro::awaitable<Fixed> get_position() const = 0;
 
     virtual RiskLimits get_limits() const = 0;
+
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type) const = 0;
+
+
+    ///Subscribe market event stream
+    /**
+    @tparam T type of item determines type of stream. 
+    @return shared pointer to IInstrumentEventStream handling stream of given type. Can't return nullptr, but for unsupported
+    streams, it can return dummy stream which throws exception on access    
+
+    @note The stream is returned already subscribed. You can start reading from it immediately. To unsubscribe, 
+    just destroy the pointer or call close() on the stream.
+     */
+    template<InstrumentStreamType T>
+    PInstrumentEventStream<T> subscribe() const {
+        return std::static_pointer_cast<IInstrumentEventStream<T> >(subscribe_stream_internal(T::type));
+    }
+
+
 };
 
 

@@ -5,7 +5,7 @@
 
 namespace quarkbot {
 
-void DataSourceBase::post(const Key &topic, const StreamTypeItem &data) {
+void DataSourceBase::post(const Key &topic, const MarketStreamTypeItem &data) {
     std::unique_lock lk(_mx);
     auto iter =  _map.find(topic);
     if (iter == _map.end()) {
@@ -25,7 +25,7 @@ void DataSourceBase::post(const Key &topic, const StreamTypeItem &data) {
 constexpr std::size_t count_of_receivers_in_block = 32;
 
 bool DataSourceBase::broadcast(std::unique_lock<std::mutex> &lk, Targets &tgs, std::size_t rd_pos, std::size_t wr_pos, 
-         const StreamTypeItem &data) {
+         const MarketStreamTypeItem &data) {
     if (rd_pos >= tgs.size()) {
         tgs.resize(wr_pos);        
         bool e = tgs.empty();
