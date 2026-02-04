@@ -13,7 +13,7 @@ struct Test: MarketStreamTypeItem {
     int x;
 };
 
-template class StreamClient<Test>;
-template class StreamServer<Test>;
+template class StreamClient<Test,1>;
+template class StreamServer<Test,1>;
 
 }

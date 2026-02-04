@@ -24,7 +24,7 @@ public:
 
 
     template<MarketStreamType T>
-    class MyServer: public StreamServer<T>, public IDataReceiver {
+    class MyServer: public StreamServer<T,1>, public IDataReceiver {
     public:
         virtual MarketStreamTypeItem::Type get_type() const noexcept override {
             return T::type;
@@ -35,7 +35,7 @@ public:
     };
 
     template<>
-    class MyServer<TradeCounter> : public StreamServer<TradeCounter>, public IDataReceiver {
+    class MyServer<TradeCounter> : public StreamServer<TradeCounter,1>, public IDataReceiver {
     public:        
         virtual MarketStreamTypeItem::Type get_type() const noexcept override {
             return Trade::type;
@@ -81,7 +81,7 @@ protected:
         std::weak_ptr<ServerRef > new_wk(server);
         if (!wkref.compare_exchange_strong(wk, new_wk)) server = wk.lock();        
     }
-    return std::make_shared<StreamClient<T> >(std::move(server));
+    return std::make_shared<StreamClient<T,1> >(std::move(server));
   }
   
 };

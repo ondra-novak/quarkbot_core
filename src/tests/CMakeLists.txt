@@ -17,6 +17,7 @@ set(testFiles
 	ta.cpp
 	root.cpp
 	integral.cpp
+	pubsub.cpp
 )
 
 link_libraries(
