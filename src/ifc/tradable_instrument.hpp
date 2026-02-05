@@ -103,19 +103,25 @@ public:
     virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type) const = 0;
 
 
-    ///Subscribe market event stream
+    ///Subscribe account related instrument event stream
     /**
-    @tparam T type of item determines type of stream. 
-    @return shared pointer to IInstrumentEventStream handling stream of given type. Can't return nullptr, but for unsupported
-    streams, it can return dummy stream which throws exception on access    
+     * Example of stream - fills executed by exchange, manual fills, funding events, settlement
+     * 
+      @tparam T type of item determines type of stream. 
+      @return shared pointer to IInstrumentEventStream handling stream of given type. Can't return nullptr, but for unsupported
+      streams, it can return dummy stream which throws exception on access    
 
-    @note The stream is returned already subscribed. You can start reading from it immediately. To unsubscribe, 
-    just destroy the pointer or call close() on the stream.
+      @note The stream is returned already subscribed. You can start reading from it immediately. To unsubscribe, 
+      just destroy the pointer or call close() on the stream.
+
+      In contrast to market event stream, there is often much longer queue, so you should not get missing events
      */
     template<InstrumentStreamType T>
     PInstrumentEventStream<T> subscribe() const {
-        return std::static_pointer_cast<IInstrumentEventStream<T> >(subscribe_stream_internal(T::type));
-    }
+        auto x =  subscribe_stream_internal(T::type);
+        if (x) return std::static_pointer_cast<IInstrumentEventStream<T> >(x);
+        else return std::make_shared<typename IEventStream<T>::Null>();
+}
 
 
 };

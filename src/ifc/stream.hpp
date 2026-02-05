@@ -1,14 +1,22 @@
 #pragma once
 
+#include "coro/src/basic_coro/awaitable.hpp"
 #include "defs.hpp"
 #include <chrono>
+#include <exception>
 #include <memory>
+#include <stdexcept>
 
 namespace quarkbot {
 
 class IEventStreamBase {
 public:
     virtual ~IEventStreamBase() = default;
+    ///Returns true, if stream is open, false if closed
+    /**
+    @note For unsupported stream, you always receives closed stream. Otherwise you need to receive nullopt to set this state false
+     */
+     virtual bool is_open() const = 0;
    ///Close the stream
     /**
        If there is pending read, it is immediately finished with nullopt
@@ -41,9 +49,23 @@ public:
     If there are missed events, it immediately returns last received event with missed count set appropriately
     There can be only one pending read at a time. If you need multiple concurrent reads, create multiple streams.
      */
-    virtual coro::awaitable<Event> read() = 0;
- 
+    virtual coro::awaitable<Event> read() = 0;    
+    class Null;
+
 };
+
+template<StreamType T>
+class IEventStream<T>::Null: public IEventStream<T> {
+public:
+    virtual coro::awaitable<Event> read() override {
+        return [](auto prom) {
+            return prom(std::make_exception_ptr(std::runtime_error("Unsupported stream")));
+        };
+    }
+    virtual bool is_open() const override {return false;};
+    virtual void close() override {}
+};
+
 
 
 

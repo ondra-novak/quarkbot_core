@@ -1,14 +1,15 @@
 #pragma once
 #include "coro/src/basic_coro/awaitable.hpp"
-#include "coro/src/basic_coro/awaiting_callback.hpp"
+#include "coro/src/basic_coro/prepared_coro.hpp"
 #include "ifc/stream.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/execution_worker.hpp"
+#include "utils/awaitable_transform.hpp"
 #include "utils/pubsub.hpp"
 #include <chrono>
+#include <coroutine>
 #include <memory>
 #include <mutex>
-#include <optional>
 
 
 
@@ -56,44 +57,30 @@ public:
         }
 
 
-    virtual void close() {
+    virtual void close() override {
         Super::close();
     }
-    virtual coro::awaitable<Event> read() {        
-        auto awt = Super::read();
-        if (awt.await_ready()) {
-            EventWithCounter<T> &&v = awt.await_resume();
-            return coro::awaitable<Event>({
-                std::chrono::system_clock::now(),
-                update_counter(v.counter),
-                std::move(v.value)
-            });
-        } else {
-            return [this](auto prom) {                
-                _result = std::move(prom);
-                _cb.set_awaiter(Super::read());
-                _cb.set_callback([this](coro::awaitable<EventWithCounter<T> > &awt){
-                    if (awt.has_value()){
-                        EventWithCounter<T> &&v = awt.await_resume();
-                        _result(Event {
-                                std::chrono::system_clock::now(),
-                                update_counter(v.counter),
-                                std::move(v.value)
-                            });
-                        } else _result(std::nullopt);
-                });
-                return _cb.await();                
-            };
-        };
+    virtual bool is_open() const override {
+        return !Super::is_closed();
     }
+    virtual coro::awaitable<Event> read() override {      
+        return _transform(Super::read(), [this](EventWithCounter<T> &&v){
+                return Event {
+                    std::chrono::system_clock::now(),
+                    update_counter(v.counter),
+                    std::move(v.value)
+                };
+        });
+    }
+
+
 
 protected:
 
 
     std::shared_ptr<StreamServer<T, limit> > _server;
     std::size_t _tick_counter = 0;    
-    coro::awaiting_callback<coro::awaitable<EventWithCounter<T> >, StreamClient *> _cb;
-    IExecutionWorker::proxy_result<Event> _result;
+    coro::awaitable_transform_r<IExecutionWorker::proxy_result , awaitable<EventWithCounter<T> >, StreamClient *> _transform;
 
     std::size_t update_counter(std::size_t counter) {
         auto diff = counter - _tick_counter;

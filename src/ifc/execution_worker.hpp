@@ -53,6 +53,7 @@ public:
         return _current_worker.lock();
     }
 
+    ///ensures that coroutine is woken up through a current dispatcher. Throws exception, is there is no dispatcher
     template<typename T>
     class proxy_result {
     public:

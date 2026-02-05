@@ -58,7 +58,9 @@ public:
      */
     template<MarketStreamType T>
     PMarketEventStream<T> subscribe() const {
-        return std::static_pointer_cast<IMarketEventStream<T> >(subscribe_stream_internal(T::type));
+        auto x =  subscribe_stream_internal(T::type);
+        if (x) return std::static_pointer_cast<IMarketEventStream<T> >(x);
+        else return std::make_shared<typename IEventStream<T>::Null>();
     }
 
     virtual std::string_view get_name() const = 0;
