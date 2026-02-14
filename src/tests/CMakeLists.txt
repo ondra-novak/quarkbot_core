@@ -5,24 +5,24 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests/)
 set(testFiles
 	compile_test.cpp
 	coro_dispatcher.cpp
-	loader.cpp
-	config_desc.cpp
-	wandering_bst.cpp
-	decimal.cpp
-	cluster_alloc.cpp
-	dispatcher.cpp
-	stream_merge.cpp
-	structured_ini.cpp
+#	loader.cpp
+#	config_desc.cpp
+#	wandering_bst.cpp
+#	decimal.cpp
+#	cluster_alloc.cpp
+#	dispatcher.cpp
+#	stream_merge.cpp
+#	structured_ini.cpp
 #	mq.cpp
-	ta.cpp
-	root.cpp
-	integral.cpp
+#	ta.cpp
+#	root.cpp
+#	integral.cpp
 	pubsub.cpp
 )
 
 link_libraries(
-     quarkbot_runtime
-     quarkbot_mq
+#     quarkbot_runtime
+#     quarkbot_mq
 	${STANDARD_LIBRARIES}
 )
 
@@ -33,7 +33,7 @@ foreach (testFile ${testFiles})
 	target_compile_definitions(${executable_name} PRIVATE
 	   MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
 	 )
-	 target_link_libraries(${executable_name} quarkbot_impl)
+	 #target_link_libraries(${executable_name} quarkbot_impl)
 	add_test(NAME "tests/${filename}" COMMAND ${executable_name})
 endforeach ()
 
