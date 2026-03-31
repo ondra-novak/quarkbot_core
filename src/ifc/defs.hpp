@@ -3,8 +3,8 @@
 #include <concepts>
 #include <memory>
 #include <stdexcept>
-#include "coro/src/basic_coro/awaitable.hpp"
-#include "coro/src/basic_coro/coroutine.hpp"
+#include "basic_coro/awaitable.hpp"
+#include "basic_coro/coroutine.hpp"
 
 
 

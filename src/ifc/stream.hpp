@@ -16,12 +16,12 @@ public:
     /**
     @note For unsupported stream, you always receives closed stream. Otherwise you need to receive nullopt to set this state false
      */
-     virtual bool is_open() const = 0;
-   ///Close the stream
+    virtual bool is_open() const = 0;
+    ///Close the stream
     /**
        If there is pending read, it is immediately finished with nullopt
     */
-     virtual void close();
+    virtual void close();
 };
 
 ///Market event stream

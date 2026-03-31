@@ -1,5 +1,5 @@
 #pragma once
-#include "coro/src/basic_coro/alert_flag.hpp"
+#include "coro/src/basic_coro/cancel_signal.hpp"
 #include "coro/src/basic_coro/awaitable.hpp"
 #include "coro/src/basic_coro/prepared_coro.hpp"
 #include <algorithm>
@@ -85,14 +85,14 @@ public:
     /**
     @param subs subscriber object
     @param cur cursor position
-    @param alert_flag optional alert flag to prevent subscription upon cancellation
+    @param cancel_signal optional alert flag to prevent subscription upon cancellation
     @retval true subscription accepted
     @retval false value is already available or publisher is closed or subscription is cancelled
      */
-    bool await(std::shared_ptr<Subs> subs, Cursor cur, coro::alert_flag *alert_flag = nullptr)  {
+    bool await(std::shared_ptr<Subs> subs, Cursor cur, coro::cancel_signal *cancel_signal = nullptr)  {
         std::lock_guard _(_mx);
         if (cur != _top || _closed) return false;
-        if (alert_flag && *alert_flag) return false;
+        if (cancel_signal && *cancel_signal) return false;
         _awaiting.push_back(std::move(subs));
         return true;
     }
@@ -100,16 +100,16 @@ public:
     ///Kick subscriber - remove from awaiting list
     /**
     @param subs subscriber to remove
-    @param alert_flag optional alert flag to set upon removal (atomically).This prevents future subscriptions 
+    @param cancel_signal optional alert flag to set upon removal (atomically).This prevents future subscriptions 
     that may happen concurrently.
      */
-    void kick(std::shared_ptr<Subs> subs, coro::alert_flag *alert_flag = nullptr) {
+    void kick(std::shared_ptr<Subs> subs, coro::cancel_signal *cancel_signal = nullptr) {
         std::lock_guard _(_mx);
         auto e = std::remove_if(_awaiting.begin(), _awaiting.end(), [&](const std::weak_ptr<Subs> &item){
             return item.lock() == subs;
         });
         _awaiting.erase(e, _awaiting.end());
-        if (alert_flag) alert_flag->set();        
+        if (cancel_signal) cancel_signal->request_cancel();        
     }
 
     ///Check if value is available at given cursor
@@ -210,7 +210,7 @@ public:
         } else {
             return [this](typename coro::awaitable<T>::result prom) -> coro::prepared_coro{
                 _result = std::move(prom);
-                if (!_source->await(this->shared_from_this(), _cur, &_alert_flag)) {
+                if (!_source->await(this->shared_from_this(), _cur, &_cancel_signal)) {
                     return _source->read(_cur, [this](const T *val){
                         if (val) {
                             return _result(*val);
@@ -228,26 +228,26 @@ public:
     ///Subscribe to publisher
     void subscribe(Pubs &publisher) {
         _source = &publisher;
-        _alert_flag.reset();
+        _cancel_signal.reset();
         _cur = _source->get_top_cursor();
     }
 
     ///Close subscriber - unsubscribe from publisher, unblocking any awaiting read
     void close() {
         if (_source) {
-            _source->kick(this->shared_from_this(),&_alert_flag);
+            _source->kick(this->shared_from_this(),&_cancel_signal);
         }
     }
 
     ///Check if subscriber is closed
     bool is_closed() const {
-        return static_cast<bool>(_alert_flag);
+        return static_cast<bool>(_cancel_signal);
     }
 
 protected:
 
     Pubs *_source;
-    coro::alert_flag _alert_flag;
+    coro::cancel_signal _cancel_signal;
     Cursor _cur = 0;
     coro::awaitable<T>::result _result;
     void notify() {

@@ -9,7 +9,8 @@
 
 namespace quarkbot {
 
-SimulatedTradableInstrument::SimulatedTradableInstrument(std::shared_ptr<SimulatedInstrument> instrument) {
+SimulatedTradableInstrument::SimulatedTradableInstrument(std::shared_ptr<SimulatedInstrument> instrument)
+:_instrument(std::move(instrument) ) {
 
 }
 
