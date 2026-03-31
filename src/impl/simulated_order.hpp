@@ -17,13 +17,13 @@ public:
                 : BaseOrder(params, instrument, replaced, name) {}
 
     using BaseOrder::post_update;
-    coro::prepared_coro post_update(Fill fill)  {
+    void post_update(Fill fill)  {
         auto instr = this->get_instrument();
         auto sim = std::static_pointer_cast<SimulatedTradableInstrument>(instr);
         if (sim) {
             sim->update_position(fill.amount);
         }
-        return BaseOrder::post_update(fill);
+        BaseOrder::post_update(fill);
     }
     virtual void cancel() {
         auto instr = this->get_instrument();

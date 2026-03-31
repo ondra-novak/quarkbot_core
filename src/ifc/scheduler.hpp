@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../coro/src/basic_coro/cancel_signal.hpp"
+#include <basic_coro/cancel_signal.hpp>
 #include "defs.hpp"
 #include <chrono>
 
@@ -26,7 +26,7 @@ public:
         returns immediately canceled awaitable.
         @return awaitable which completes when time point is reached or alert flag is set
      */
-    virtual awaitable<void> sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr = nullptr) = 0;
+    virtual awaitable<bool> sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr = nullptr) = 0;
     ///Sleep for specified duration or until alerted
     /**
         @param duration duration to sleep
@@ -36,7 +36,7 @@ public:
         returns immediately canceled awaitable.
         @return awaitable which completes when duration elapses or alert flag is set
      */
-    virtual awaitable<void> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr = nullptr) = 0;
+    virtual awaitable<bool> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr = nullptr) = 0;
 
     ///Interrupt any awaitable sleeping on the scheduler with specified alert flag
     /**
@@ -46,7 +46,7 @@ public:
 
      * @param cancel_signal alert flag used to identify sleeping awaitables
      */
-    virtual void interrupt(coro::cancel_signal *cancel_signal) = 0;
+    virtual void cancel(coro::cancel_signal *cancel_signal) = 0;
 
 };
 

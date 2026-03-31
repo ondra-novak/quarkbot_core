@@ -24,6 +24,7 @@ class IBacktestDataSource {
     virtual Quote get_quite() const = 0;
     virtual Trade get_trade() const = 0;
     virtual OrderBookEntry get_orderbook_increment() const = 0;
+    virtual ~IBacktestDataSource() = default;
 
 };
 

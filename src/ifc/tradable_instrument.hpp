@@ -1,8 +1,9 @@
 #pragma once
 
-#include "coro/src/basic_coro/awaitable.hpp"
+#include <basic_coro/awaitable.hpp>
 #include "ifc/defs.hpp"
 #include "ifc/stream.hpp"
+#include "ifc/stream_defs.hpp"
 #include "market_instrument.hpp"
 #include "order.hpp"
 #include "utils/function_view.hpp"
@@ -37,7 +38,14 @@ public:
     even if replace fails.
     @param name order name, any arbitrary text which helps to strategy to identify the order
      */
-    virtual POrder place_order(const OrderRequest &params, POrder order_to_replace = {}, std::string_view name = {});
+    virtual Order place_order(const OrderRequest &params, Order order_to_replace, std::string_view name = {}) = 0;
+    virtual Order place_order(const OrderRequest &params, std::string_view name = {}) = 0;
+
+    ///Cancel order 
+    /**
+    This handles implementation of function cancel() on order
+    */
+    virtual void cancel_order(Order order) = 0;
 
     ///Attach storage/database and restore stored orders
     /**
@@ -56,7 +64,7 @@ public:
         Any updates happened before order's restoration should be post to the strategy as an order event
 
      */
-    virtual void attach_storage(PStorage storage, function_view<void(POrder)> callback) = 0;
+    virtual void attach_storage(PStorage storage, function_view<void(Order)> callback) = 0;
 
     ///Aggregate fills for this instrument
     /**
@@ -96,35 +104,17 @@ public:
 
         @note function is asynchronous. It is much faster to count position from fills.
     */
-    virtual coro::awaitable<Fixed> get_position() const = 0;
+    virtual coro::awaitable<Decimal> get_position() const = 0;
 
     virtual RiskLimits get_limits() const = 0;
 
-    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type) const = 0;
-
-
-    ///Subscribe account related instrument event stream
-    /**
-     * Example of stream - fills executed by exchange, manual fills, funding events, settlement
-     * 
-      @tparam T type of item determines type of stream. 
-      @return shared pointer to IInstrumentEventStream handling stream of given type. Can't return nullptr, but for unsupported
-      streams, it can return dummy stream which throws exception on access    
-
-      @note The stream is returned already subscribed. You can start reading from it immediately. To unsubscribe, 
-      just destroy the pointer or call close() on the stream.
-
-      In contrast to market event stream, there is often much longer queue, so you should not get missing events
-     */
-    template<InstrumentStreamType T>
-    PInstrumentEventStream<T> subscribe() const {
-        auto x =  subscribe_stream_internal(T::type);
-        if (x) return std::static_pointer_cast<IInstrumentEventStream<T> >(x);
-        else return std::make_shared<typename IEventStream<T>::Null>();
-}
-
+  
 
 };
+
+inline void Order::cancel() {
+    _state->instrument->cancel_order(*this);
+}
 
 
 }

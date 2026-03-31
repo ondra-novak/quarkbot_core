@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.hpp"
-#include "utils/fixed.hpp"
+#include "utils/decimal.hpp"
+
 
 namespace quarkbot {
 
@@ -36,7 +37,7 @@ public:
         @retval true transfered
         @retval false transfer
     */  
-    virtual awaitable<bool> transfer(PUnderlyingCurrency currency, PAccount to_account, Fixed amount) const = 0;
+    virtual awaitable<bool> transfer(PUnderlyingCurrency currency, PAccount to_account, Decimal amount) const = 0;
 };  
 
 

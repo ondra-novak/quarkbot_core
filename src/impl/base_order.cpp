@@ -18,18 +18,17 @@ BaseOrder::BaseOrder(const OrderParameters &params,
 
 
 
-coro::prepared_coro BaseOrder::post_update(OrderStatus status) {
+void BaseOrder::post_update(OrderStatus status) {
     std::lock_guard _(_mx);
     if (_event_waiter) {
         _status = status;
-        return _event_waiter(BaseOrder::is_done());
+        _event_waiter(BaseOrder::is_done());
     } else {
         _events.push_back(status);            
-        return {};
     }
 }
 
-coro::prepared_coro BaseOrder::post_update(Fill fill) {
+void BaseOrder::post_update(Fill fill) {
     std::lock_guard _(_mx);
     _events.push_back(fill);
     return _event_waiter(true);
@@ -44,7 +43,7 @@ coro::awaitable<bool> BaseOrder::wait_event()  {
         } else if (BaseOrder::is_done()) {  //empty and done
             return res(false);          //report it is done
         } else { //empty and not done, register result with dispatcher
-            _event_waiter = IExecutionWorker::proxy_result(std::move(res));                    
+            _event_waiter = std::move(res);                    
             return coro::prepared_coro{};   //nothing to resume
         }
     };

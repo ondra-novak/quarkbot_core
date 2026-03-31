@@ -45,17 +45,17 @@ namespace quarkbot {
         virtual coro::awaitable<IStorage::FeeState> aggregate_fees(PStorage fill_storage, IStorage::FeeState initial_state = {}, std::chrono::system_clock::time_point until_time = std::chrono::system_clock::time_point::max()) override;
         virtual coro::awaitable<std::span<const Fill> > get_last_fills(std::span<Fill> space) override;
         virtual PAccount get_account() const override;
-        virtual coro::awaitable<Fixed> get_position() const override;
+        virtual coro::awaitable<Decimal> get_position() const override;
         virtual RiskLimits get_limits() const override;
         
 
-        void update_position(Fixed amount);
+        void update_position(Decimal amount);
         std::shared_ptr<SimulatedInstrument> get_origin_instrument() const {return _instrument;}
 
 
     protected:
         std::shared_ptr<SimulatedInstrument> _instrument;
-        Fixed _position;
+        Decimal _position;
         mutable spin_mutex _pos_mx;
         PAccount _account;
         PStorage _storage;

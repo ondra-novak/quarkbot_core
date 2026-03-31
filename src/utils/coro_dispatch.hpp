@@ -1,7 +1,7 @@
 #pragma once
-#include "coro/src/basic_coro/awaitable.hpp"
-#include "coro/src/basic_coro/exceptions.hpp"
-#include "coro/src/basic_coro/prepared_coro.hpp"
+#include <basic_coro/awaitable.hpp>
+#include <basic_coro/exceptions.hpp>
+#include <basic_coro/prepared_coro.hpp>
 #include "dispatcher.hpp"
 #include <concepts>
 #include <exception>

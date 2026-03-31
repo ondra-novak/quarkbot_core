@@ -1,5 +1,6 @@
 #pragma once
-#include "coro/src/basic_coro/prepared_coro.hpp"
+#include <basic_coro/prepared_coro.hpp>
+#include "basic_coro/awaitable.hpp"
 #include "ifc/order.hpp"
 #include "ifc/defs.hpp"
 #include "utils/spin_mutex.hpp"
@@ -32,11 +33,11 @@ public:
 
    
 
-    coro::prepared_coro post_update(OrderStatus status) ;
+    void post_update(OrderStatus status) ;
 
-    coro::prepared_coro post_update(Fill fill);
+    void post_update(Fill fill);
 
-    coro::prepared_coro post_update(Rejection rej);
+    void post_update(Rejection rej);
 
     void reject(OrderRejectionReason rsn) {
         post_update(Rejection{rsn});
@@ -47,7 +48,7 @@ public:
 
     virtual coro::awaitable<bool> wait_event() override;
 
-    virtual Fixed get_filled_amount() const override {return _filled_amount;}
+    virtual Decimal get_filled_amount() const override {return _filled_amount;}
     virtual bool any_fill() const override;
     virtual std::optional<Fill> read_fill() override;
     virtual const OrderParameters &get_parameters() const override;
@@ -67,12 +68,12 @@ protected:
     std::weak_ptr<IOrder> _replaced;
     std::string _name;
     std::string _rejection_message;
-    Fixed _filled_amount = {};
+    Decimal _filled_amount = {};
     OrderStatus _status = OrderStatus::sent;
     OrderRejectionReason _rejection_reason = OrderRejectionReason::none;
     mutable spin_mutex _mx;
     EventQueue _events = {};
-    IExecutionWorker::proxy_result<bool> _event_waiter = {};
+    ProxyResult<bool> _event_waiter;
 
     void flush_statuses();
 

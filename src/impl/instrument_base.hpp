@@ -12,6 +12,7 @@ namespace quarkbot {
 class InstrumentBase : public IMarketInstrument , public std::enable_shared_from_this<InstrumentBase>{
 public:
 
+#if 0
 
     ///connect instrument to data stream
     /**
@@ -23,7 +24,7 @@ public:
     }        
 
 
-    template<MarketStreamType T>
+    template<StreamType T>
     class MyServer: public StreamServer<T,1>, public IDataReceiver {
     public:
         virtual MarketStreamTypeItem::Type get_type() const noexcept override {
@@ -45,7 +46,7 @@ public:
             const Trade &t = static_cast<const Trade &>(data);
             accum.trades += 1;
             accum.last_price = t.price;
-            accum.volume += t.size;
+            accum.volume += static_cast<long double>(t.size.to_double());
             accum.time = t.time;
             this->post(accum);
         }
@@ -54,7 +55,7 @@ public:
         TradeCounter accum;
     };
     
-    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(MarketStreamTypeItem::Type type) const {
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(StreamTypeItem::Type type) const {
         if (type == Quote::type) return this->subscribe<Quote>(_quote_server);
         if (type == Trade::type) return this->subscribe<Trade>(_trade_server);
         if (type == OrderBook::type) return this->subscribe<OrderBook>(_orderbook_server);
@@ -84,6 +85,7 @@ protected:
     return std::make_shared<StreamClient<T,1> >(std::move(server));
   }
   
+  #endif
 };
 
 } // namespace quarkbot

@@ -3,8 +3,11 @@
 #include "types.hpp"
 #include "defs.hpp"
 #include <cstdint>
+#include <memory>
 #include <optional>
+#include "utils/decimal.hpp"
 #include "utils/round.hpp"
+
 
 namespace quarkbot {
 
@@ -49,7 +52,7 @@ struct OrderParametersGen {
     bool hedge = false;
 };
 
-using OrderParameters = OrderParametersGen<Fixed>;
+using OrderParameters = OrderParametersGen<Decimal>;
 using OrderRequest = OrderParametersGen<Rounded>;
 
 enum class OrderStatus : uint8_t {
@@ -119,97 +122,171 @@ inline constexpr bool is_done_status(OrderStatus status) {
            status == OrderStatus::replaced;
 }
 
+struct OrderStatusUpdate {
+    OrderStatus status;
+    OrderRejectionReason rej_status = OrderRejectionReason::none;
+    std::string rej_message = {};
+};
 
-class IOrder {
+class Order {
 public:
-    virtual ~IOrder() = default;
 
-    virtual const OrderParameters &get_parameters() const = 0;
-    ///Returns order status
-    /**
-        @return OrderStatus enumeration
+    struct State {
+        ///original parameters -  adjusted
+        const OrderParametersGen<Decimal> parameters = {};
+        ///associated instrument
+        PTradableInstrument instrument = {};
+        ///order name
+        std::string name = {};
+        ///reference to replaced order
+        std::weak_ptr<State> replaced_order = {};
+        ///internal order ID
+        std::string id = {};
+        ///filled amount
+        Decimal filled = {};
+        ///order status
+        OrderStatus status = OrderStatus::sent; 
+        ///if order rejected, there is reject reason
+        OrderRejectionReason reject_reason = {};
+        ///if order rejected, there is message if any
+        std::string rejection_message = {};
+        ///revision of last change
+        /** @note connector must update order in strategy's thread */
+        unsigned int rev = 0;
+        ///revision of last seen change
+        unsigned int seen_rev = 0;     
+        ///queue of unprocessed fills
+        std::queue<Fill> fills;
+        ///awaiting coroutine
+        awaitable<bool>::result awaiting = {};
+        
 
-        @note the status is not updated asynchronously. You need to call  wait_event() or read_fill() to properly
-        update status. This should be done in strategy's thread
-    */
-    virtual OrderStatus get_status() const = 0;
-
-    ///Retrieve order's rejection reason. It can appear only when reject status
-    virtual OrderRejectionReason get_rejection_reason() const = 0;
-    ///Get rejection message
-    virtual std::string_view get_rejection_message() const = 0;
+        State(OrderParametersGen<Decimal> params, 
+              PTradableInstrument instrument,
+              std::string name,
+              std::weak_ptr<State> replaced_order
+        ):parameters(std::move(params))
+         ,instrument(std::move(instrument))
+         ,name(std::move(name))
+         ,replaced_order(std::move(replaced_order)) {}
+    };
     
-    ///Returns true, if order is done
+    Order(std::shared_ptr<State> st):_state(std::move(st)) {}
 
-    virtual bool is_done() const = 0;
-    ///Retrieve next fill
+    Order(OrderParametersGen<Decimal> params, 
+        PTradableInstrument instrument,
+        std::string name,
+        Order replaced_order
+    ):_state(std::make_shared<State>(std::move(params),std::move(instrument), std::move(name), replaced_order._state)) {}
+
+    Order(OrderParametersGen<Decimal> params, 
+        PTradableInstrument instrument,
+        std::string name
+    ):_state(std::make_shared<State>(std::move(params),std::move(instrument), std::move(name),  std::weak_ptr<State>{})) {}
+
+
+    ///Wait for next event (awaitable)
     /**
-    The function removes unprocessed fill from the queue and returns it. If there
-    is no fill, returns nullopt. You will not receive fills twice, so you need to store fill somewhere
-     */
-    virtual std::optional<Fill> read_fill() = 0;
-    ///Determine if there is an equeued fill
-    /**
-        The function doesn't change status or anything in the queue. It is better to call read_fill() and check
-        for result.
+    @retval true a state of order has been changed, or there are unprocessed fill
+    @retval false order is done
+
+    @note The function always returns immediatelly if there is unprocessed fill. It returns true, if there is posibility that
+      state has been changed, and this information was note pulled out yet. Otherwise the function blocks, if co_awaited
+      If the order is done, function immediatelly returns false
     */
-    virtual bool any_fill() const = 0;
-    ///wait for event
-    /**
-      @retval true event happened
-      @retval false eof, no more events
-
-      @note the function returns immediately true if there is an unprocessed fill. Cycling without 
-      @note the final status is updated, once all fills are processed
-      @note event market order can be in `open` state if there are unprocessed fills      
-
-      @code
-      while (co_await order.wait_event()) {
-          auto f = read_fill();
-          if (f) process_fill(*f);
-      }
-      @endcode
-     */
-    virtual awaitable<bool> wait_event() = 0;
-    ///Get associated tradable instrument
-    virtual PTradableInstrument get_instrument() const = 0;
-    ///Get order name (assigned by strategy)
-    virtual std::string_view get_name() const = 0;
-    virtual Fixed get_filled_amount() const = 0;
-
-    ///Retrieves order which has been replaced by this order
-    /**
-    @return replaced order
-    @note Function will return nullptr if there is no replaced order. Also note that replaced order
-    is kept as long as exists somewhere in the system. So if you need it, you should hold it somewhere else,
-    otherwise it is destroyed (internally weak_ref)
-    */
-    virtual POrder get_replaced_order() const = 0;
-
-    ///cancel current order
-    /**
-    if order is already in final state, the function does nothing.
-    The cancel operation is confirmed by sending order to final state.
-    @note the cancel doesn't set to canceled state, it is set when exchange confirms cancel. If order
-    is filled during waiting for confirmation then final state is filled.
-    */
-    virtual void cancel() = 0;
-
-
-    ///Await for final order status
-    /**
-    @param callback function is called for every fill
-    @return (asynchronous) returns final status of the order
-     */
-    template<std::invocable<Fill> Fn>
-    awaitable<OrderStatus> run(Fn callback) {
-        while (co_await this->wait_event()) {
-            auto f = this->read_fill();
-            if (f) callback(*f);            
-        }
-        co_return get_status();
+    awaitable<bool> next_event() {
+        if (!_state->fills.empty()) return true;
+        if (_state->seen_rev != _state->rev) {_state->seen_rev = _state->rev; return true;}
+        if (is_done_status(_state->status)) return false;
+        return [st = _state](auto promise) {
+            st->awaiting = std::move(promise);
+        };
     }
 
+    ///returns true if there is any unprocessed fill
+    bool any_fill() const {
+        return !_state->fills.empty();
+    }
+
+    ///reads next fill, 
+    /**
+    @return next unprocessed fill, or nullopt if none
+    */
+    std::optional<Fill> read_fill() {
+        std::optional<Fill> out;
+        if (any_fill()) {
+            out.emplace(std::move(_state->fills.front()));
+            _state->fills.pop();
+        }
+        return out;
+    }
+
+    
+
+    ///get order parameters
+    const OrderParametersGen<Decimal> &get_parameters() const {return _state->parameters;}
+    ///get instrument
+    PTradableInstrument get_instrument() const {return _state->instrument;}
+    ///get order name
+    const std::string &get_name() const {return _state->name;}    
+    ///retrieve order instance which has been replaced
+    /**
+        @return optional containing order instance. Note that to return
+            valid order instance, it must still exists somewhere in the
+            system. Once the last reference is removed, the previous order is no longer
+            available and function returns nullopt
+    */
+    std::optional<Order> get_replaced_order() const {
+        auto lk = _state->replaced_order.lock();
+        std::optional<Order> out;
+        if (lk) out.emplace(lk);
+        return out;
+    }
+    ///return internal id
+    const std::string &get_id() const {return _state->id;}
+    ///return filled amount
+    Decimal get_filled() const {return _state->filled;}
+    ///return get order status
+    OrderStatus get_status() const {return _state->status;}
+    ///get reason for rejection
+    OrderRejectionReason get_reject_reason() const {return _state->reject_reason;}
+    ///get rejection message
+    const std::string &get_rejection_message() const {return _state->rejection_message;}
+
+
+    ///update order status
+    /**
+    @note function is not MT safe. Ensure that it is called in strategy's thread
+    */
+    void update_order(OrderStatusUpdate update) {
+        _state->status = update.status;
+        _state->reject_reason = update.rej_status;
+        _state->rejection_message = std::move(update.rej_message);
+         ++_state->rev;
+        if (_state->awaiting) {
+            _state->seen_rev = _state->rev;
+            _state->awaiting(true);
+        }
+    }
+
+    ///update order status
+    /**
+    @note function is not MT safe. Ensure that it is called in strategy's thread
+    */
+    void update_order(Fill fill) {
+        _state->filled += fill.amount; 
+        _state->fills.push(std::move(fill));
+
+        if (_state->awaiting) {
+            _state->awaiting(true);
+        }
+    }
+
+    void cancel();
+
+protected:
+
+std::shared_ptr<State> _state = {};
 };
 
 

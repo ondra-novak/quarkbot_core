@@ -14,17 +14,17 @@ SimulatedTradableInstrument::SimulatedTradableInstrument(std::shared_ptr<Simulat
 
 }
 
-static Fixed round_amount(const IMarketInstrument::Info &nfo, const Rounded &amount) {
-    auto f1 = amount.get_rounded(nfo.lot_size_increment, -1);
+static Decimal round_amount(const IMarketInstrument::Info &nfo, const Rounded &amount) {
+    Decimal f1(amount.get_rounded(nfo.lot_size_increment.to_double(), -1),nfo.min_lot_size.precision());
     if (f1 < nfo.min_lot_size) {
-        f1 = amount.get_rounded(nfo.min_lot_size, -1);
+        f1 = Decimal (amount.get_rounded(nfo.min_lot_size.to_double(), -1),nfo.min_lot_size.precision());
     }
-    return Fixed(f1, nfo.lot_size_increment);
+    return f1;
 }
 
-static Fixed round_price(const IMarketInstrument::Info &nfo, const Rounded &price, Side side) {
+static Decimal round_price(const IMarketInstrument::Info &nfo, const Rounded &price, Side side) {
     int def = -static_cast<int>(side);
-    return Fixed(price.get_rounded(nfo.price_increment, def), nfo.price_increment);
+    return Decimal(price.get_rounded(nfo.price_increment.to_double(), def), nfo.price_increment.precision());
 }
 
 
@@ -81,11 +81,11 @@ coro::awaitable<std::span<const Fill> > SimulatedTradableInstrument::get_last_fi
 PAccount SimulatedTradableInstrument::get_account() const {
 
 }
-coro::awaitable<Fixed> SimulatedTradableInstrument::get_position() const {
+coro::awaitable<Decimal> SimulatedTradableInstrument::get_position() const {
     std::lock_guard _(_pos_mx);
     return _position;
 }
-void SimulatedTradableInstrument::update_position(Fixed amount) {
+void SimulatedTradableInstrument::update_position(Decimal amount) {
     std::lock_guard _(_pos_mx);
     _position+=amount;            
 }

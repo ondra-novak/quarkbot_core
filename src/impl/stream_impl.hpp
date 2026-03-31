@@ -1,13 +1,11 @@
 #pragma once
-#include "coro/src/basic_coro/awaitable.hpp"
-#include "coro/src/basic_coro/prepared_coro.hpp"
+#include <basic_coro/awaitable.hpp>
 #include "ifc/stream.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/execution_worker.hpp"
-#include "utils/awaitable_transform.hpp"
+#include <basic_coro/awaitable_transform.hpp>
 #include "utils/pubsub.hpp"
 #include <chrono>
-#include <coroutine>
 #include <memory>
 #include <mutex>
 
@@ -80,7 +78,7 @@ protected:
 
     std::shared_ptr<StreamServer<T, limit> > _server;
     std::size_t _tick_counter = 0;    
-    coro::awaitable_transform_r<IExecutionWorker::proxy_result , awaitable<EventWithCounter<T> >, StreamClient *> _transform;
+    coro::awaitable_transform_r<ProxyResult , awaitable<EventWithCounter<T> >, StreamClient *> _transform;
 
     std::size_t update_counter(std::size_t counter) {
         auto diff = counter - _tick_counter;

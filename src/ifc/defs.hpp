@@ -3,9 +3,10 @@
 #include <concepts>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 #include "basic_coro/awaitable.hpp"
 #include "basic_coro/coroutine.hpp"
-
+#include "stream_defs.hpp"
 
 
 
@@ -13,19 +14,7 @@ namespace quarkbot {
 
 template<typename T> using awaitable = coro::awaitable<T>;
 
-struct StreamTypeItem {
-    using Type = std::string_view;
-};
 
-struct MarketStreamTypeItem :StreamTypeItem {};
-struct InstrumentStreamTypeItem :StreamTypeItem{};
-
-template<typename T>
-concept StreamType = std::is_base_of_v<StreamTypeItem, T> && requires {
-    {T::type}->std::convertible_to<typename T::Type>;
-};
-template<typename T> concept MarketStreamType = std::is_base_of_v<MarketStreamTypeItem, T> && StreamType<T>;
-template<typename T> concept InstrumentStreamType = std::is_base_of_v<InstrumentStreamTypeItem, T> && StreamType<T>;
 
 
 template<typename T>
@@ -53,7 +42,6 @@ class IAccount;
 class IExchange;
 class IMarketInstrument;
 class ITradableInstrument;
-class IOrder;
 class IUnderlyingCurrency;
 class IStorage;
 class IScheduler;
@@ -62,27 +50,21 @@ class IEventStream;
 class IExecutionWorker;
 class IBacktestDataSource;
 
-template<MarketStreamType T>
-using IMarketEventStream = IEventStream<T>;
-template<MarketStreamType T>
-using IInstrumentEventStream = IEventStream<T>;
 
 
 using PAccount = safe_ref<IAccount>;
 using PExchange = safe_ref<IExchange>;
 using PMarketInstrument = safe_ref<IMarketInstrument>;
 using PTradableInstrument = safe_ref<ITradableInstrument>;
-using POrder = safe_ref<IOrder>;
 using PUnderlyingCurrency = safe_ref<IUnderlyingCurrency>;
 using PStorage = safe_ref<IStorage>;
-template<MarketStreamType T>
-using PMarketEventStream = safe_ref<IMarketEventStream<T> >;
-template<InstrumentStreamType T>
-using PInstrumentEventStream = safe_ref<IInstrumentEventStream<T> >;
 using PScheduler = safe_ref<IScheduler>;
 using PExecutionWorker = safe_ref<IExecutionWorker>;
 using coroutine = coro::coroutine<void>;
 using PBacktestDataSource = safe_ref<IBacktestDataSource>;
+template<StreamType T>
+using PEventStream  =  safe_ref<IEventStream<T> >;
+
 
 
 template <auto Method>

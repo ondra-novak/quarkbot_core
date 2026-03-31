@@ -11,16 +11,16 @@ namespace quarkbot {
 class SchedulerRT: public IScheduler {
 public:
     virtual std::chrono::system_clock::time_point now() const override;
-    virtual awaitable<void> sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr) override;
-    virtual awaitable<void> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr) override;
-    virtual void interrupt(coro::cancel_signal *cancel_signal) override;
+    virtual awaitable<bool> sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr) override;
+    virtual awaitable<bool> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr) override;
+    virtual void cancel(coro::cancel_signal *cancel_signal) override;
 
     void start();
 
 
 protected:
 
-    using Queue = ScheduledQueue<IExecutionWorker::proxy_result<void>, 
+    using Queue = ScheduledQueue<ProxyResult<bool>, 
                    std::chrono::system_clock::time_point,
                    cancel_signal *>;
 

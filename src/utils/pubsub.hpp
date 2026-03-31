@@ -1,7 +1,7 @@
 #pragma once
-#include "coro/src/basic_coro/cancel_signal.hpp"
-#include "coro/src/basic_coro/awaitable.hpp"
-#include "coro/src/basic_coro/prepared_coro.hpp"
+#include <basic_coro/cancel_signal.hpp>
+#include <basic_coro/awaitable.hpp>
+#include <basic_coro/prepared_coro.hpp>
 #include <algorithm>
 #include <array>
 #include <concepts>

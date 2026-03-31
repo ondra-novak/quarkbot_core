@@ -1,29 +1,34 @@
 cmake_minimum_required(VERSION 3.28)
 project (trading_ifc)
-set (CMAKE_CXX_STANDARD 20)
+set (CMAKE_CXX_STANDARD 23)
 if (MSVC)
-	add_compile_options(/W4 /EHsc /DNOMINMAX    )
+	add_compile_options(/W4 /EHsc /DNOMINMAX /permissive-   )
 	set(STANDARD_LIBRARIES "")
 else()
-	add_compile_options(-Wall -Wextra -Wpedantic)
+	add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused -Woverloaded-virtual -Wconversion -Wsign-conversion -Wnull-dereference -Wdouble-promotion -Wformat=2)
 	set(STANDARD_LIBRARIES "pthread")
 endif()
 add_compile_options(-Wall -Wno-noexcept-type)
-find_package(Git)
-if(GIT_EXECUTABLE)
-	execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-endif()
+
+include(FetchContent)
+FetchContent_Declare(
+    BasicCoro
+    GIT_REPOSITORY https://www.github.com/ondra-novak/basic_coro.git
+    GIT_TAG 04e8c9d2c3bbdfd3a9da2b9c6627910e0bfc9c7a
+    EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(BasicCoro)
 
 # Find LevelDB using pkg-config
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBSSL REQUIRED openssl)
-pkg_check_modules(LIBWEBSOCKETS REQUIRED libwebsockets)
+#find_package(PkgConfig REQUIRED)
+#pkg_check_modules(LIBSSL REQUIRED openssl)
+#pkg_check_modules(LIBWEBSOCKETS REQUIRED libwebsockets)
 
 
-find_library(LEVELDB_LIBRARIES leveldb)
-if(NOT LEVELDB_LIBRARIES)
-  message(FATAL_ERROR "libleveldb missing (libleveldb-dev)?")
-endif()
+#find_library(LEVELDB_LIBRARIES leveldb)
+#if(NOT LEVELDB_LIBRARIES)
+  #message(FATAL_ERROR "libleveldb missing (libleveldb-dev)?")
+#endif()
 
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
@@ -33,8 +38,8 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_INSTALL_PREFIX "/usr/local" CACHE PATH "Default path to install" FORCE)
 endif()
 enable_testing()
-include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/coro/src)
-add_subdirectory("src/impl")
+include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/src)
+#add_subdirectory("src/impl")
 add_subdirectory("src/tests")
 #add_subdirectory("src/example")
 #add_subdirectory("src/simulator")

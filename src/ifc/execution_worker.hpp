@@ -1,11 +1,14 @@
 #pragma once
 
-#include "coro/src/basic_coro/awaitable.hpp"
-#include "coro/src/basic_coro/prepared_coro.hpp"
+#include <basic_coro/awaitable.hpp>
+#include <basic_coro/prepared_coro.hpp>
+#include "basic_coro/result_proxy.hpp"
 #include "defs.hpp"
 #include <coroutine>
+#include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 namespace quarkbot {
@@ -53,37 +56,7 @@ public:
         return _current_worker.lock();
     }
 
-    ///ensures that coroutine is woken up through a current dispatcher. Throws exception, is there is no dispatcher
-    template<typename T>
-    class proxy_result {
-    public:
-
-        proxy_result()  = default;
-
-        proxy_result(coro::awaitable_result<T> p):_p(std::move(p)),_wrk(IExecutionWorker::current()) {
-            if (_wrk == nullptr) {
-                throw std::runtime_error("Operation must be called from execution worker");
-            }
-        }
-
-        operator bool() const {
-            return static_cast<bool>(_p);
-        }
-
-        template<typename ... Ts>
-        requires (std::is_invocable_v<coro::awaitable_result<T>, Ts...>)
-        coro::prepared_coro operator()(Ts && ... args) {
-            auto p = _p(std::forward<Ts>(args)...);
-            if (p) _wrk->resume(std::move(p));
-            return {};
-        }
-
-    protected:
-        coro::awaitable_result<T> _p;
-        PExecutionWorker _wrk;
-    };
-
-
+    
 protected:
 
 
@@ -92,6 +65,29 @@ protected:
 };
 
 inline  thread_local std::weak_ptr<IExecutionWorker> IExecutionWorker::_current_worker;
+
+
+struct ProxyResultExecutor {
+    PExecutionWorker _worker;
+    void operator()(coro::prepared_coro coro) {
+        if (_worker) _worker->resume(std::move(coro));        
+    }
+};
+
+
+template<typename T>
+class ProxyResult : public coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor> {
+public:
+    ProxyResult(coro::awaitable_result<T> res):coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>(
+        std::move(res), {IExecutionWorker::current()})
+    {
+        if (!this->_executor._worker) throw std::runtime_error("Function can be called only from executor worker");
+    }
+    ProxyResult():coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>({},{}) {}
+    operator bool() const {return this->_result.operator bool();}
+};
+
+
 
 
 }

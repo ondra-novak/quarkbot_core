@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/src/basic_coro/awaitable.hpp"
+#include <basic_coro/awaitable.hpp>
 #include "defs.hpp"
 #include "market_instrument.hpp"
 

@@ -134,7 +134,7 @@ void SimulatedInstrument::run_matching(Param trade) {
     if (!_last_quote)return;
     
 
-    Quote new_order_quotes{{},Fixed::min(),{},Fixed::max(), {}, _last_quote->time};
+    Quote new_order_quotes{{},Decimal::min(),{},Decimal::max(), {}, _last_quote->time};
     auto iter = std::remove_if(_orders.begin(), _orders.end(), [&](OrderRecord &rc){
         const auto &params  = rc.order->get_parameters();
 
@@ -265,7 +265,7 @@ void SimulatedInstrument::run_matching(Param trade) {
     }
 }
 
-Fill SimulatedInstrument::create_fill(Fixed price, Fixed amount, Side side, std::chrono::system_clock::time_point tm, std::string_view name) {
+Fill SimulatedInstrument::create_fill(Decimal price, Decimal amount, Side side, std::chrono::system_clock::time_point tm, std::string_view name) {
     return Fill {
         generate_random_string(),
         std::string(name),

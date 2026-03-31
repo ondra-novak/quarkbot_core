@@ -1,5 +1,5 @@
 #include "backtest_worker.hpp"
-#include "coro/src/basic_coro/prepared_coro.hpp"
+#include <basic_coro/prepared_coro.hpp>
 #include "ifc/defs.hpp"
 #include <mutex>
 
@@ -14,24 +14,23 @@ void BacktestExecutionWorker::resume(std::coroutine_handle<> h) noexcept {
     _microtask_queue.push(h);
 }
 
-awaitable<void> BacktestExecutionWorker::sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr) {
-    return [&](awaitable<void>::result prom) mutable {
+awaitable<bool> BacktestExecutionWorker::sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr) {
+    return [&](awaitable<bool>::result prom) mutable {
         std::lock_guard _(_mx);
-        if (cancel_signal_ptr && *cancel_signal_ptr) return prom.set_empty();
-        _sch_queue.push(IExecutionWorker::proxy_result(std::move(prom)), time_point, cancel_signal_ptr);
-        return coro::prepared_coro{};
+        if (cancel_signal_ptr && *cancel_signal_ptr)  prom.set_empty();
+        else _sch_queue.push(std::move(prom), time_point, cancel_signal_ptr);        
     };
 
 }
-awaitable<void> BacktestExecutionWorker::sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr) {
+awaitable<bool> BacktestExecutionWorker::sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr) {
     return sleep_until(_cur_time.load()+duration, cancel_signal_ptr);
 }
-void BacktestExecutionWorker::interrupt(coro::cancel_signal *cancel_signal) {
+void BacktestExecutionWorker::cancel(coro::cancel_signal *cancel_signal) {
     std::lock_guard _(_mx);
     auto iter = _sch_queue.find(cancel_signal);
     if (cancel_signal) cancel_signal->request_cancel();
     if (iter != _sch_queue.end()) {
-        resume(_sch_queue.mutable_ref(iter)->value());
+        _sch_queue.mutable_ref(iter)->value();
         _sch_queue.erase(iter);
     } 
 }

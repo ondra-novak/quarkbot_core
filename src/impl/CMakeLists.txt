@@ -13,3 +13,4 @@ add_library (quarkbot_impl
     simulated_tradable_instrument.cpp
 )
 
+target_link_libraries(quarkbot_impl BasicCoro::basic_coro)

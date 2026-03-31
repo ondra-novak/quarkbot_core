@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils/fixed.hpp"
+#include "utils/decimal.hpp"
 #include <chrono>
 #include <cstdint>
 namespace quarkbot {
@@ -58,9 +58,9 @@ struct Fill {
     ///Execution reason
     ExecutionReason reason;
     ///fill amount
-    Fixed amount;
+    Decimal amount;
     ///fill price
-    Fixed price;
+    Decimal price;
     ///absolute fees in original currency
     double fees;
     ///conversion rate between original currency and contract currency

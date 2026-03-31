@@ -1,5 +1,6 @@
 #pragma once
 
+#include "utils/decimal.hpp"
 #include <cmath>
 namespace quarkbot {
     enum class RoundStrategy {
@@ -24,6 +25,8 @@ public:
     constexpr Rounded() = default;
     ///construct number
     constexpr Rounded(double v, RoundStrategy s = RoundStrategy::nearest): value(v), strategy(s) {}
+
+    constexpr Rounded(Decimal v, RoundStrategy s = RoundStrategy::nearest): value(v.to_double()), strategy(s) {}
 
     ///get rounded number
     /**

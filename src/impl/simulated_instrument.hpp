@@ -3,6 +3,7 @@
 #include "ifc/defs.hpp"
 #include "ifc/market_events.hpp"
 #include "ifc/stream.hpp"
+#include "ifc/stream_defs.hpp"
 #include "instrument_base.hpp"
 
 #include <chrono>
@@ -34,7 +35,7 @@ public:
     void cancel_order(std::shared_ptr<SimulatedOrder> order);
 
     
-    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(MarketStreamTypeItem::Type type) const override;
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(StreamTypeItem::Type type, const StreamParams &params) const override;
     
 
 protected:
@@ -42,7 +43,7 @@ protected:
     struct OrderRecord {
         std::shared_ptr<SimulatedOrder> order;
         bool stopped;
-        Fixed fill_amount;
+        Decimal fill_amount;
     };
 
 
@@ -52,7 +53,7 @@ protected:
     PUnderlyingCurrency _pnl_currency;
     PExchange _exchange;
 
-    template<MarketStreamType T>
+    template<StreamType T>
     class MyDataSource: public IDataReceiver {
     public:
         std::weak_ptr<SimulatedInstrument> _owner;
@@ -80,7 +81,7 @@ protected:
     template<typename Param>
     void run_matching(Param p);
 
-    Fill create_fill(Fixed price, Fixed amount, Side side, std::chrono::system_clock::time_point tm, std::string_view name);
+    Fill create_fill(Decimal price, Decimal amount, Side side, std::chrono::system_clock::time_point tm, std::string_view name);
 
 };
 
