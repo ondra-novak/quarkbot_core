@@ -4,6 +4,7 @@
 #include "ifc/account.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/event_stream_publisher.hpp"
+#include "ifc/publisher_base.hpp"
 #include "ifc/queue_stream_publisher.hpp"
 #include "ifc/stream_defs.hpp"
 #include <memory>
@@ -14,7 +15,7 @@ namespace quarkbot {
 
     template<typename Factory>
     requires(std::is_invocable_r_v<std::shared_ptr<void>, Factory, PMarketInstrument, PAccount, StreamTypeItem::Type, const StreamParams *>)
-    class PublishingMaps {
+    class PublisherManager {
     public:
 
         struct Key {
@@ -41,11 +42,11 @@ namespace quarkbot {
 
         struct KeyHash {auto operator()(const Key &k){return k.hash();}};
 
-        using PublisherRef = std::weak_ptr<void>;
+        using PublisherRef = std::weak_ptr<PublisherBase>;
 
         using MapType = std::unordered_map<Key, PublisherRef, KeyHash> ;
 
-        PublishingMaps(Factory factory):_factory(std::move(factory)) {}
+        PublisherManager(Factory factory):_factory(std::move(factory)) {}
 
 
         template<StreamType T, bool queue>
@@ -66,11 +67,10 @@ namespace quarkbot {
             return get_publisher<T, false>(instrument, acc);
         }
 
-                template<StreamType T>
+        template<StreamType T>
         auto get_queue_publisher(const PMarketInstrument &instrument, const PAccount &acc) {
             return get_publisher<T, true>(instrument, acc);
         }
-
 
 
 

@@ -2,6 +2,7 @@
 
 #include "basic_coro/cancel_signal.hpp"
 #include "execution_worker.hpp"
+#include "ifc/publisher_base.hpp"
 #include "ifc/stream_defs.hpp"
 #include "stream.hpp"
 #include <chrono>
@@ -20,7 +21,7 @@ namespace quarkbot {
         Manages queue which length is defined by time span (few seconds)
     */
     template<StreamType T>
-    class QueueStreamPublisher {
+    class QueueStreamPublisher : public PublisherBase{
     public:
 
         ///Constructor with obsolence interval definition
@@ -30,8 +31,6 @@ namespace quarkbot {
         */
         explicit QueueStreamPublisher(std::chrono::system_clock::duration obsolence_interval)
             :_obsolence_interval(obsolence_interval) {}
-
-        using Revision = StreamEventRevision;
 
 
         using Event = StreamEvent<T>;
@@ -168,21 +167,14 @@ namespace quarkbot {
 
     protected:
          ///Consumer definition - registration of awaiting coroutine
-        struct Consumer {
-            ResultAndExecWorker<bool> _result; //result of suspended coroutine associated with its execution worker
-            coro::cancel_signal *_cancel; // if not null, awaiting can be canceled
-        };
-
         struct Item {
             T data;
             std::chrono::system_clock::time_point received;
         };
         
-        std::mutex _mx;
         std::deque<Item> _queue;
         Revision _front_revision;
         std::chrono::system_clock::duration _obsolence_interval;
-        std::vector<Consumer> _awaiters;
         bool _closed = false;
  
     };

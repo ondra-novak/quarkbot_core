@@ -2,6 +2,7 @@
 
 #include "basic_coro/cancel_signal.hpp"
 #include "execution_worker.hpp"
+#include "ifc/publisher_base.hpp"
 #include "ifc/stream_defs.hpp"
 #include "stream.hpp"
 #include <atomic>
@@ -21,16 +22,8 @@ namespace quarkbot {
         Revision is used to detect change        
     */
     template<StreamType T>
-    class EventStreamPublisher {
+    class EventStreamPublisher : public PublisherBase{
     public:
-
-        using Revision = StreamEventRevision;
-        
-        ///Consumer definition - registration of awaiting coroutine
-        struct Consumer {
-            ResultAndExecWorker<bool> _result; //result of suspended coroutine associated with its execution worker
-            coro::cancel_signal *_cancel; // if not null, awaiting can be canceled
-        };
 
         using Event = StreamEvent<T>;
 
@@ -75,10 +68,7 @@ namespace quarkbot {
             _received = cb(_value);
             _rev.fetch_add(1,std::memory_order_release);
             std::lock_guard _(_mx);
-            for (auto &x: _awaiters) {
-                x(true);
-            }
-            _awaiters.clear();
+            flush_consumers(true);
         }
 
         ///begin await on next event
@@ -122,36 +112,6 @@ namespace quarkbot {
             };
         }
 
-        ///cancel awaiting operation
-        /**
-        @param sig pointer to associated cancel signal, which serves as identification and also signal distributor. Must not be
-        null, other function fails with false
-        @retval true awaiter was removed and coroutine was scheduled with eof indication as result
-        @retval false awaiter was not found, it is possible that the coroutine is running and processing some data. The
-        canel_signal prevents to next co_await on this object, but caller must use a proper synchronization to 
-        join coroutine's execution with its own thread.
-
-        @note MT safe
-
-        */
-        bool cancel(coro::cancel_signal *sig) {            
-            if (!sig || sig->is_canceled()) return false; //ignore if already canceled
-            std::lock_guard _(_mx);
-            //try to find awaiter
-            auto found =  std::find_if(_awaiters.begin(), _awaiters.end(), [&](const Consumer &c){
-                return c._cancel == sig;
-            });
-            //request cancel on signal
-            sig->request_cancel();
-            //if found, remove it and report true
-            if (found != _awaiters.end()) {
-                found->_result(false);  //close the stream for this consumer only
-                _awaiters.erase(found); 
-                return true;
-            }
-            //otherwise report false
-            return false;
-        }
 
         ///tests, whether server is closed
         /**
@@ -168,17 +128,12 @@ namespace quarkbot {
         void close() {
             std::lock_guard _(_mx);
             _rev.store(closed_stream, std::memory_order_release);
-             for (auto &x: _awaiters) {
-                x(false);
-            }                        
-            _awaiters.clear();
+            flush_consumers(false);
         }
 
     protected:
         volatile T _value;
         volatile std::chrono::system_clock::time_point _received;
-        mutable std::mutex _mx;
-        std::vector<Consumer> _awaiters;
         std::atomic<Revision> _rev;
     };
 

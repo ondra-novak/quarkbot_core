@@ -56,16 +56,7 @@ class IEventStream : public IEventStreamBase{
 public:
     virtual ~IEventStream();
 
-    ///Event structure 
-    //todo: rewrite later
-    struct Event {
-        ///time of receiving
-        std::chrono::system_clock::time_point received;
-        ///number of missed events if processing was too slow
-        std::size_t missed;
-        ///event data
-        T data;
-    };
+    using Event = StreamEvent<T>;
 
     ///Read next event
     /**
@@ -73,7 +64,7 @@ public:
     If there are missed events, it immediately returns last received event with missed count set appropriately
     There can be only one pending read at a time. If you need multiple concurrent reads, create multiple streams.
      */
-    virtual coro::awaitable<Event> read() = 0;    
+    virtual coro::awaitable<const Event &> read() = 0;    
     class Null;
 
 };
