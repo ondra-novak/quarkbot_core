@@ -44,6 +44,8 @@ struct StreamEvent {
 
     bool eof() const {return revision == closed_stream;};
 
+    void set_eof() {revision = closed_stream;}
+
     explicit operator bool() const {return !eof();}
 };
 

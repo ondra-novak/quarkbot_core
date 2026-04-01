@@ -6,6 +6,7 @@
 #include "ifc/event_stream_publisher.hpp"
 #include "ifc/publisher_base.hpp"
 #include "ifc/queue_stream_publisher.hpp"
+#include "ifc/stream.hpp"
 #include "ifc/stream_defs.hpp"
 #include <memory>
 #include <type_traits>
@@ -72,7 +73,12 @@ namespace quarkbot {
             return get_publisher<T, true>(instrument, acc);
         }
 
+        template<bool queue>
+        std::shared_ptr<IEventStreamBase> subscribe_stream_event_stream(std::string_view type, const StreamParams &params) const {
 
+        };
+        
+        
 
     protected:
 

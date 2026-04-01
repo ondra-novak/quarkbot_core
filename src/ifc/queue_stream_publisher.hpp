@@ -165,6 +165,12 @@ namespace quarkbot {
         }
 
 
+        QueueStreamPublisher(): PublisherBase([](std::shared_ptr<PublisherBase> this_shared) -> std::shared_ptr<IEventStreamBase> {
+            auto me = std::static_pointer_cast<QueueStreamPublisher<T> >(this_shared);
+            return std::make_shared<StreamSubscriber<T, QueueStreamPublisher> >(me);
+        }) {}
+
+
     protected:
          ///Consumer definition - registration of awaiting coroutine
         struct Item {

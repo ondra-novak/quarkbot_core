@@ -7,6 +7,7 @@
 #include "stream.hpp"
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <type_traits>
 #include <unistd.h>
@@ -125,11 +126,16 @@ namespace quarkbot {
         /**
         @note MT safe unless there are multiple writers
         */
-        void close() {
+        virtual void close() {
             std::lock_guard _(_mx);
             _rev.store(closed_stream, std::memory_order_release);
             flush_consumers(false);
         }
+
+        EventStreamPublisher(): PublisherBase([](std::shared_ptr<PublisherBase> this_shared) -> std::shared_ptr<IEventStreamBase> {
+            auto me = std::static_pointer_cast<EventStreamPublisher<T> >(this_shared);
+            return std::make_shared<StreamSubscriber<T, EventStreamPublisher> >(me);
+        }) {}
 
     protected:
         volatile T _value;
