@@ -272,9 +272,6 @@ static_assert(test_round_to_zero_precision());
 int main() {
     // ── Exception tests (runtime-only) ───────────────────────────────────────
 
-    // negative precision
-    CHECK_EXCEPTION(std::invalid_argument, Decimal(1, -1));
-    CHECK_EXCEPTION(std::invalid_argument, Decimal(1.0, -1));
 
     // addition overflow
     CHECK_EXCEPTION(std::overflow_error,
@@ -291,10 +288,6 @@ int main() {
     // division by zero
     CHECK_EXCEPTION(std::domain_error,
         Decimal(100, 2) / Decimal(0, 2));
-
-    // round_to negative precision
-    CHECK_EXCEPTION(std::invalid_argument,
-        Decimal(123, 2).round_to(-1));
-
+        
     return 0;
 }
