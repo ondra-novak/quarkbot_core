@@ -66,14 +66,14 @@ struct ProxyResultExecutor {
 
 
 template<typename T>
-class ProxyResult : public coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor> {
+class ResultAndExecWorker : public coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor> {
 public:
-    ProxyResult(coro::awaitable_result<T> res):coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>(
+    ResultAndExecWorker(coro::awaitable_result<T> res):coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>(
         std::move(res), {IExecutionWorker::current()})
     {
         if (!this->_executor._worker) throw std::runtime_error("Function can be called only from executor worker");
     }
-    ProxyResult():coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>({},{}) {}
+    ResultAndExecWorker():coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>({},{}) {}
     operator bool() const {return this->_result.operator bool();}
 };
 

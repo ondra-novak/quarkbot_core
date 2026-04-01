@@ -20,6 +20,9 @@ template class quarkbot::SchedulerRealTime<void (*)() >;
 #include "../ifc/scheduler.hpp"
 #include "../ifc/storage.hpp"
 #include "../ifc/tradable_instrument.hpp"
+#include "../ifc/event_stream_publisher.hpp"
+#include "../ifc/queue_stream_publisher.hpp"
+#include "../ifc/publisher_manager.hpp"
 int main(int argc, char **argv) {
     return 0;
 }

@@ -2,6 +2,7 @@
 
 #include <basic_coro/awaitable.hpp>
 #include "defs.hpp"
+#include "ifc/stream_defs.hpp"
 #include <chrono>
 #include <exception>
 #include <memory>
@@ -24,6 +25,28 @@ public:
     virtual void close();
 };
 
+using StreamEventRevision = std::size_t;
+
+
+inline constexpr auto closed_stream = StreamEventRevision (-2);
+
+///Envelope for stream item
+template<StreamType T>
+struct StreamEvent {
+    ///the payload itself
+    T data = {};
+    ///revision (reported by stream server)
+    StreamEventRevision revision = 0;
+    ///count of missed events
+    std::size_t missed = 0;
+    ///a  timestamp when this event was received by stream server (can be simulated in backtest)
+    std::chrono::system_clock received = {};
+
+    bool eof() const {return revision == closed_stream;};
+
+    explicit operator bool() const {return !eof();}
+};
+
 ///Market event stream
 /**
 @tparam T type of event data
@@ -33,15 +56,7 @@ class IEventStream : public IEventStreamBase{
 public:
     virtual ~IEventStream();
 
-    ///Event structure
-    struct Event {
-        ///time of receiving
-        std::chrono::system_clock::time_point received;
-        ///number of missed events if processing was too slow
-        std::size_t missed;
-        ///event data
-        T data;
-    };
+    using Event = StreamEvent<T>;
 
     ///Read next event
     /**
@@ -49,7 +64,7 @@ public:
     If there are missed events, it immediately returns last received event with missed count set appropriately
     There can be only one pending read at a time. If you need multiple concurrent reads, create multiple streams.
      */
-    virtual coro::awaitable<Event> read() = 0;    
+    virtual coro::awaitable<const Event &> read() = 0;    
     class Null;
 
 };
@@ -108,3 +123,4 @@ public:
 };
 
 }
+
