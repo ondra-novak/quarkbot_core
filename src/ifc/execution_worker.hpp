@@ -5,19 +5,14 @@
 #include "basic_coro/result_proxy.hpp"
 #include "defs.hpp"
 #include <coroutine>
-#include <cstddef>
-#include <functional>
 #include <memory>
-#include <optional>
 #include <stdexcept>
-#include <type_traits>
 namespace quarkbot {
 
 class IExecutionWorker {
 public:
 
     virtual ~IExecutionWorker() = default;
-
 
     virtual void resume(std::coroutine_handle<> h) noexcept = 0;
     void resume(coro::prepared_coro h) {h.release();}
@@ -28,14 +23,11 @@ public:
 
         @note you don't need to use this function to run a coroutine in
         current execution worker. Just call the coroutine as normal function
-
-
     */
     void run(coroutine coro) {
         resume(coro.release());
         
     }
-
     ///Create new execution worker
     /**
         In most cases, it starts a new thread. The thread run if there is a reference
@@ -44,8 +36,6 @@ public:
         @note Backtest probably doesn't spawn a new thread, it simply just creates a new reference
     */
     virtual PExecutionWorker spawn() noexcept = 0;
-
-
 
     ///Returns this thread's execution worker
     /**

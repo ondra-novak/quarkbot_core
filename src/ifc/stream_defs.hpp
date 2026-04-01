@@ -10,7 +10,7 @@ struct StreamTypeItem {
 };
 
 template<typename T>
-concept StreamType = std::derived_from<T, StreamTypeItem> && requires {
+concept StreamType = std::derived_from<T, StreamTypeItem> && std::is_trivial_v<T> && requires {
     {T::type}->std::convertible_to<typename T::Type>;    
 };
 
