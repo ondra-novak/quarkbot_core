@@ -71,7 +71,7 @@ The `event_types` field uses the lowercase string names: `"trade"`, `"quote"`, `
 
 ## Library API
 
-All symbols live in the `quarkbot` namespace. The library is header+source, no external dependencies beyond the C++20 standard library.
+All symbols live in the `quarkbot` namespace. The library is header+source. The base reader/writer has no external dependencies beyond the C++23 standard library. The `JsonExchangeConverter` depends on **nlohmann/json** (fetched via CMake `FetchContent`).
 
 ### Event Types
 
@@ -215,7 +215,7 @@ struct CsvTickConfig {
 
 ### JsonExchangeConverter
 
-Reads NDJSON (newline-delimited JSON) or a JSON array. Each object is mapped to an event via a configurable field map. Intended for handling raw exchange API dumps (e.g., Binance trade history, order book snapshots).
+Reads NDJSON (newline-delimited JSON) or a JSON array. Each object is mapped to an event via a configurable field map. Intended for handling raw exchange API dumps (e.g., Binance trade history, order book snapshots). Uses **nlohmann/json** for parsing.
 
 The event type is determined by a required `"type"` field (or a configurable field name), with values mapped to internal event types via a user-supplied map.
 
@@ -278,6 +278,12 @@ cmake_minimum_required(VERSION 3.22)
 project(replay_parser CXX)
 set(CMAKE_CXX_STANDARD 23)
 
+include(FetchContent)
+FetchContent_Declare(nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp
+    DOWNLOAD_NO_EXTRACT TRUE)
+FetchContent_MakeAvailable(nlohmann_json)
+
 add_library(replay_parser
     replay_reader.cpp
     replay_writer.cpp
@@ -285,7 +291,9 @@ add_library(replay_parser
     converters/csv_tick.cpp
     converters/json_exchange.cpp
 )
-target_include_directories(replay_parser PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_include_directories(replay_parser
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/..
+    PRIVATE ${nlohmann_json_SOURCE_DIR})
 
 enable_testing()
 add_subdirectory(tests)
@@ -293,7 +301,9 @@ add_subdirectory(tests)
 
 The `tests/CMakeLists.txt` links against `replay_parser` and registers each test with `add_test()` so `ctest` runs them. No external test framework — plain `assert`/`std::terminate` or a minimal hand-rolled harness to keep the dependency footprint zero.
 
-The library has **no external dependencies** beyond the C++23 standard library.
+**Dependencies:**
+- Base library (`replay_reader`, `replay_writer`, CSV converters): C++23 stdlib only
+- `JsonExchangeConverter`: [nlohmann/json](https://github.com/nlohmann/json) v3.11.3 (single-header, fetched automatically)
 
 ---
 
