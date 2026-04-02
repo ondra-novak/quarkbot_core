@@ -3,7 +3,7 @@
 
 #include "ifc/account.hpp"
 #include "ifc/defs.hpp"
-#include "ifc/publisher_base.hpp"
+#include "publisher_base.hpp"
 #include "ifc/stream.hpp"
 #include "ifc/stream_defs.hpp"
 #include <memory>

@@ -1,17 +1,17 @@
 #pragma once
 
-#include "basic_coro/cancel_signal.hpp"
-#include "execution_worker.hpp"
-#include "ifc/publisher_base.hpp"
+#include "publisher_base.hpp"
+#include <basic_coro/cancel_signal.hpp>
+#include "ifc/execution_worker.hpp"
 #include "ifc/stream_defs.hpp"
-#include "stream.hpp"
+#include "ifc/stream.hpp"
+#include "subscriber.hpp"
 #include <chrono>
 #include <deque>
 #include <iterator>
-#include <mutex>
 #include <type_traits>
 #include <unistd.h>
-#include <vector>
+
 
 namespace quarkbot {
 

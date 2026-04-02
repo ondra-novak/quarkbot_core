@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.hpp"
+#include "ifc/stream_defs.hpp"
 #include "types.hpp"
 #include "utils/decimal.hpp"
 #include "utils/ref_count.hpp"
@@ -31,6 +32,7 @@ struct OrderBookEntry : StreamTypeItem {
     static constexpr Type type = "orderbook_increment";
 };
 
+
 template<typename X>
 struct StreamSingleParam: StreamParams {
     X param;
@@ -49,28 +51,28 @@ template<unsigned int _interval_sec>
 struct ClosedBarInterval: ClosedBar {
     constexpr static auto params = StreamSingleParam<unsigned int>{{},_interval_sec};
 };
-    
+
+struct OrderBookLevel {
+    OrderBookEntry ask;
+    OrderBookEntry bid;
+};
+
+struct OrderBookBase {
+    std::chrono::system_clock::time_point time;
+    OrderBookLevel level[1];     
+
+    OrderBookLevel &operator[](unsigned int l) {
+        OrderBookLevel *levels = level;
+        return levels[l];
+    }
+};    
 
 template<unsigned int depth>
-class OrderBook: public StreamTypeItem {
+class OrderBook: public OrderBookBase,  public StreamTypeItem {
 public:
-    std::array<OrderBookEntry, depth> bids;
-    std::array<OrderBookEntry, depth> asks;
-    std::chrono::system_clock::time_point time;
-
+    OrderBookLevel other_levels[1];     
     static constexpr Type type = "orderbook_snapshot";
     constexpr static auto params = StreamSingleParam<unsigned int>{{},depth};
-
-    static bool bids_sort(const OrderBookEntry &a, const OrderBookEntry &b) {
-        return a.price > b.price;
-    }
-    static bool asks_sort(const OrderBookEntry &a, const OrderBookEntry &b) {
-        if (a.price == Decimal{})
-            return false;
-        if (b.price == Decimal{})
-            return true;
-        return a.price < b.price;
-    }
 };
 
 struct TradeCounter : public StreamTypeItem {
