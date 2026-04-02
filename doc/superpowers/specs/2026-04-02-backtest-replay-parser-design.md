@@ -132,7 +132,7 @@ public:
     explicit ReplayReader(std::istream &stream);     // stream-based, no companion file read
 
     std::optional<Event> next();  // returns nullopt at EOF
-    void reset();                 // seeks back to first record (file-based only)
+    void reset();                 // seeks back to first record; throws std::logic_error if stream-based
 };
 ```
 
@@ -173,7 +173,7 @@ public:
 Reads CSV files with OHLCV data. Produces `ClosedBarEvent` records.
 
 Expected columns (names configurable): `time, open, high, low, close, volume`.
-Timestamp column accepts: Unix epoch (seconds or milliseconds, auto-detected), or ISO 8601 string.
+Timestamp column accepts: Unix epoch integer (treated as milliseconds if value > 1e10, otherwise seconds), or ISO 8601 string (`YYYY-MM-DDTHH:MM:SS.sssZ`).
 
 Configuration:
 ```cpp
@@ -196,7 +196,7 @@ Reads CSV tick files. Produces `TradeEvent` and optionally `QuoteEvent` records.
 
 Required columns: `time, price, size`. Optional columns: `bid, ask, bid_size, ask_size` — if all four are present, a `QuoteEvent` is emitted alongside each `TradeEvent`.
 
-Also handles the existing mmbot replay CSV format (`timestamp, symbol, bid, ask, bid_size, ask_size, trade, volume, index`).
+Also handles the existing mmbot replay CSV format (`timestamp, symbol, bid, ask, bid_size, ask_size, trade, volume, index`). The `index` column is ignored.
 
 Configuration:
 ```cpp
@@ -222,12 +222,19 @@ The event type is determined by a required `"type"` field (or a configurable fie
 Configuration:
 ```cpp
 struct JsonFieldMap {
-    std::string field_type     = "type";
-    std::string field_symbol   = "symbol";
-    std::string field_time     = "time";    // expects ms epoch integer or ISO string
-    std::string field_price    = "price";
-    std::string field_size     = "size";
-    // ... bid/ask/levels as needed
+    std::string field_type      = "type";
+    std::string field_symbol    = "symbol";
+    std::string field_time      = "time";       // ms epoch integer or ISO 8601 string
+    std::string field_price     = "price";      // for trade
+    std::string field_size      = "size";       // for trade
+    std::string field_bid       = "bid";        // for quote
+    std::string field_ask       = "ask";        // for quote
+    std::string field_bid_size  = "bid_size";   // for quote
+    std::string field_ask_size  = "ask_size";   // for quote
+    std::string field_levels    = "levels";     // array field for orderbook snapshot
+    std::string field_ob_price  = "price";      // within each level object
+    std::string field_ob_size   = "size";       // within each level object
+    std::string field_ob_side   = "side";       // within each level object ("bid"/"ask")
     std::map<std::string, std::string> type_map;  // e.g. {"aggTrade" -> "trade"}
 };
 ```
