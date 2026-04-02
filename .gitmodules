@@ -1,3 +1,0 @@
-[submodule "src/coro"]
-	path = src/coro
-	url = https://github.com/ondra-novak/basic_coro

@@ -2,7 +2,7 @@
 
 #include <basic_coro/awaitable.hpp>
 #include <basic_coro/prepared_coro.hpp>
-#include "basic_coro/result_proxy.hpp"
+#include <basic_coro/result_proxy.hpp>
 #include "defs.hpp"
 #include <coroutine>
 #include <memory>
