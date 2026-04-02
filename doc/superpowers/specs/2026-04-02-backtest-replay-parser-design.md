@@ -245,20 +245,55 @@ struct JsonFieldMap {
 
 ```
 src/backtest/
+├── CMakeLists.txt             — standalone build root (see Build System below)
 ├── replay_format.hpp          — wire format constants, type enum, payload structs
 ├── replay_reader.hpp
 ├── replay_reader.cpp
 ├── replay_writer.hpp
 ├── replay_writer.cpp
-└── converters/
-    ├── ifc.hpp                — IConverter interface
-    ├── csv_ohlc.hpp
-    ├── csv_ohlc.cpp
-    ├── csv_tick.hpp
-    ├── csv_tick.cpp
-    ├── json_exchange.hpp
-    └── json_exchange.cpp
+├── converters/
+│   ├── ifc.hpp                — IConverter interface
+│   ├── csv_ohlc.hpp
+│   ├── csv_ohlc.cpp
+│   ├── csv_tick.hpp
+│   ├── csv_tick.cpp
+│   ├── json_exchange.hpp
+│   └── json_exchange.cpp
+└── tests/
+    ├── CMakeLists.txt
+    ├── test_reader_writer.cpp  — round-trip: write events, read back, compare
+    ├── test_csv_ohlc.cpp
+    ├── test_csv_tick.cpp
+    └── test_json_exchange.cpp
 ```
+
+---
+
+## Build System
+
+`src/backtest/CMakeLists.txt` is a **self-contained build root** — it can be compiled independently of the parent project (`cmake -S src/backtest -B build/backtest`), but is also included by the parent via `add_subdirectory("src/backtest")` when needed.
+
+```cmake
+cmake_minimum_required(VERSION 3.22)
+project(replay_parser CXX)
+set(CMAKE_CXX_STANDARD 23)
+
+add_library(replay_parser
+    replay_reader.cpp
+    replay_writer.cpp
+    converters/csv_ohlc.cpp
+    converters/csv_tick.cpp
+    converters/json_exchange.cpp
+)
+target_include_directories(replay_parser PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+
+enable_testing()
+add_subdirectory(tests)
+```
+
+The `tests/CMakeLists.txt` links against `replay_parser` and registers each test with `add_test()` so `ctest` runs them. No external test framework — plain `assert`/`std::terminate` or a minimal hand-rolled harness to keep the dependency footprint zero.
+
+The library has **no external dependencies** beyond the C++23 standard library.
 
 ---
 
