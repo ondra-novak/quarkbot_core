@@ -3,85 +3,113 @@
 
 #include "ifc/account.hpp"
 #include "ifc/defs.hpp"
-#include "ifc/event_stream_publisher.hpp"
 #include "ifc/publisher_base.hpp"
-#include "ifc/queue_stream_publisher.hpp"
 #include "ifc/stream.hpp"
 #include "ifc/stream_defs.hpp"
 #include <memory>
+#include <mutex>
 #include <type_traits>
 #include <unordered_map>
 namespace quarkbot {
 
 
     template<typename Factory>
-    requires(std::is_invocable_r_v<std::shared_ptr<void>, Factory, PMarketInstrument, PAccount, StreamTypeItem::Type, const StreamParams *>)
-    class PublisherManager {
+    requires(std::is_invocable_r_v<std::shared_ptr<PublisherBase>, Factory, /*(*/ PMarketInstrument, PAccount, StreamTypeItem::Type, const StreamParams *, bool /*)*/>)
+    class PublishingMaps {
     public:
+
+        using PPublisher = std::shared_ptr<PublisherBase>;
+        using WPPublisher = std::weak_ptr<PublisherBase>;
 
         struct Key {
             PMarketInstrument instrument;   //instrument
             PAccount account;               //account can be null
             StreamTypeItem::Type type;          //steam type - statically allocated
-            const StreamParams *params;     //pointer to stream params (statically allocated)
             bool queue;
 
             bool operator==(const Key &) const = default;
             size_t hash() const {
                 std::hash<const IMarketInstrument *> h1;
                 std::hash<const IAccount *> h2;
-                std::hash<std::string_view> h3;
-                std::hash<const StreamParams *> h4;
+                std::hash<std::string_view> h3;                
 
                 auto hash1 = h1(instrument.get());
                 auto hash2 = h2(account.get());
                 auto hash3 = h3(type);
-                auto hash4 = h4(params);
-                return hash1+hash2+hash3+hash4;
+                return hash1+hash2+hash3;
             }
         };
+        
 
         struct KeyHash {auto operator()(const Key &k){return k.hash();}};
 
-        using PublisherRef = std::weak_ptr<PublisherBase>;
-
-        using MapType = std::unordered_map<Key, PublisherRef, KeyHash> ;
-
-        PublisherManager(Factory factory):_factory(std::move(factory)) {}
-
-
-        template<StreamType T, bool queue>
-        auto get_publisher(const PMarketInstrument &instrument, const PAccount &acc) {
-            using RetType = std::conditional_t<queue,QueueStreamPublisher<T>, EventStreamPublisher<T> >;
-            Key k{instrument, acc, T::type, stream_params<T>, queue};
-            std::shared_ptr<RetType> retval;
-            auto iter = _map.find(k);
-            if (iter == _map.end()) return retval;
-            auto lk = iter->second.lock();
-            if (!lk) return retval;
-            retval =  std::static_pointer_cast<RetType>(lk);
-            return retval;
-        }
-
-        template<StreamType T>
-        auto get_event_publisher(const PMarketInstrument &instrument, const PAccount &acc) {
-            return get_publisher<T, false>(instrument, acc);
-        }
-
-        template<StreamType T>
-        auto get_queue_publisher(const PMarketInstrument &instrument, const PAccount &acc) {
-            return get_publisher<T, true>(instrument, acc);
-        }
-
-        template<bool queue>
-        std::shared_ptr<IEventStreamBase> subscribe_stream_event_stream(std::string_view type, const StreamParams &params) const {
-
+        struct ValueItem {
+            const StreamParams *params; //constexpr allocated params
+            WPPublisher publisher; //weak reference to publisher
         };
+
+        using Value = std::vector<ValueItem>;
         
-        
+        using MapType = std::unordered_map<Key, Value, KeyHash> ;
+
+        PublishingMaps(Factory factory):_factory(std::move(factory)) {}
+
+        template<std::invocable<const StreamParams *, PPublisher> Callback>
+        bool enum_all_publishers(const PMarketInstrument &instrument, const PAccount &account, StreamTypeItem::Type type, bool queue, Callback &&cb) {
+            std::scoped_lock _(_mx);
+            auto iter = _map.find(Key{instrument, account, type, queue});
+            if (_map.end() == iter) return false;
+            Value &v = iter->second;
+            v.erase(std::remove_if(v.begin(), v.end(), [&](const ValueItem &itm){
+                auto lk =  itm.publisher.expired();
+                if (lk) {
+                    std::invoke(std::forward<Callback>(cb), itm.params, lk);
+                    return false;
+                } 
+                return true;
+            }), v.end());
+
+            if (v.empty()) {
+                _map.erase(iter);
+                return false;
+            }
+            return true;            
+        }
+
+        std::shared_ptr<IEventStreamBase> connect_to(const PMarketInstrument &instrument,
+                                                    const PAccount &account,
+                                                    StreamTypeItem::Type type,
+                                                    const StreamParams *params,
+                                                    bool queue
+                                                ) {
+            std::scoped_lock _(_mx);                                                    
+            Key k{instrument, account, type, queue};
+            Value &v = _map[k];
+            PPublisher pub;
+            for (ValueItem &itm: v) {
+                if (itm.params == params) {
+                    pub = itm.publisher.lock();
+                    if (pub) {
+                        return pub->create_subscriber(pub);
+                    }
+                    pub = _factory(instrument, account, type, params, queue);
+                    if (pub) {
+                        itm.publisher = pub;
+                        return pub->create_subscriber(pub);
+                    }
+                    return {};
+                }
+            }
+            pub = _factory(instrument,account, type, params, queue);
+            if (pub) {
+                v.push_back({params, pub});                
+                return pub->create_subscriber(pub);
+            }
+            return {};            
+        }
 
     protected:
-
+        std::mutex _mx;
         Factory _factory;
         MapType _map;
 

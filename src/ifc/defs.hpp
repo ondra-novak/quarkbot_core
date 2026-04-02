@@ -65,11 +65,4 @@ using PBacktestDataSource = safe_ref<IBacktestDataSource>;
 template<StreamType T>
 using PEventStream  =  safe_ref<IEventStream<T> >;
 
-
-
-template <auto Method>
-constexpr auto c_link = [](auto* obj, auto... args) {
-    return (obj->*Method)(args...);
-};
-
 }
