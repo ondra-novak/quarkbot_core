@@ -2,8 +2,7 @@
 
 #include <basic_coro/awaitable.hpp>
 #include "ifc/defs.hpp"
-#include "ifc/stream.hpp"
-#include "ifc/stream_defs.hpp"
+#include "ifc/streaming.hpp"
 #include "market_instrument.hpp"
 #include "order.hpp"
 #include "utils/function_view.hpp"

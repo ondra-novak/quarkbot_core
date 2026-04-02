@@ -3,46 +3,44 @@
 
 #include "basic_coro/awaitable_transform.hpp"
 #include "basic_coro/cancel_signal.hpp"
-#include "ifc/stream.hpp"
+#include "ifc/streaming.hpp"
 #include "ifc/stream_defs.hpp"
+#include "impl/streaming/publisher_base.hpp"
 namespace quarkbot {
 
-template<StreamType T, template<class> class Publisher>
-class StreamSubscriber: public IEventStream<T> {
+template<typename ViewType, typename Publisher>
+class StreamSubscriber: public IEventStream<ViewType> {
 public:
+    using Seq = PublisherBase::Seq;
 
-    using Event = typename IEventStream<T>::Event;
-    using MyPub = Publisher<T>;
-
-    virtual coro::awaitable<const Event &> read() {
-        if (!_publisher) _event.set_eof();        
-        if (_event.eof()) return _event;
-        return _trn(_publisher->next_event(_event.revisiton, &_signal),[this](bool b) -> const Event &{
+    virtual bool is_open() const override {
+        return !_closed;
+    }
+    virtual void close() override {
+        _closed = true;
+        _publisher->cancel(&sig);
+    }
+    virtual coro::awaitable<bool> read_internal(ViewType &ref, std::size_t *missed) override {
+        if (_closed) return false;
+        return _trn(_publisher->next(_seq, &sig),[this, missed, &ref](bool b){
             if (b) {
-                _publisher->read(_event);
-            } else {
-                _event.revision = closed_stream;
-            }
-            return _event;
+                Seq cur = _seq;
+                _publisher->read(ref, _seq);
+                if (missed) *missed = _seq - cur - 1;                
+            } 
+            return b;
         });
     }
-    virtual bool is_open() const {return _publisher;}
-    virtual void close() {
-        if (_publisher) {
-            _publisher->cancel(&_signal);
-            _publisher.reset();
-        }
-    }
 
-    StreamSubscriber(std::shared_ptr<MyPub> publisher): _publisher(std::move(publisher)) {}
-
+    StreamSubscriber(std::shared_ptr<Publisher> publisher):_publisher(std::move(publisher)) {}
+        
 protected:
-    Event _event;
-    coro::cancel_signal _signal;
-    std::shared_ptr<MyPub> _publisher;
-    coro::awaitable_transform<coro::awaitable<bool>, StreamSubscriber *> _trn;
 
-
+    Seq _seq = 0; //current revision, used for polling
+    std::shared_ptr<Publisher> _publisher; //reference to publisher, used for polling
+    bool _closed = false; //flag indicating whether stream is closed
+    coro::awaitable_transform<coro::awaitable<bool>, StreamSubscriber *, ViewType &, std::size_t * > _trn;
+    coro::cancel_signal sig;
 
 };
 

@@ -4,8 +4,8 @@
 #include "ifc/account.hpp"
 #include "ifc/defs.hpp"
 #include "publisher_base.hpp"
-#include "ifc/stream.hpp"
 #include "ifc/stream_defs.hpp"
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <type_traits>
@@ -13,19 +13,17 @@
 namespace quarkbot {
 
 
-    template<typename Factory>
-    requires(std::is_invocable_r_v<std::shared_ptr<PublisherBase>, Factory, /*(*/ PMarketInstrument, PAccount, StreamTypeItem::Type, const StreamParams *, bool /*)*/>)
-    class PublishingMaps {
+    class PublisherManager {
     public:
 
         using PPublisher = std::shared_ptr<PublisherBase>;
         using WPPublisher = std::weak_ptr<PublisherBase>;
+        using Factory = std::function<std::shared_ptr<PublisherBase>(PMarketInstrument, PAccount, StreamTypeItem::Type, const StreamParams *)>;
 
         struct Key {
             PMarketInstrument instrument;   //instrument
             PAccount account;               //account can be null
             StreamTypeItem::Type type;          //steam type - statically allocated
-            bool queue;
 
             bool operator==(const Key &) const = default;
             size_t hash() const {
@@ -41,7 +39,7 @@ namespace quarkbot {
         };
         
 
-        struct KeyHash {auto operator()(const Key &k){return k.hash();}};
+        struct KeyHash {std::size_t operator()(const Key &k) const {return k.hash();}};
 
         struct ValueItem {
             const StreamParams *params; //constexpr allocated params
@@ -52,17 +50,17 @@ namespace quarkbot {
         
         using MapType = std::unordered_map<Key, Value, KeyHash> ;
 
-        PublishingMaps(Factory factory):_factory(std::move(factory)) {}
+        PublisherManager(Factory factory):_factory(std::move(factory)) {}
 
         template<std::invocable<const StreamParams *, PPublisher> Callback>
-        bool enum_all_publishers(const PMarketInstrument &instrument, const PAccount &account, StreamTypeItem::Type type, bool queue, Callback &&cb) {
+        bool enum_all_publishers(const PMarketInstrument &instrument, const PAccount &account, StreamTypeItem::Type type, Callback &&cb) {
             std::scoped_lock _(_mx);
-            auto iter = _map.find(Key{instrument, account, type, queue});
+            auto iter = _map.find(Key{instrument, account, type});
             if (_map.end() == iter) return false;
             Value &v = iter->second;
             v.erase(std::remove_if(v.begin(), v.end(), [&](const ValueItem &itm){
-                auto lk =  itm.publisher.expired();
-                if (lk) {
+                auto lk =  itm.publisher.lock();
+                if (lk) {                    
                     std::invoke(std::forward<Callback>(cb), itm.params, lk);
                     return false;
                 } 
@@ -79,11 +77,9 @@ namespace quarkbot {
         std::shared_ptr<IEventStreamBase> connect_to(const PMarketInstrument &instrument,
                                                     const PAccount &account,
                                                     StreamTypeItem::Type type,
-                                                    const StreamParams *params,
-                                                    bool queue
-                                                ) {
+                                                    const StreamParams *params) {
             std::scoped_lock _(_mx);                                                    
-            Key k{instrument, account, type, queue};
+            Key k{instrument, account, type};
             Value &v = _map[k];
             PPublisher pub;
             for (ValueItem &itm: v) {
@@ -92,7 +88,7 @@ namespace quarkbot {
                     if (pub) {
                         return pub->create_subscriber(pub);
                     }
-                    pub = _factory(instrument, account, type, params, queue);
+                    pub = _factory(instrument, account, type, params);
                     if (pub) {
                         itm.publisher = pub;
                         return pub->create_subscriber(pub);
@@ -100,7 +96,7 @@ namespace quarkbot {
                     return {};
                 }
             }
-            pub = _factory(instrument,account, type, params, queue);
+            pub = _factory(instrument,account, type, params);
             if (pub) {
                 v.push_back({params, pub});                
                 return pub->create_subscriber(pub);

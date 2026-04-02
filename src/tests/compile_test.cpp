@@ -17,11 +17,12 @@ template class quarkbot::SchedulerRealTime<void (*)() >;
 #include "../ifc/order.hpp"
 #include "../ifc/memory.hpp"
 #include "../ifc/scheduler.hpp"
-#include "../ifc/storage.hpp"
 #include "../ifc/tradable_instrument.hpp"
-#include "../impl/streaming/event_stream_publisher.hpp"
-#include "../impl/streaming/queue_stream_publisher.hpp"
+#include "../impl/streaming/lock_free_publisher.hpp"
 #include "../impl/streaming/publisher_manager.hpp"
+#include "../impl/streaming/orderbook_state.hpp"
+
+
 int main(int argc, char **argv) {
     return 0;
 }

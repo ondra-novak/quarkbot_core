@@ -66,7 +66,7 @@ namespace quarkbot {
             _received = cb(_value);
             _rev.fetch_add(1,std::memory_order_release);
             std::lock_guard _(_mx);
-            flush_consumers(true);
+            flush_consumers_lk(true);
         }
 
         ///begin await on next event
@@ -126,7 +126,7 @@ namespace quarkbot {
         virtual void close() {
             std::lock_guard _(_mx);
             _rev.store(closed_stream, std::memory_order_release);
-            flush_consumers(false);
+            flush_consumers_lk(false);
         }
 
         EventStreamPublisher(): PublisherBase([](std::shared_ptr<PublisherBase> this_shared) -> std::shared_ptr<IEventStreamBase> {

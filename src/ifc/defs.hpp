@@ -6,7 +6,6 @@
 #include <type_traits>
 #include "basic_coro/awaitable.hpp"
 #include "basic_coro/coroutine.hpp"
-#include "stream_defs.hpp"
 
 
 
@@ -45,8 +44,6 @@ class ITradableInstrument;
 class IUnderlyingCurrency;
 class IStorage;
 class IScheduler;
-template<StreamType T>
-class IEventStream;
 class IExecutionWorker;
 class IBacktestDataSource;
 
@@ -62,7 +59,5 @@ using PScheduler = safe_ref<IScheduler>;
 using PExecutionWorker = safe_ref<IExecutionWorker>;
 using coroutine = coro::coroutine<void>;
 using PBacktestDataSource = safe_ref<IBacktestDataSource>;
-template<StreamType T>
-using PEventStream  =  safe_ref<IEventStream<T> >;
 
 }

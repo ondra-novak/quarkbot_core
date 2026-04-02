@@ -2,7 +2,7 @@
 
 #include "defs.hpp"
 #include "types.hpp"
-#include "ifc/stream.hpp"
+#include "ifc/streaming.hpp"
 #include <memory>
 namespace quarkbot {
 
@@ -57,10 +57,10 @@ public:
     just destroy the pointer or call close() on the stream.
      */
     template<StreamType T>
-    PEventStream<T> subscribe() const {
+    EventStream<T> subscribe() const {
         auto x =  subscribe_stream_internal(T::type, stream_params<T>);
-        if (x) return std::static_pointer_cast<IEventStream<T> >(x);
-        else return std::make_shared<typename IEventStream<T>::Null>();
+        if (x) return EventStream<T>(std::static_pointer_cast<typename EventStream<T>::ViewType>(x));
+        else return EventStream<T>();
     }
 
     virtual std::string_view get_name() const = 0;

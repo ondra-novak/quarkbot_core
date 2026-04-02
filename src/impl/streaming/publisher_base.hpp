@@ -1,9 +1,11 @@
 #pragma once
 
+#include <atomic>
 #include <basic_coro/awaitable_transform.hpp>
 #include <basic_coro/cancel_signal.hpp>
+#include <mutex>
 #include "ifc/execution_worker.hpp"
-#include "ifc/stream.hpp"
+#include "ifc/streaming.hpp"
 namespace quarkbot {
 
 class PublisherBase {
@@ -12,7 +14,7 @@ public:
 
         PublisherBase(Factory factory):_factory(factory) {}
 
-        using Revision = StreamEventRevision;
+        using Seq = std::size_t;
         
         ///Consumer definition - registration of awaiting coroutine
         struct Consumer {
@@ -56,16 +58,33 @@ public:
             return _factory(this_shared);
         }
 
+        void flush_consumers(bool st) {
+            std::lock_guard _(_mx);
+            flush_consumers_lk(st);
+        }
+        
+        bool is_closed() const {
+            std::lock_guard _(_mx);
+            return _closed;
+        }
+
+        void close() {
+            std::lock_guard _(_mx);
+            _closed = true;
+            flush_consumers_lk(false);
+        }
+
 protected:
 
         mutable std::mutex _mx;
         std::vector<Consumer> _awaiters;
 
-        void flush_consumers(bool st) {
+        void flush_consumers_lk(bool st) {
             for (auto &x: _awaiters) x._result(st);
             _awaiters.clear();
         }
         Factory _factory;
+        bool _closed = false;
 
 };
 

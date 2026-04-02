@@ -1,9 +1,8 @@
 #pragma once
-#include "defs.hpp"
 #include "ifc/stream_defs.hpp"
 #include "types.hpp"
 #include "utils/decimal.hpp"
-#include "utils/ref_count.hpp"
+#include <algorithm>
 #include <chrono>
 
 namespace quarkbot {
@@ -17,18 +16,27 @@ struct Quote : StreamTypeItem {
     Decimal ask_size;
     std::chrono::system_clock::time_point time;
     static constexpr Type type = "quote";
+    Quote &view() {return *this;}
 };
 
 struct Trade : StreamTypeItem {
     Decimal price;
     Decimal size;
     std::chrono::system_clock::time_point time;
+    Trade &view() {return *this;}
     static constexpr Type type = "trade";
 };
 
-struct OrderBookEntry : StreamTypeItem {
+struct OrderBookLevel {
     Decimal price = {}; // price level
     Decimal size = {};  // new size (if <= 0 then remove the level)
+};
+
+struct OrderBookEntry : OrderBookLevel, StreamTypeItem {
+    Side side = {};
+    std::chrono::system_clock::time_point time;
+
+    OrderBookEntry &view() {return *this;}
     static constexpr Type type = "orderbook_increment";
 };
 
@@ -44,6 +52,7 @@ struct ClosedBar: StreamTypeItem {
     Decimal low;
     Decimal close;
     Decimal volume; //volume is optional, if not available, it is set to zero
+    ClosedBar &view() {return *this;}
     static constexpr Type type = "closed_bar";
 };
 
@@ -52,27 +61,39 @@ struct ClosedBarInterval: ClosedBar {
     constexpr static auto params = StreamSingleParam<unsigned int>{{},_interval_sec};
 };
 
-struct OrderBookLevel {
-    OrderBookEntry ask;
-    OrderBookEntry bid;
+
+struct OrderBookView {
+    std::span<OrderBookLevel> bids = {};
+    std::span<OrderBookLevel> asks = {};
+     std::chrono::system_clock::time_point *time = nullptr;
+
+    OrderBookView() = default;
+    OrderBookView(std::span<OrderBookLevel> bids,std::span<OrderBookLevel> asks,std::chrono::system_clock::time_point *time)
+        :bids(bids),asks(asks),time(time) {}
+
+    OrderBookView &operator=(const OrderBookView &other) noexcept{
+        if (this != &other) {
+            auto dbids = std::min(bids.size(), other.bids.size());
+            auto dasks = std::min(asks.size(), other.asks.size());
+            std::copy_n(other.bids.begin(), dbids, bids.begin());
+            std::copy_n(other.asks.begin(), dasks, asks.begin());
+            if (time && other.time) *time = *other.time;
+        }        
+        return *this;
+    }
 };
 
-struct OrderBookBase {
-    std::chrono::system_clock::time_point time;
-    OrderBookLevel level[1];     
-
-    OrderBookLevel &operator[](unsigned int l) {
-        OrderBookLevel *levels = level;
-        return levels[l];
-    }
-};    
 
 template<unsigned int depth>
-class OrderBook: public OrderBookBase,  public StreamTypeItem {
+struct OrderBook: StreamTypeItem {
 public:
-    OrderBookLevel other_levels[1];     
+    std::chrono::system_clock::time_point time;
+    std::array<OrderBookLevel,depth> bids; 
+    std::array<OrderBookLevel,depth> asks;     
+
+    OrderBookView view() {return OrderBookView(bids,asks,&time);}
+
     static constexpr Type type = "orderbook_snapshot";
-    constexpr static auto params = StreamSingleParam<unsigned int>{{},depth};
 };
 
 struct TradeCounter : public StreamTypeItem {

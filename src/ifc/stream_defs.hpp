@@ -9,9 +9,12 @@ struct StreamTypeItem {
     using Type = std::string_view;
 };
 
+
+
 template<typename T>
-concept StreamType = std::derived_from<T, StreamTypeItem> && std::is_trivial_v<T> && requires {
+concept StreamType = std::derived_from<T, StreamTypeItem> && std::is_trivial_v<T> && requires(T v) {
     {T::type}->std::convertible_to<typename T::Type>;    
+    {v.view()};
 };
 
 
