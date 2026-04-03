@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.hpp"
+#include "ifc/underlying.hpp"
 #include "types.hpp"
 #include "ifc/streaming.hpp"
 #include <memory>
@@ -20,21 +21,19 @@ public:
         double min_volume = 0.0;
         double fee_rate_maker = 0.0;
         double fee_rate_taker = 0.0;
+        ///underlying currency for quotes
+        UnderlyingCurrency quote_currency;
+        ///underlying currency for pnl, can be different - for example inverted futures 
+        UnderlyingCurrency pnl_currency;
+        ///underlying currenct for asset if exists (nullopt for contracts, stocks and non currency assets)
+        std::optional<UnderlyingCurrency> asset;
+    
     };
-
-
     virtual ~IMarketInstrument() = default;
-    ///Retrieves quote currency (price)
-    virtual PUnderlyingCurrency get_quote_currency() const = 0;
-    ///Returns the asset currency of the market instrument, This can be NULL for contracts that do not have an asset currency
-    virtual PUnderlyingCurrency get_asset() const = 0;
-    ///Retrieves currency of PnL. It can be different for inverse contracts. For normal contracts, it returns get_quote_currency
-    virtual PUnderlyingCurrency get_pnl_currency() const = 0;
 
     virtual PExchange get_exchange() const = 0;
 
     virtual Info get_info() const = 0;
-
 
     ///Internal
     virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams &params) const = 0;
@@ -45,7 +44,6 @@ public:
       @return reference to tradable instrument, can be nullptr if not available for trading with this account
      */
     virtual awaitable<PTradableInstrument> create_tradable_instrument(PAccount account) const = 0;
-
 
     ///Subscribe market event stream
     /**

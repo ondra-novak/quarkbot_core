@@ -1,5 +1,7 @@
 #pragma once
 
+#include "basic_coro/coro_frame.hpp"
+#include "basic_coro/prepared_coro.hpp"
 #include "types.hpp"
 #include "defs.hpp"
 #include <cstdint>
@@ -29,6 +31,19 @@ enum class OrderType {
     oco
 };
 
+inline constexpr bool is_limit_order(OrderType type) {
+    return type == OrderType::limit
+        || type == OrderType::limit_post_only
+        || type == OrderType::limit_ioc
+        || type == OrderType::oco;
+}
+
+inline constexpr bool is_stop_order(OrderType type) {
+    return type == OrderType::stop
+        || type == OrderType::stoplimit
+        || type == OrderType::oco;
+}
+
 template<typename NumberType>
 struct OrderParametersGen {
     ///order side
@@ -36,13 +51,11 @@ struct OrderParametersGen {
     ///order type
     OrderType type;
     ///amount (positive number)
-    NumberType amount; //mandatory
+    NumberType quantity; //mandatory
     ///limit price (for limit orders)
     NumberType limit_price = {};
     ///stop price (for stop orders)
     NumberType stop_price = {};
-    ///trailing offset - round strategy is applied to final price
-    NumberType trailing_offset = {};
     ///max leverage (0 = disabled)
     double leverage = 0;
     
@@ -125,7 +138,12 @@ inline constexpr bool is_done_status(OrderStatus status) {
 struct OrderStatusUpdate {
     OrderStatus status;
     OrderRejectionReason rej_status = OrderRejectionReason::none;
-    std::string rej_message = {};
+    std::string string_param = {};        
+};
+
+///Initial order update - when order is pulled from exchange 
+struct OrderInitialUpdate {
+    std::string id = {};    
 };
 
 class Order {
@@ -142,7 +160,7 @@ public:
         std::weak_ptr<State> replaced_order = {};
         ///internal order ID
         std::string id = {};
-        ///filled amount
+        ///filled amount (calculated locally)
         Decimal filled = {};
         ///order status
         OrderStatus status = OrderStatus::sent; 
@@ -253,15 +271,22 @@ public:
     ///get rejection message
     const std::string &get_rejection_message() const {return _state->rejection_message;}
 
+    
 
     ///update order status
     /**
     @note function is not MT safe. Ensure that it is called in strategy's thread
     */
-    void update_order(OrderStatusUpdate update) {
+    void update_order(OrderStatusUpdate &&update) {
         _state->status = update.status;
         _state->reject_reason = update.rej_status;
-        _state->rejection_message = std::move(update.rej_message);
+        if (!update.string_param.empty()) {
+            if (update.rej_status == OrderRejectionReason::none) {
+                _state->id = std::move(update.string_param);
+            } else {
+                _state->rejection_message = std::move(update.string_param);
+            }
+        }
          ++_state->rev;
         if (_state->awaiting) {
             _state->seen_rev = _state->rev;
@@ -273,7 +298,7 @@ public:
     /**
     @note function is not MT safe. Ensure that it is called in strategy's thread
     */
-    void update_order(Fill fill) {
+    void update_order(Fill &&fill) {
         _state->filled += fill.amount; 
         _state->fills.push(std::move(fill));
 
@@ -282,11 +307,19 @@ public:
         }
     }
 
+    void update_order(OrderInitialUpdate &&st) {
+        _state->status = OrderStatus::open;
+        _state->id = st.id;
+    }
+
     void cancel();
+
+    bool operator==(const Order &) const = default;
+
 
 protected:
 
-std::shared_ptr<State> _state = {};
+    std::shared_ptr<State> _state = {};
 };
 
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.hpp"
+#include "ifc/underlying.hpp"
 #include "utils/decimal.hpp"
 
 
@@ -19,7 +20,7 @@ public:
     virtual std::string_view get_name() const = 0;
 
     ///Retrieve balance for given currency
-    virtual awaitable<WalletInfo> get_balance(PUnderlyingCurrency currency) const = 0;
+    virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency currency) const = 0;
 
     ///Retrieves total equity of the account
     /**
@@ -27,7 +28,7 @@ public:
     @return WalletInfo - if currency cannot be used, returns nullopt. It is recommended to select
     quote currency or pnl currency which should be supported
      */
-    virtual awaitable<WalletInfo> get_total_equity(PUnderlyingCurrency currency) const = 0;
+    virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency currency) const = 0;
 
     ///transfer money from one account to other
     /**
@@ -37,7 +38,7 @@ public:
         @retval true transfered
         @retval false transfer
     */  
-    virtual awaitable<bool> transfer(PUnderlyingCurrency currency, PAccount to_account, Decimal amount) const = 0;
+    virtual awaitable<bool> transfer(UnderlyingCurrency currency, PAccount to_account, Decimal amount) const = 0;
 };  
 
 

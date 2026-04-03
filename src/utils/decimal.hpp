@@ -40,6 +40,8 @@ public:
     constexpr Decimal round_to(uint32_t new_precision) const;
     constexpr static Decimal min() {return Decimal{};}
     constexpr static Decimal max() {return Decimal{std::numeric_limits<int64_t>::max(),0};}
+    constexpr explicit operator bool() const {return m_value != 0;}
+
 
 private:
     int64_t  m_value = 0;
