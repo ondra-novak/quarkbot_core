@@ -3,24 +3,66 @@
 
 #include "ifc/defs.hpp"
 #include "ifc/exchange.hpp"
+#include "ifc/market_events.hpp"
 #include "ifc/market_instrument.hpp"
 #include "ifc/stream_defs.hpp"
 #include "ifc/streaming.hpp"
+#include "ifc/underlying.hpp"
+#include "simaccount.hpp"
+#include "simexecutor.hpp"
+#include "streaming/lock_free_publisher.hpp"
+#include "streaming/publisher_manager.hpp"
 #include <memory>
+#include <unordered_map>
 namespace quarkbot {
+
+class SimInstrument;
+class SimTradableInstrument;
 
 class SimExchange: public IExchange {
 public:
     
+    using QuotePublisher = LockFreePublisher<Quote, 1>;
+    using TradePublisher = LockFreePublisher<Trade, 1>;
+    using ClosedBarPublisher = LockFreePublisher<ClosedBar, 1>;
+    using TradeCounterPublisher = LockFreePublisher<TradeCounter, 1>;
+
+    ///this function creates empty account, credentials are ignored
     virtual PAccount create_account(const std::string &name, const std::string &credentials) const override;
     virtual std::vector<PMarketInstrument> get_market_instruments() const override;
     virtual std::vector<UnderlyingCurrency> get_all_currencies() const override;
     virtual std::string_view get_name() const override;
 
-    std::shared_ptr<IEventStreamBase> subscribe_stream(const IMarketInstrument *instrument,const IAccount *, StreamTypeItem::Type type, const StreamParams &params);
-    PTradableInstrument create_tradable_instrument(const IMarketInstrument *instrument, const IAccount *);
+    std::shared_ptr<IEventStreamBase> subscribe_stream(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account, StreamTypeItem::Type type, const StreamParams &params);
+    PTradableInstrument create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account);
+
+    ///Sets instruments , creates instrument map (removes existing)
+    void set_instruments(std::span<IMarketInstrument::Info> instruments);
+
+    ///create account, set up initial wallet
+    PAccount create_account(const std::string &name, std::span<std::pair<UnderlyingCurrency, Decimal> > wallet);
+
+    void on_event(const std::string &instrument, Quote qt);
+    void on_event(const std::string &instrument, Trade tr);
+
+    void cancel_all_orders(PMarketInstrument instrument ) {
+        _executor.cancel_all(std::static_pointer_cast<SimInstrument>(instrument));
+    }
 
 protected:
+
+    std::unordered_map<std::string, std::weak_ptr<SimInstrument> > _instrument_names;
+ 
+    PublisherManager _streams;
+    SimExecutor _executor;
+    std::vector<std::weak_ptr<SimTradableInstrument> > _tradable_instruments;
+
+    std::shared_ptr<SimInstrument> resolve_instrument(const std::string &instr);
+
+
+    template<typename T, typename Pub>
+    std::shared_ptr<IEventStreamBase> connect_to(std::shared_ptr<SimInstrument> instrument, const StreamParams *params);
+
 
 };
 

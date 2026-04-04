@@ -1,7 +1,5 @@
 #pragma once
 
-#include "basic_coro/coro_frame.hpp"
-#include "basic_coro/prepared_coro.hpp"
 #include "types.hpp"
 #include "defs.hpp"
 #include <cstdint>
@@ -151,7 +149,7 @@ public:
 
     struct State {
         ///original parameters -  adjusted
-        const OrderParametersGen<Decimal> parameters = {};
+        const OrderParameters parameters = {};
         ///associated instrument
         PTradableInstrument instrument = {};
         ///order name
@@ -315,7 +313,7 @@ public:
     void cancel();
 
     bool operator==(const Order &) const = default;
-
+    
 
 protected:
 

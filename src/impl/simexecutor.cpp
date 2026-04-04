@@ -1,14 +1,17 @@
 #include "simexecutor.hpp"
+#include "impl/simexchange.hpp"
+#include "siminstrument.hpp"    
+#include "ifc/defs.hpp"
 #include "ifc/order.hpp"
 #include "ifc/types.hpp"
 #include "utils/decimal.hpp"
 #include "utils/random_string.hpp"
-#include "ifc/tradable_instrument.hpp"
+#include "ifc/tradable_instrument.hpp" // IWYU pragma: keep
 #include <algorithm>
 
 namespace quarkbot {
 
-    void SimExecutor::place_order(Order ord, std::string instrument, IExecutionResult *result) {
+    void SimExecutor::place_order(Order ord, PSimInstrument instrument, IExecutionResult *result) {
 
         ActiveOrder aord{
             std::move(ord),std::move( instrument), result
@@ -20,7 +23,7 @@ namespace quarkbot {
         _active_orders.push_back(std::move(aord));
 
     }
-    void SimExecutor::replace_order(Order ord, Order prev_order, std::string instrument, IExecutionResult *result) {
+    void SimExecutor::replace_order(Order ord, Order prev_order, PSimInstrument instrument, IExecutionResult *result) {
         ActiveOrder aord{
             std::move(ord),std::move( instrument), result
         };
@@ -190,7 +193,7 @@ namespace quarkbot {
 
     }
 
-    void SimExecutor::on_event(std::string_view instrument, Trade &trade){
+    void SimExecutor::on_event(PSimInstrument instrument, Trade &trade){
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
             if (ord.instrument == instrument) {
                 return match_order(ord, trade);
@@ -200,7 +203,7 @@ namespace quarkbot {
         _active_orders.erase(e, _active_orders.end());
     }
 
-    void SimExecutor::on_event(std::string_view instrument, Quote &quote){
+    void SimExecutor::on_event(PSimInstrument instrument, Quote &quote){
         Quote new_quote = quote;
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
             if (ord.instrument == instrument) {
@@ -242,3 +245,4 @@ namespace quarkbot {
     }
 
 }
+

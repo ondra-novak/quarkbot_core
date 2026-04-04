@@ -12,21 +12,21 @@ namespace quarkbot {
 
 class IMarketInstrument {
 public:
-
-
     struct Info : ContractInfo {
         Decimal min_lot_size = {};
         Decimal lot_size_increment = {};
         Decimal price_increment = {};
-        double min_volume = 0.0;
-        double fee_rate_maker = 0.0;
-        double fee_rate_taker = 0.0;
+        Decimal min_volume = {};
+        Decimal fee_rate_maker = {};
+        Decimal fee_rate_taker = {};
         ///underlying currency for quotes
         UnderlyingCurrency quote_currency;
         ///underlying currency for pnl, can be different - for example inverted futures 
         UnderlyingCurrency pnl_currency;
         ///underlying currenct for asset if exists (nullopt for contracts, stocks and non currency assets)
         std::optional<UnderlyingCurrency> asset;
+        ///instrument name - not need to be unique (exchange related)
+        std::string name;
     
     };
     virtual ~IMarketInstrument() = default;
@@ -36,14 +36,14 @@ public:
     virtual Info get_info() const = 0;
 
     ///Internal
-    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams &params) const = 0;
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams &params) = 0;
     
     ///Create tradable instrument from the instrument
     /**
       @param account associated account
       @return reference to tradable instrument, can be nullptr if not available for trading with this account
      */
-    virtual awaitable<PTradableInstrument> create_tradable_instrument(PAccount account) const = 0;
+    virtual awaitable<PTradableInstrument> create_tradable_instrument(PAccount account) = 0;
 
     ///Subscribe market event stream
     /**
@@ -61,7 +61,6 @@ public:
         else return EventStream<T>();
     }
 
-    virtual std::string_view get_name() const = 0;
 };
 
 

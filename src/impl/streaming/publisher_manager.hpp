@@ -5,6 +5,7 @@
 #include "ifc/defs.hpp"
 #include "publisher_base.hpp"
 #include "ifc/stream_defs.hpp"
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -18,7 +19,6 @@ namespace quarkbot {
 
         using PPublisher = std::shared_ptr<PublisherBase>;
         using WPPublisher = std::weak_ptr<PublisherBase>;
-        using Factory = std::function<std::shared_ptr<PublisherBase>(PMarketInstrument, PAccount, StreamTypeItem::Type, const StreamParams *)>;
 
         struct Key {
             PMarketInstrument instrument;   //instrument
@@ -50,7 +50,6 @@ namespace quarkbot {
         
         using MapType = std::unordered_map<Key, Value, KeyHash> ;
 
-        PublisherManager(Factory factory):_factory(std::move(factory)) {}
 
         template<std::invocable<const StreamParams *, PPublisher> Callback>
         bool enum_all_publishers(const PMarketInstrument &instrument, const PAccount &account, StreamTypeItem::Type type, Callback &&cb) {
@@ -82,31 +81,37 @@ namespace quarkbot {
             Key k{instrument, account, type};
             Value &v = _map[k];
             PPublisher pub;
-            for (ValueItem &itm: v) {
-                if (itm.params == params) {
-                    pub = itm.publisher.lock();
-                    if (pub) {
-                        return pub->create_subscriber(pub);
-                    }
-                    pub = _factory(instrument, account, type, params);
-                    if (pub) {
-                        itm.publisher = pub;
-                        return pub->create_subscriber(pub);
-                    }
-                    return {};
+            auto r = std::remove_if(v.begin(), v.end(), [&](const ValueItem v){
+                if (v.params == params) {
+                    pub = v.publisher.lock();
+                    return !pub;
                 }
-            }
-            pub = _factory(instrument,account, type, params);
+                return true;
+            });
+            v.erase(r, v.end());
+
             if (pub) {
-                v.push_back({params, pub});                
                 return pub->create_subscriber(pub);
             }
+
             return {};            
+        }
+
+        auto register_publisher(const PMarketInstrument &instrument,
+                                const PAccount &account,
+                                StreamTypeItem::Type type,
+                                const StreamParams *params,
+                                PPublisher publisher
+                            ) {
+            std::scoped_lock _(_mx);                                                    
+            Key k{instrument, account, type};
+            Value &v = _map[k];
+            v.push_back({params, publisher});
+            return publisher;
         }
 
     protected:
         std::mutex _mx;
-        Factory _factory;
         MapType _map;
 
 

@@ -23,8 +23,19 @@ enum class InstrumentType: int8_t {
 
 struct ContractInfo {
     InstrumentType type;
-    double multiplier;      ///contract multiplier (amount * multiplier * price = turnover)
-    double tick_scale;      ///price multiplier
+    Decimal multiplier;      ///contract multiplier (amount * multiplier * price = turnover)
+    Decimal tick_scale;      ///price multiplier
+
+    Decimal calc_pnl(Decimal open_price, Decimal close_price, Decimal amount) const {
+        open_price *= tick_scale;
+        close_price *= tick_scale;
+        if (type == InstrumentType::spot || type == InstrumentType::contract) {
+            return (close_price - open_price) * amount * multiplier;
+        } else if (type == InstrumentType::inverse_contract) {
+            return (reciprocal(open_price) - reciprocal(close_price)) * amount * multiplier;
+        }
+        return {};
+    }
 };
 
 enum class ExecutionReason : int8_t{
@@ -62,12 +73,12 @@ struct Fill {
     ///fill price
     Decimal price;
     ///absolute fees in original currency
-    double fees;
+    Decimal fees;
     ///conversion rate between original currency and contract currency
     /**
     formula: contract_currenct = fees * fee_rate;
      */
-    double fee_rate;
+    Decimal fee_rate;
 };
 
 };

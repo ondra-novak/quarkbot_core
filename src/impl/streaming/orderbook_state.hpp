@@ -38,8 +38,8 @@ public:
             [&](const StreamParams *,  const PublisherManager::PPublisher &pub){
                 IncrementPublisher &p = static_cast<IncrementPublisher &>(*pub);
                 for (auto &x: states) {
-                    p.write([&](OrderBookEntry &t){
-                        t = x;
+                    p.write([&](OrderBookEntry &t) noexcept{
+                        t = x;return true;
                     });
                 }
                 any = true;
@@ -69,8 +69,9 @@ public:
             [&](const StreamParams *, const PublisherManager::PPublisher &pub){
                 SnapshotPublisher &p = static_cast<SnapshotPublisher &>(*pub);
                 OrderBookView view(_bids[_bank],_asks[_bank], &_tp[_bank]);
-                p.write([&](OrderBookView &v){
+                p.write([&](OrderBookView &v)noexcept{
                     v = view;
+                    return true;
                 });
                 any = true;
             });

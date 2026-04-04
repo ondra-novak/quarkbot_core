@@ -10,10 +10,14 @@ class IAccount {
 public:
 
     struct WalletInfo {
-        ///total balance (equity when used for contract)
-        double balance = 0.0;
-        ///available balance (total - order blocked - margin)
-        double available = 0.0;
+        ///available balance (can be used for trading)
+        Decimal balance = {};
+        ///unrealized pnl for open positions in this currency (if applicable)
+        Decimal unrealized_pnl = {};
+        ///margin used for open positions in this currency (if applicable)
+        Decimal margin = {};
+        ///amount blocked for open orders (if applicable)
+        Decimal order_blocked = {};
     };
 
     virtual ~IAccount() = default;
@@ -38,7 +42,7 @@ public:
         @retval true transfered
         @retval false transfer
     */  
-    virtual awaitable<bool> transfer(UnderlyingCurrency currency, PAccount to_account, Decimal amount) const = 0;
+    virtual awaitable<bool> transfer(UnderlyingCurrency currency, PAccount to_account, Decimal amount)  = 0;
 };  
 
 

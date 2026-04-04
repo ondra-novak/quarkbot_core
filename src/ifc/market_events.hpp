@@ -46,19 +46,27 @@ struct StreamSingleParam: StreamParams {
     X param;
 };
 
-struct ClosedBar: StreamTypeItem {
-    Decimal open;
-    Decimal high;
-    Decimal low;
-    Decimal close;
-    Decimal volume; //volume is optional, if not available, it is set to zero
+struct ClosedBar  {
+    Decimal open = 0;
+    Decimal high = 0;
+    Decimal low = 0;
+    Decimal close = 0;
+    Decimal volume = 0; //volume is optional, if not available, it is set to zero
+    std::size_t interval_index = 0;
     ClosedBar &view() {return *this;}
-    static constexpr Type type = "closed_bar";
+    static constexpr StreamTypeItem::Type type = "closed_bar";
+    using ParamType =  StreamSingleParam<unsigned int>;
 };
 
 template<unsigned int _interval_sec>
-struct ClosedBarInterval: ClosedBar {
-    constexpr static auto params = StreamSingleParam<unsigned int>{{},_interval_sec};
+struct ClosedBarInterval: ClosedBar, StreamTypeItem{
+    constexpr static auto params =ParamType {{},_interval_sec};
+    std::chrono::system_clock::time_point interval_begin() const {
+        return std::chrono::system_clock::time_point(std::chrono::seconds(interval_index * _interval_sec));
+    }
+    std::chrono::system_clock::time_point interval_end() const {
+        return std::chrono::system_clock::time_point(std::chrono::seconds(interval_index * (_interval_sec+1)));
+    }
 };
 
 
@@ -101,9 +109,9 @@ struct TradeCounter : public StreamTypeItem {
     /// total count of trades
     std::uint64_t trades = 0;
     /// total volume - it can reset when stream is reopened
-    long double volume = static_cast<long double>(0.0);
+    Decimal volume ={};
     /// last price
-    Decimal last_price;
+    Decimal last_price = {};
 
     std::chrono::system_clock::time_point time;
 };

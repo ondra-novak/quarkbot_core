@@ -19,14 +19,12 @@ namespace quarkbot {
 ///Represents rounded number with specified round strategy
 class Rounded {
 public:
-    double value = 0;
+    Decimal value = 0;
     RoundStrategy strategy = RoundStrategy::nearest;
     
     constexpr Rounded() = default;
-    ///construct number
-    constexpr Rounded(double v, RoundStrategy s = RoundStrategy::nearest): value(v), strategy(s) {}
 
-    constexpr Rounded(Decimal v, RoundStrategy s = RoundStrategy::nearest): value(v.to_double()), strategy(s) {}
+    constexpr Rounded(Decimal v, RoundStrategy s = RoundStrategy::nearest): value(v), strategy(s) {}
 
     ///get rounded number
     /**
@@ -35,30 +33,30 @@ public:
     means to use ceil for defensive side and floor for agresive side. If defensive side is zero,
     round is used in this case
      */
-    double get_rounded(double step, int defesive_side) const {
-        double v = value * step;
+    Decimal get_rounded(Decimal step, int defesive_side) const {
+        auto v = value * step;
         switch (strategy) {
             case RoundStrategy::floor:
-                return std::floor(v)/step;
+                return floor(v)/step;
             case RoundStrategy::ceil:
-                return std::ceil(v)/step;
+                return ceil(v)/step;
             case RoundStrategy::nearest:
-                return std::round(v)/step;
+                return round(v)/step;
             case RoundStrategy::defensive:
                 if (defesive_side < 0) {
-                    return std::floor(v)/step;
+                    return floor(v)/step;
                 } else if (defesive_side > 0) { 
-                    return std::ceil(v)/step;
+                    return ceil(v)/step;
                 } else {
-                    return std::round(v)/step;
+                    return round(v)/step;
                 }
             case RoundStrategy::aggresive:
                 if (defesive_side < 0) {
-                    return std::ceil(v)/step;
+                    return ceil(v)/step;
                 } else if (defesive_side > 0) { 
-                    return std::floor(v)/step;
+                    return floor(v)/step;
                 } else {
-                    return std::round(v)/step;
+                    return round(v)/step;
                 }
         }
         return value;

@@ -2,25 +2,26 @@
 
 #include <cmath>
 
+template<typename T>
 class ACBCalculator {
 private:
-    double averageCostBase;
-    double openPosition;
-    double realizedPnL;
+    T averageCostBase;
+    T openPosition;
+    T realizedPnL;
 
-    static constexpr double abs(double c) {
+    static constexpr T abs(T c) {
         if (c < 0) return -c;
         return c;
     }
 
 public:
-    constexpr ACBCalculator(double acb = 0.0, double position = 0.0, double pnl = 0.0)
+    constexpr ACBCalculator(T acb = 0.0, T position = 0.0, T pnl = 0.0)
         : averageCostBase(acb), openPosition(position), realizedPnL(pnl) {}
 
-    constexpr ACBCalculator trade(double volume, double price) const {
-        double newPosition = openPosition + volume;
-        double newACB = averageCostBase;
-        double newPnL = realizedPnL;
+    constexpr ACBCalculator trade(T volume, T price) const {
+        T newPosition = openPosition + volume;
+        T newACB = averageCostBase;
+        T newPnL = realizedPnL;
 
         if ((openPosition >= 0 && newPosition >= 0) || (openPosition <= 0 && newPosition <= 0)) {
             // Adding to existing position
@@ -31,7 +32,7 @@ public:
             }
         } else {
             // Position reversal or closure
-            double closedVolume = std::min(abs(openPosition), abs(volume));
+            T closedVolume = std::min(abs(openPosition), abs(volume));
             newPnL += closedVolume * (price - averageCostBase) * (openPosition > 0 ? 1 : -1);
 
             if (abs(newPosition) > 1e-9) {
@@ -44,7 +45,7 @@ public:
         return ACBCalculator(newACB, newPosition, newPnL);
     }
 
-    constexpr double getAverageCost() const { return averageCostBase; }
-    constexpr double getOpenPosition() const { return openPosition; }
-    constexpr double getRealizedPnL() const { return realizedPnL; }
+    constexpr T getAverageCost() const { return averageCostBase; }
+    constexpr T getOpenPosition() const { return openPosition; }
+    constexpr T getRealizedPnL() const { return realizedPnL; }
 };

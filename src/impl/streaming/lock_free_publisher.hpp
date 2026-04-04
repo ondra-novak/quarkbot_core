@@ -17,7 +17,8 @@ namespace quarkbot {
     public:
 
 
-        template<std::invocable<ViewType &> CBWriter>
+        template<typename CBWriter>
+        requires(std::is_nothrow_invocable_r_v<bool, CBWriter, ViewType &>)
         void write(CBWriter &&writer) {
             _queue.write(std::forward<CBWriter>(writer));
             flush_consumers(true);
@@ -48,6 +49,9 @@ namespace quarkbot {
         }) {}
         LockFreePublisher(Factory factory):PublisherBase(factory) {}
 
+        Seq get_top_seq() const {
+            return _queue.get_top_seq();
+        }
 
 
     protected:

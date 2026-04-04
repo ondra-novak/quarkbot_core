@@ -29,25 +29,23 @@ public:
         }
     }
 
-    template<std::invocable<T &> CBWriter>
+    template<typename CBWriter>
+    requires(std::is_nothrow_invocable_r_v<bool, CBWriter, T &>)
     void write(CBWriter &&writer) {
-        auto seq = _cur_seq.fetch_add(1, std::memory_order_relaxed);
-        auto index = seq % nitems;
-        writer(_queue[index]);
-        
+        if (writer(_queue[_next_index])) {
+            _next_index = (_cur_seq.fetch_add(1, std::memory_order_release)+1) % nitems;
+        }        
     }
-    
 
     Seq get_top_seq() const {
         return _cur_seq.load(std::memory_order_relaxed);
     }
 
-
 protected:
-
 
     static constexpr auto nitems = count+reserved;
 
     std::array<T, nitems> _queue;
     std::atomic<Seq> _cur_seq = {0};
+    std::size_t _next_index  = 0;
 };
