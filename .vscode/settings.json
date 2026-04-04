@@ -75,5 +75,19 @@
         "valarray": "cpp",
         "variant": "cpp",
         "csignal": "cpp"
+    },
+    "cmake.debugConfig": {
+        "setupCommands": [
+            {
+                "description": "Enable pretty-printing for gdb",
+                "text": "-enable-pretty-printing",
+                "ignoreFailures": true
+            },
+            {
+                "description": "Load my Decimal printer",
+                "text": "source ${workspaceFolder}/debug/decimal-printer.py",
+                "ignoreFailures": false
+            }
+        ]
     }
 }

@@ -4,7 +4,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests/)
 #file(GLOB testFiles "*.cpp")
 set(testFiles
 	compile_test.cpp
-    decimal.cpp
+    decimal_test.cpp    
 #	loader.cpp
 #	config_desc.cpp
 #	wandering_bst.cpp

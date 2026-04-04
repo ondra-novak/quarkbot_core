@@ -111,7 +111,7 @@ namespace quarkbot {
                 case OrderType::stoplimit:
                 case OrderType::oco:
                     dp = params.stop_price - p;
-                    if (dp.scaled_value() * sid < 0) order.trig = true;  
+                    if (sgn(dp) * sid < 0) order.trig = true;  
                     else return false;
                     break;
                 case OrderType::market:
@@ -119,11 +119,11 @@ namespace quarkbot {
                         create_fill(order, p, dq,quote.time,taker); 
                         s -= dq;
                     }
-                    else create_fill(order, Decimal(p.to_double() + p.to_double() *_slippage*static_cast<double>(params.side), p.precision()), leave_quant,quote.time,taker);
+                    else create_fill(order, Decimal(p.to_double() + p.to_double() *_slippage*static_cast<double>(params.side)), leave_quant,quote.time,taker);
                     break;                
 
                 case OrderType::limit_post_only:
-                    if (taker && dp.scaled_value() * sid < 0) {
+                    if (taker && sgn(dp) * sid < 0) {
                         order.result->report_status(order.ord, {OrderStatus::rejected, OrderRejectionReason::post_only_taker});
                         return true;
                     }
@@ -134,7 +134,7 @@ namespace quarkbot {
                         create_fill(order,p, dq, quote.time, taker);                            
                         break;
                     }
-                    else if (dp.scaled_value() * sid < 0) {
+                    else if (sgn(dp) * sid < 0) {
                         create_fill(order, params.limit_price, leave_quant, quote.time, taker);
                         break;
                     }                        

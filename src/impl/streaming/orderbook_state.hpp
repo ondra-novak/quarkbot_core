@@ -115,12 +115,12 @@ protected:
             if (cmp(*old_i, *inc_i)) {
                 *up_i++ = *old_i++;
             } else if (cmp(*inc_i, *old_i)) {
-                if (inc_i->size.scaled_value()) {
+                if (inc_i->size) {
                     *up_i++ = *inc_i;
                 }
                 ++inc_i;
             } else {
-                if (inc_i->size.scaled_value()) {
+                if (inc_i->size) {
                     *up_i++ = *inc_i;
                 }
                 ++inc_i;
