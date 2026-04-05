@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.hpp"
+#include "ifc/types.hpp"
 #include "ifc/underlying.hpp"
 #include "utils/decimal.hpp"
 
@@ -14,10 +15,16 @@ public:
         Decimal balance = {};
         ///unrealized pnl for open positions in this currency (if applicable)
         Decimal unrealized_pnl = {};
-        ///margin used for open positions in this currency (if applicable)
-        Decimal margin = {};
-        ///amount blocked for open orders (if applicable)
+        ///blocked balance for opened orders (spot markets)
         Decimal order_blocked = {};
+        ///initial margin for opened orders and positions (leveraged markets)
+        Decimal initial_margin = {};
+        ///maintenance margin for opened positions (leveraged markets)
+        Decimal maintenance_margin = {};
+
+        Decimal remaining_balance() const {
+            return balance + unrealized_pnl - order_blocked - initial_margin;
+        }
     };
 
     virtual ~IAccount() = default;
@@ -43,6 +50,9 @@ public:
         @retval false transfer
     */  
     virtual awaitable<bool> transfer(UnderlyingCurrency currency, PAccount to_account, Decimal amount)  = 0;
+
+    ///Retrive current position on given market instrument
+    virtual awaitable<Position> get_position(PMarketInstrument instrument) = 0;
 };  
 
 

@@ -3,6 +3,7 @@
 #include "ifc/defs.hpp"
 #include "ifc/market_events.hpp"
 #include "ifc/order.hpp"
+#include "ifc/underlying.hpp"
 #include <chrono>
 #include <memory>
 namespace quarkbot {
@@ -16,27 +17,15 @@ public:
     using Timestamp = std::chrono::system_clock::time_point;
 
 
-
-    class IExecutionResult {
-    public:
-        virtual ~IExecutionResult() = default;
-        virtual void report_fill(const Order &ord, const Fill &fill) = 0;
-        virtual void report_status(const Order &ord, const OrderStatusUpdate &status) = 0;        
-        virtual void init(const Order &ord, const OrderInitialUpdate &init) = 0;        
-        virtual void report_blocked(const Order &ord,Decimal dec) = 0;
-    };
-
-
-
     using PSimInstrument = std::shared_ptr<SimInstrument>;
 
     void on_event(PSimInstrument instrument, Trade &trade);
     void on_event(PSimInstrument instrument, Quote &quote);
 
-    void place_order(Order ord, PSimInstrument instrument, IExecutionResult *result);
-    void replace_order(Order ord, Order prev_order, PSimInstrument instrument, IExecutionResult *result);
+    void place_order(Order ord);
+    void replace_order(Order ord, Order prev_order);
     void cancel_order(Order ord);
-    bool cancel_all(PSimInstrument instrument);
+    bool cancel_all(PTradableInstrument instrument);
 
 
 protected:
@@ -48,7 +37,6 @@ protected:
     struct ActiveOrder {
         Order ord;
         PSimInstrument instrument;
-        IExecutionResult *result; //extracted from PTradableInstrument but not indirectly accessible from here, so we need pointer
         Decimal filled = {};
         bool trig = false;
     };
@@ -64,7 +52,14 @@ protected:
     void create_fill(ActiveOrder &order, Decimal price, Decimal quantity, Timestamp tp, bool taker);
 
     OrderType real_order_type(const ActiveOrder &order);
- 
+    void update_order_blocking(const ActiveOrder & aord);    
+
+    SimTradableInstrument &report(const ActiveOrder &aord);
+
+
+    static PSimInstrument extract_instrument(const Order &ord);
+
+    //TODO implement reporting of order blocking
 };
 
 

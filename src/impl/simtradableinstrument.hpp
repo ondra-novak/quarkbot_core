@@ -5,6 +5,7 @@
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
 #include "ifc/tradable_instrument.hpp"
+#include "ifc/types.hpp"
 #include "simexecutor.hpp"
 #include "utils/decimal.hpp"
 
@@ -18,7 +19,7 @@ namespace quarkbot {
 class SimInstrument;
 class SimAccount;
 
-class SimTradableInstrument: public ITradableInstrument {
+class SimTradableInstrument: public ITradableInstrument, public std::enable_shared_from_this<SimTradableInstrument> {
 public:
     SimTradableInstrument(std::shared_ptr<SimInstrument> instr, std::shared_ptr<SimAccount> account)
         :_instrument(std::move(instr)), _account(std::move(account)) {}
@@ -26,8 +27,6 @@ public:
 
     void report_fill(const Fill &fill);    
     void report_price(Decimal price) ;
-    void report_margin(Decimal margin);
-    void report_order_blocked(Decimal blocked);
 
 
     auto get_sim_instrument() const {
@@ -43,21 +42,32 @@ public:
     virtual Order place_order(const OrderRequest &params, Order order_to_replace, std::string_view name = {}) override;
     virtual Order place_order(const OrderRequest &params, std::string_view name = {}) override;
     virtual void cancel_order(Order order) override;
-    virtual void attach_storage(PStorage , function_view<void(Order)>) override {/* not implemented */}
-    virtual coro::awaitable<Position> get_position() const override {return _position;}
-    virtual RiskLimits get_limits() const override {return _risk_limits;}
+    virtual bool cancel_all_orders() override;
+    virtual awaitable<Position> get_position() const override {return _position;}
+    virtual SerializedOrder serialize_order(Order ord) override;
+    virtual Order restore_order(SerializedOrder ord) override;
 
+
+    void on_order_fill(const Order &ord, const Fill &fill);
+    void on_order_status(const Order &ord, const OrderStatusUpdate &status);        
+    void on_order_accept(const Order &ord, const OrderInitialUpdate &status);    
+    void on_start_update_blocks();    
+    void on_update_blocks(Side side, Decimal quantity, Decimal price);  
 
 protected:
     std::shared_ptr<SimInstrument> _instrument;
     std::shared_ptr<SimAccount> _account;   
+
     Position _position;
+    Decimal _position_blocked = {}; //for spot
+
     Decimal _last_price = {};
-    RiskLimits _risk_limits = {};
 
 
-    class OrderState: public Order::State, public SimExecutor::IExecutionResult {
+    class OrderState: public Order::State {
     public:
+        PExecutionWorker _worker;
+
         OrderState(OrderParametersGen<Decimal> params, 
               std::shared_ptr<SimTradableInstrument> instrument,
               std::string name,
@@ -65,16 +75,6 @@ protected:
               PExecutionWorker worker
             );
 
-        virtual void report_fill(const Order &ord, const Fill &fill) override;
-        virtual void report_status(const Order &ord, const OrderStatusUpdate &status) override;
-        virtual void init(const Order &ord, const OrderInitialUpdate &init) override;
-        virtual void report_blocked(const Order &ord,Decimal dec) override;
-
-        virtual ~OrderState() = default;
-
-
-    protected:
-        PExecutionWorker _worker;
 
     };
 
@@ -88,10 +88,24 @@ protected:
         }
     };
 
+
+    struct NewOrdersStats {
+        Decimal buy_turnover, buy_quantity;
+        Decimal sell_turnover, sell_quantity;
+    };
+
+    std::optional<NewOrdersStats> _new_order_stats;
+    void flush_orders_stats();
+
     static coro::coroutine<void, coro::pmr_allocator<> > coro_report_fill(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument, Order ord, Fill fill );
-    static coro::coroutine<void, coro::pmr_allocator<>> coro_report_status(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument, OrderStatusUpdate update);
-    static coro::coroutine<void, coro::pmr_allocator<>> coro_report_init(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument, OrderInitialUpdate update);
-    static coro::coroutine<void, coro::pmr_allocator<>> coro_report_blocked(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument, Decimal dec);
+    static coro::coroutine<void, coro::pmr_allocator<>> coro_report_status(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderStatusUpdate update);
+    static coro::coroutine<void, coro::pmr_allocator<>> coro_report_init(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderInitialUpdate update);
+
+    void liquidation();
+    std::optional<Order> liquidation_order; 
+
+    virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderState> old_state, std::string_view name = {});
+    
 
 };
 

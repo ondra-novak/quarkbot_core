@@ -45,9 +45,9 @@ public:
     void on_event(const std::string &instrument, Quote qt);
     void on_event(const std::string &instrument, Trade tr);
 
-    void cancel_all_orders(PMarketInstrument instrument ) {
-        _executor.cancel_all(std::static_pointer_cast<SimInstrument>(instrument));
-    }
+    bool cancel_all_orders(PTradableInstrument instrument );
+    void cancel_order(Order ord);
+    void place_order(Order ord);
 
 protected:
 

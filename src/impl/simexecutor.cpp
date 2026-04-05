@@ -6,44 +6,67 @@
 #include "ifc/types.hpp"
 #include "utils/decimal.hpp"
 #include "utils/random_string.hpp"
-#include "ifc/tradable_instrument.hpp" // IWYU pragma: keep
+#include "simtradableinstrument.hpp"
 #include <algorithm>
+#include <memory>
 
 namespace quarkbot {
 
-    void SimExecutor::place_order(Order ord, PSimInstrument instrument, IExecutionResult *result) {
+    SimExecutor::PSimInstrument SimExecutor::extract_instrument(const Order &ord) {
+        auto instr = ord.get_instrument();
+        auto minstr = instr->get_instrument();
+        return std::dynamic_pointer_cast<SimInstrument>(minstr);        
+    }
+
+    void SimExecutor::place_order(Order ord) {
+
+        auto instrument = extract_instrument(ord);
+        if (!instrument) {
+            ord.update_order(OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::not_tradable});
+            return;
+        }
 
         ActiveOrder aord{
-            std::move(ord),std::move( instrument), result
+            std::move(ord),std::move( instrument)
         };
         if (!validate_order(aord)) return;
-        aord.result->init(aord.ord, { generate_random_string()});        
+        report(aord).on_order_accept(aord.ord, { generate_random_string()});        
         if (match_order(aord,true)) return;
 
         _active_orders.push_back(std::move(aord));
+        update_order_blocking(_active_orders.back());
 
     }
-    void SimExecutor::replace_order(Order ord, Order prev_order, PSimInstrument instrument, IExecutionResult *result) {
+    void SimExecutor::replace_order(Order ord, Order prev_order) {
+
+
+        auto instrument = extract_instrument(ord);
+        if (!instrument) {
+            ord.update_order(OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::not_tradable});
+            return;
+        }
+
         ActiveOrder aord{
-            std::move(ord),std::move( instrument), result
+            std::move(ord),std::move( instrument)
         };
         if (!validate_order(aord)) return;
         auto found = std::find_if(_active_orders.begin(), _active_orders.end(), [&](const ActiveOrder &a){
             return a.ord == prev_order;
         });
         if (found == _active_orders.end()) {
-            aord.result->report_status(ord, {OrderStatus::rejected, OrderRejectionReason::order_not_found});
+            report(aord).on_order_status(ord, {OrderStatus::rejected, OrderRejectionReason::order_not_found});
             return ;
         }
         if (!validate_order_replace(aord, *found)) return;
-        aord.result->init(aord.ord, {generate_random_string()});
+        report(aord).on_order_accept(aord.ord, {generate_random_string()});
         aord.filled = found->filled; //copy filled 
-        found->result->report_status(found->ord, {OrderStatus::replaced});        
+        report(aord).on_order_status(found->ord, {OrderStatus::replaced});        
 
         if (match_order(aord,true)) {
             _active_orders.erase(found);
         } else {
             *found = std::move(aord);
+            update_order_blocking((*found));
         }
 
     }
@@ -52,8 +75,10 @@ namespace quarkbot {
             return a.ord == ord;
         });
         if (found == _active_orders.end()) return;  
-        found->result->report_status(found->ord, {OrderStatus::canceled});
+        auto aord = std::move(*found);
         _active_orders.erase(found);
+        report(aord).on_order_status(aord.ord, {OrderStatus::canceled});
+        update_order_blocking(aord);
     }
 
     bool SimExecutor::validate_order(ActiveOrder &order) {
@@ -61,17 +86,17 @@ namespace quarkbot {
         const OrderParametersGen<Decimal> &params = ord.get_parameters();
 
         if (params.quantity <= 0) {
-            order.result->report_status(ord, { OrderStatus::rejected, OrderRejectionReason::invalid_params, "Invalid quantity" });
+            report(order).on_order_status(ord, { OrderStatus::rejected, OrderRejectionReason::invalid_params, "Invalid quantity" });
             return false;
         }
 
         if (params.type != OrderType::stop && params.type != OrderType::market && params.limit_price <= Decimal(0)) {
-            order.result->report_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params ,"Invalid or missing limit price"});
+            report(order).on_order_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params ,"Invalid or missing limit price"});
             return false;
         }
 
         if ((params.type == OrderType::stop || params.type == OrderType::stoplimit || params.type == OrderType::oco) && params.stop_price <= Decimal(0)) {
-            order.result->report_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params , "Invalid or missing stop price"});
+            report(order).on_order_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params , "Invalid or missing stop price"});
             return false;
         }
 
@@ -81,7 +106,7 @@ namespace quarkbot {
         const OrderParametersGen<Decimal> &params = order.ord.get_parameters();
         const OrderParametersGen<Decimal> &old_params = replacing_order.ord.get_parameters();
         if (params.side != old_params.side || params.type != old_params.type) {
-            order.result->report_status(order.ord, {OrderStatus::rejected , OrderRejectionReason::invalid_replace});
+            report(order).on_order_status(order.ord, {OrderStatus::rejected , OrderRejectionReason::invalid_replace});
             return false;
         }
         return true;
@@ -127,7 +152,7 @@ namespace quarkbot {
 
                 case OrderType::limit_post_only:
                     if (taker && sgn(dp) * sid < 0) {
-                        order.result->report_status(order.ord, {OrderStatus::rejected, OrderRejectionReason::post_only_taker});
+                        report(order).on_order_status(order.ord, {OrderStatus::rejected, OrderRejectionReason::post_only_taker});
                         return true;
                     }
                     [[fallthrough]];
@@ -142,14 +167,14 @@ namespace quarkbot {
                         break;
                     }                        
                     if (params.type == OrderType::limit_ioc) {
-                        order.result->report_status(order.ord, {OrderStatus::filled});
+                        report(order).on_order_status(order.ord, {OrderStatus::filled});
                         return true;
                     }
                     return false;                                                            
             }
         }
 
-        order.result->report_status(order.ord, {OrderStatus::filled});
+        report(order).on_order_status(order.ord, {OrderStatus::filled});
         return true;
     }
 
@@ -176,7 +201,7 @@ namespace quarkbot {
                 Decimal leave_quant = params.quantity - order.filled;
                 create_fill(order, params.limit_price, std::max(leave_quant, trade.size), trade.time,false);
                 bool filled = order.filled >= params.quantity;
-                if (filled) order.result->report_status(order.ord, {OrderStatus::filled});
+                if (filled) report(order).on_order_status(order.ord, {OrderStatus::filled});
                 return filled;
             }
         }
@@ -234,15 +259,43 @@ namespace quarkbot {
             tp,
             order.ord.get_instrument()->get_info(),
             order.ord.get_parameters().side,
-            ExecutionReason::strategy_order,
+            order.ord.get_parameters().reason_override,
             quantity,
             price,
             fees,
             1.0
         };
         order.filled += quantity;
-        order.result->report_fill(order.ord, f);
+        report(order).on_order_fill(order.ord, f);
     }
 
+
+    void SimExecutor::update_order_blocking(const ActiveOrder & aord) {        
+        Position buys {Side::buy};
+        Position sells {Side::sell};
+        auto instrument = aord.ord.get_instrument();
+        const auto &info = instrument->get_info();
+        for (auto &x: _active_orders) {
+            if (x.ord.get_instrument() == instrument) {
+                const auto &p = x.ord.get_parameters();
+                Position &cur = p.side == Side::sell?sells:buys;
+                auto t = real_order_type(x);
+                auto leaves = p.quantity - x.filled;
+                if (is_limit_order(t)) {
+                    cur.update(cur.side, p.limit_price, leaves, info);
+                } else if (is_stop_order(t)) {
+                    cur.update(cur.side, p.stop_price, leaves, info);
+                }
+            }
+        }
+
+    }       
+
+SimTradableInstrument &SimExecutor::report(const ActiveOrder &aord) {
+    return *static_cast<SimTradableInstrument *>(aord.ord.get_instrument().get());
 }
+}
+
+
+
 

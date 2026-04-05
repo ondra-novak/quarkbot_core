@@ -25,6 +25,7 @@ std::shared_ptr<IEventStreamBase> SimExchange::connect_to(std::shared_ptr<SimIns
 
 
 
+
 std::shared_ptr<IEventStreamBase> SimExchange::subscribe_stream(
         std::shared_ptr<SimInstrument> instrument,
         std::shared_ptr<SimAccount> /*account*/,
@@ -128,5 +129,21 @@ PTradableInstrument SimExchange::create_tradable_instrument(std::shared_ptr<SimI
     _tradable_instruments.push_back(r);
     return r;
 }
+
+bool SimExchange::cancel_all_orders(PTradableInstrument instrument ) {
+    return _executor.cancel_all(instrument);
+}
+void SimExchange::cancel_order(Order ord) {
+    _executor.cancel_order(ord);
+}
+void SimExchange::place_order(Order ord) {
+    auto rep_ord =ord.get_replaced_order();
+    if (rep_ord.has_value()) {
+        _executor.replace_order(ord, *rep_ord);
+    } else {
+        _executor.place_order(ord);
+    }
+}
+
 
 }

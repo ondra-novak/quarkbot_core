@@ -17,23 +17,23 @@ namespace quarkbot {
 };
 
 ///Represents rounded number with specified round strategy
-class Rounded {
+class TargetValue {
 public:
     Decimal value = 0;
     RoundStrategy strategy = RoundStrategy::nearest;
     
-    constexpr Rounded() = default;
+    constexpr TargetValue() = default;
 
-    constexpr Rounded(Decimal v, RoundStrategy s = RoundStrategy::nearest): value(v), strategy(s) {}
+    constexpr TargetValue(Decimal v, RoundStrategy s = RoundStrategy::nearest): value(v), strategy(s) {}
 
     ///get rounded number
     /**
     @param step round step 
-    @param defensive_side specifies side which is defensive (other side is aggresive). Positive value
-    means to use ceil for defensive side and floor for agresive side. If defensive side is zero,
+    @param aggresive_side specifies side which is aggresive (other side is defensive). Positive value
+    means to use ceil for defensive side and floor for agresive side. If aggresive_side is zero,
     round is used in this case
      */
-    Decimal get_rounded(Decimal step, int defesive_side) const {
+    Decimal get_rounded(Decimal step, int aggresive_side) const {
         auto v = value * step;
         switch (strategy) {
             case RoundStrategy::floor:
@@ -43,17 +43,17 @@ public:
             case RoundStrategy::nearest:
                 return round(v)/step;
             case RoundStrategy::defensive:
-                if (defesive_side < 0) {
+                if (aggresive_side > 0) {
                     return floor(v)/step;
-                } else if (defesive_side > 0) { 
+                } else if (aggresive_side < 0) { 
                     return ceil(v)/step;
                 } else {
                     return round(v)/step;
                 }
             case RoundStrategy::aggresive:
-                if (defesive_side < 0) {
+                if (aggresive_side > 0) {
                     return ceil(v)/step;
-                } else if (defesive_side > 0) { 
+                } else if (aggresive_side < 0) { 
                     return floor(v)/step;
                 } else {
                     return round(v)/step;

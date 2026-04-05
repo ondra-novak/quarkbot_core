@@ -26,6 +26,8 @@ public:
         return _exchange->create_tradable_instrument(shared_from_this(), acc);
     }
 
+
+    auto get_sim_exchange() const {return _exchange;}
 protected:
     std::shared_ptr<SimExchange> _exchange;
     Info _cfg;

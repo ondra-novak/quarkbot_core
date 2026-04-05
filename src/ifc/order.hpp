@@ -2,9 +2,11 @@
 
 #include "types.hpp"
 #include "defs.hpp"
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <system_error>
 #include "utils/decimal.hpp"
 #include "utils/round.hpp"
 
@@ -61,15 +63,22 @@ struct OrderParametersGen {
     bool reduce_only = false;
     ///create or increase to hedge side - can open reverse position if supported on exchange
     bool hedge = false;
+    ///sets execution reason for given order 
+    /**
+      Allows to override execution reason for strategy orders. 
+     */
+    ExecutionReason reason_override = ExecutionReason::strategy_order;
 };
 
 using OrderParameters = OrderParametersGen<Decimal>;
-using OrderRequest = OrderParametersGen<Rounded>;
+using OrderRequest = OrderParametersGen<TargetValue>;
+
+
 
 enum class OrderStatus : uint8_t {
     ///order sent, not confirmed yet
     sent,
-    ///order is active, open, waiting in orderbook
+    ///order is active, open, waiting in orderbook, waiting to trigger, there can be partial fills (see fills)
     open,    
     ///order is done, filled complete
     filled,
@@ -80,7 +89,9 @@ enum class OrderStatus : uint8_t {
     ///order is done, has been replaced by other order
     replaced,
     ///order has been recently restored from storage and exchange adapter is synchronizing its state
-    restored
+    restored,
+    ///order is done, informations about the order are lost - this can happen as resolution of restored state. (order is no longer found in history)
+    lost
 };
 
 enum class OrderRejectionReason : uint8_t{
@@ -130,7 +141,8 @@ inline constexpr bool is_done_status(OrderStatus status) {
     return status == OrderStatus::filled ||
            status == OrderStatus::canceled ||
            status == OrderStatus::rejected ||
-           status == OrderStatus::replaced;
+           status == OrderStatus::replaced ||
+           status == OrderStatus::lost ;
 }
 
 struct OrderStatusUpdate {
@@ -146,6 +158,7 @@ struct OrderInitialUpdate {
 
 class Order {
 public:
+
 
     struct State {
         ///original parameters -  adjusted
@@ -175,6 +188,10 @@ public:
         std::queue<Fill> fills;
         ///awaiting coroutine
         awaitable<bool>::result awaiting = {};
+        ///contains timestamp of last seen fill pulled from fills
+        std::chrono::system_clock::time_point _last_seen_fill_time = {};
+        ///contains index of last seen fill, if timestamp was same
+        std::size_t _last_seen_fill_counter = 0;
         
 
         State(OrderParametersGen<Decimal> params, 
@@ -186,7 +203,7 @@ public:
          ,name(std::move(name))
          ,replaced_order(std::move(replaced_order)) {}
     };
-    
+        
     Order(std::shared_ptr<State> st):_state(std::move(st)) {}
 
     Order(OrderParametersGen<Decimal> params, 
@@ -233,6 +250,11 @@ public:
         if (any_fill()) {
             out.emplace(std::move(_state->fills.front()));
             _state->fills.pop();
+            if (_state->_last_seen_fill_time  == out->time) _state->_last_seen_fill_counter++;
+            else {
+                _state->_last_seen_fill_time = out->time;
+                _state->_last_seen_fill_counter = 0;
+            }
         }
         return out;
     }
@@ -311,6 +333,8 @@ public:
     }
 
     void cancel();
+    Decimal get_turnover(Decimal price, Decimal filled = {}) const;
+    bool done() const {return is_done_status(get_status());}
 
     bool operator==(const Order &) const = default;
     
@@ -320,7 +344,7 @@ protected:
     std::shared_ptr<State> _state = {};
 };
 
-
+using SerializedOrder = std::string;
 
 }
     

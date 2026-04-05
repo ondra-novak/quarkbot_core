@@ -17,20 +17,6 @@ class ITradableInstrument : public IMarketInstrument{
 public:
     virtual ~ITradableInstrument() = default;
 
-    struct RiskLimits {
-        ///allocated equity for this instrument (in counter underlying)
-        double allocated_equity = 0;
-        ///max allowed leverage
-        double max_leverage = 0;
-        ///max allowed position (short/long)
-        double max_position = 0;
-        ///allowed trading size (buy - long, sell - short, otherwise unlimited)
-        Side allowed_side = Side::undetermined;
-    };
-
-
-    using Position = ACBCalculator<Decimal>;
-
     ///Place an order on the instrument
     /**
     @param params order parameters
@@ -43,53 +29,88 @@ public:
     virtual Order place_order(const OrderRequest &params, Order order_to_replace, std::string_view name = {}) = 0;
     virtual Order place_order(const OrderRequest &params, std::string_view name = {}) = 0;
 
+    ///Serializes order state
+    /**
+        @param ord order
+        @return serialized form of the order, The content can be any binary data which enables function restore_order_state
+        @note result can be store into database
+    */
+    virtual SerializedOrder serialize_order(Order ord) = 0;
+    ///Restores order state
+    /**
+        @param ord serialized form of the order
+        @return restored order. 
+        @note restored order can have state OrderState::restured. Order's actual state is updated asynchronously once
+        the order is found on the exchange in order history. If this operation fails, state is changed to lost.
+    */
+    virtual Order restore_order(SerializedOrder ord) = 0;
+
     ///Cancel order 
     /**
     This handles implementation of function cancel() on order
     */
     virtual void cancel_order(Order order) = 0;
 
-    ///Attach storage/database and restore stored orders
+    ///Cancel all orders associated with this instrument
     /**
-        The storage is used to store any created or canceled orders automatically and also record all fills.
-        On restart, all stored orders are restored by calling the provided callback for each restored order.
-        The orders are in "restored" state until any update is posted to them.
+        Cancels orders managed by this strategy. 
+        Doesn't cancel any other orders
+        @retval true canceled some orders
+        @retval false no orders found to cancel
+    */
+    virtual bool cancel_all_orders() = 0;
 
-        The strategy should assign a storage to each tradable instrument it uses before placing any orders 
-        - best during initialization.
-
-        If no storage is attached, no orders are stored and no orders are restored on restart. Fills can be stored in memory temporarily
-        during the lifetime of the instrument, but they are not persisted.
-
-        @param storage associated strategy storage
-        @param callback function called for every restored order. Restored orders are in "restored" state until. 
-        Any updates happened before order's restoration should be post to the strategy as an order event
-
-     */
-    virtual void attach_storage(PStorage storage, function_view<void(Order)> callback) = 0;
     ///Get associated account
     virtual PAccount get_account() const = 0;
 
-    ///Retrieves last know position
-    /**
-        @return current position on the instrument
-        @note on spot market, it returns exactly same value as query to wallet with underlying asset. On futures or derivates,
-        it returns count of held contracts.
-
-        @note function is asynchronous. It is much faster to count position from fills.
-    */
-    virtual coro::awaitable<Position> get_position() const = 0;
-
-    virtual RiskLimits get_limits() const = 0;
+    ///Retrieves position (from exchange)
+    virtual awaitable<Position> get_position() const = 0;
 
     ///converts tradable instrument into market instrument
     virtual PMarketInstrument get_instrument() const = 0;
+
+
+    OrderParameters convert_request_to_params(OrderRequest req, Side cur_position_side) {
+        const Info &info = get_info();
+        int aps = static_cast<int>(req.side);
+        int aqs = req.side == cur_position_side?1:-1;
+        return {
+            req.side,
+            req.type,
+            req.quantity.get_rounded(info.lot_size_increment, aqs),
+            req.limit_price.get_rounded(info.price_increment, aps),
+            req.stop_price.get_rounded(info.price_increment, aps),
+            req.leverage,
+            req.reduce_only,
+            req.hedge
+        };
+    }
 
 };
 
 inline void Order::cancel() {
     _state->instrument->cancel_order(*this);
 }
+
+inline Decimal Order::get_turnover(Decimal price, Decimal filled) const {
+        const auto &params = get_parameters();
+        const auto &info = get_instrument()->get_info();
+        filled = std::min(filled, params.quantity);
+        auto leaves = params.quantity - filled;
+        Decimal t1 = 0;
+        Decimal t2 = 0;
+        if (is_limit_order(params.type)) {
+            t1 = info.calc_turnover_pnl_currency(params.limit_price, leaves);
+        } 
+        if (is_stop_order(params.type)) {
+            t2 = info.calc_turnover_pnl_currency(params.stop_price, leaves);
+        }
+        if (t1 > t2) return t1;
+        if (t2 > t1) return t2;
+        if (t1) return t1;
+        return info.calc_turnover_pnl_currency(price,leaves);
+    }
+
 
 
 }

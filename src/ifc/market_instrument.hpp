@@ -17,6 +17,7 @@ public:
         Decimal lot_size_increment = {};
         Decimal price_increment = {};
         Decimal min_volume = {};
+        Decimal leverage = {};      //0 used for spot
         Decimal fee_rate_maker = {};
         Decimal fee_rate_taker = {};
         ///underlying currency for quotes
@@ -24,9 +25,14 @@ public:
         ///underlying currency for pnl, can be different - for example inverted futures 
         UnderlyingCurrency pnl_currency;
         ///underlying currenct for asset if exists (nullopt for contracts, stocks and non currency assets)
-        std::optional<UnderlyingCurrency> asset;
+        std::optional<UnderlyingCurrency> asset_wallet;
         ///instrument name - not need to be unique (exchange related)
         std::string name;
+
+        ///instrument is leveraged
+        bool is_leveraged() const {return leverage > 0;}
+        ///there is a wallet for asset
+        bool asset_has_wallet() const {return !is_leveraged() && asset_wallet.has_value();}
     
     };
     virtual ~IMarketInstrument() = default;

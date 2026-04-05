@@ -1,9 +1,13 @@
 #pragma once
 
 #include "ifc/account.hpp"
+#include "ifc/underlying.hpp"
 #include "utils/decimal.hpp"
+#include <concepts>
+#include <functional>
 #include <optional>
 #include <unordered_map>
+#include <utility>
 namespace quarkbot {
 
 class SimAccount final: public IAccount, public std::enable_shared_from_this<SimAccount> {
@@ -37,31 +41,40 @@ public:
         return true;
     }
 
-    void report_upnl(std::string id, Decimal upnl) {
-        auto iter = _wallet.find(id);
-        if (iter == _wallet.end()) return;
-        iter->second.unrealized_pnl = upnl;
-    }
-
-    ///return false if wallet must be liquidated, true otherwise
-    bool report_margin(std::string id, Decimal margin) {
-        auto iter = _wallet.find(id);
-        if (iter == _wallet.end()) return false;
-        iter->second.margin = margin;
-        return check_bankruptcy(iter->second);
-
-    }
-
     bool check_bankruptcy(const WalletInfo &info) const {
-        return info.balance + info.unrealized_pnl > info.margin + info.order_blocked;
+        return info.balance + info.unrealized_pnl > info.initial_margin + info.order_blocked;
     }
 
-    void report_order_blocked(std::string id, Decimal order_blocked) {
+
+
+    ///update wallet
+    template<std::invocable<WalletInfo &> Callback>
+    bool update_wallet(const std::string &id, Callback &&cb, bool create = false) {
         auto iter = _wallet.find(id);
-        if (iter == _wallet.end()) return;
-        iter->second.order_blocked = order_blocked;
+        if (iter == _wallet.end()) {
+            if (!create) return false;
+            auto ins = _wallet.emplace(id, WalletInfo{});
+            iter = ins.first;
+        }
+        std::invoke(std::forward<Callback>(cb), iter->second);
+        return check_bankruptcy(iter->second);
     }
 
+    template<std::invocable<WalletInfo &> Callback>
+    bool update_wallet(const UnderlyingCurrency &currency, Callback &&cb, bool create = false) {
+        return update_wallet(currency.id, std::forward<Callback>(cb), create);
+    }
+
+    const WalletInfo &get_wallet(const std::string &id) {
+        static WalletInfo empty;
+        auto iter = _wallet.find(id);
+        if (iter == _wallet.end()) return empty;
+        return iter->second;
+    }
+
+     awaitable<Position> get_position(PMarketInstrument) override {
+        return Position{};   //todo implement later, but not required for simulator
+     }
 
 protected:    
     std::string _name;
