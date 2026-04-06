@@ -60,6 +60,7 @@ int main() {
         CHECK(specs[0].asset_wallet.has_value());
         CHECK_EQUAL(*specs[0].asset_wallet, std::string("BTC"));
         CHECK(specs[0].fee_rate_maker == Decimal::from_string("0.001"));
+        CHECK(specs[0].fee_rate_taker == Decimal::from_string("0.001"));
 
         // Test reading trade events
         auto e1 = src.next_event();
@@ -95,6 +96,7 @@ int main() {
 
         auto q1 = qsrc.next_event();
         CHECK(q1.has_value());
+        CHECK_EQUAL(q1->instrument, std::string("BTCUSDT"));
         CHECK(std::holds_alternative<quarkbot::Quote>(q1->payload));
         auto &quote1 = std::get<quarkbot::Quote>(q1->payload);
         CHECK(quote1.bid == Decimal::from_string("57999.00"));
@@ -106,6 +108,9 @@ int main() {
         CHECK(q2.has_value());
         auto &quote2 = std::get<quarkbot::Quote>(q2->payload);
         CHECK(quote2.bid == Decimal::from_string("58050.00"));
+        CHECK(quote2.bid_size == Decimal::from_string("2.0"));
+        CHECK(quote2.ask == Decimal::from_string("58052.00"));
+        CHECK(quote2.ask_size == Decimal::from_string("1.2"));
 
         auto q3 = qsrc.next_event();
         CHECK(!q3.has_value());
