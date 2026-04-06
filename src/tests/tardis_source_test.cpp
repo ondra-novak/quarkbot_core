@@ -1,9 +1,9 @@
 #include "impl/tardis_data_source.hpp"
-#include "impl/simexchange.hpp"
 #include "tests/check.h"
 #include <zlib.h>
 #include <cstdio>
 #include <fstream>
+#include <iostream>
 
 static void write_gz(const std::string &path, std::string_view content) {
     gzFile f = gzopen(path.c_str(), "wb");

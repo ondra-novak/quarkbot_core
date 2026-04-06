@@ -118,8 +118,13 @@ bool ConfiguredDataSource::read_line(std::string &out) {
     out.clear();
     char buf[4096];
     while (true) {
-        if (!gzgets(reinterpret_cast<gzFile>(_gz), buf, sizeof(buf)))
+        if (!gzgets(reinterpret_cast<gzFile>(_gz), buf, sizeof(buf))) {
+            int errnum = 0;
+            gzerror(reinterpret_cast<gzFile>(_gz), &errnum);
+            if (errnum != Z_OK && errnum != Z_STREAM_END)
+                throw std::runtime_error("gz read error in ConfiguredDataSource::read_line");
             return !out.empty();
+        }
         out += buf;
         // gzgets stops at newline or EOF; if we got a newline we're done
         if (!out.empty() && out.back() == '\n') {
