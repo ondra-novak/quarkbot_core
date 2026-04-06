@@ -7,9 +7,9 @@ namespace quarkbot {
 
 IMarketInstrument::Info InstrumentSpec::resolve(IExchange &exchange) const {
     IMarketInstrument::Info info;
-    static_cast<ContractInfo &>(info).type = type;
-    static_cast<ContractInfo &>(info).multiplier = multiplier;
-    static_cast<ContractInfo &>(info).tick_scale = tick_scale;
+    info.type = type;
+    info.multiplier = multiplier;
+    info.tick_scale = tick_scale;
     info.name = name;
     info.quote_currency = exchange.create_currency(quote_currency);
     info.pnl_currency = exchange.create_currency(pnl_currency);
