@@ -1,6 +1,7 @@
 #include "simtradableinstrument.hpp"
 #include "ifc/account.hpp"
 #include "ifc/execution_worker.hpp"
+#include "ifc/market_events.hpp"
 #include "ifc/order.hpp"
 #include "ifc/types.hpp"
 #include "siminstrument.hpp"
@@ -12,7 +13,7 @@
 #include <stdexcept>
 namespace quarkbot {
 
-using WalletInfo = IAccount::WalletInfo;
+using WalletInfo = SimAccount::WalletInfoExt;
 
 void SimTradableInstrument::report_fill(const Fill &fill) {
     const auto &info = _instrument->get_info();
@@ -71,13 +72,11 @@ SimTradableInstrument::OrderState::OrderState(OrderParametersGen<Decimal> params
             ,_worker(std::move(worker)) {}
 
 coro::coroutine<void, coro::pmr_allocator<>> SimTradableInstrument::coro_report_fill(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument, Order ord, Fill fill ) {
-    instrument->flush_orders_stats();
     instrument->report_fill(fill);
     ord.update_order(std::move(fill));
     co_return;
 }
 coro::coroutine<void, coro::pmr_allocator<>> SimTradableInstrument::coro_report_status(coro::pmr_allocator<>,std::shared_ptr<SimTradableInstrument> instrument, Order ord,OrderStatusUpdate update) {
-    instrument->flush_orders_stats();
     ord.update_order(std::move(update));
     if (instrument->liquidation_order && ord == *instrument->liquidation_order && ord.done()) {
         instrument->liquidation_order.reset();
@@ -85,45 +84,10 @@ coro::coroutine<void, coro::pmr_allocator<>> SimTradableInstrument::coro_report_
     co_return;
 }
 coro::coroutine<void, coro::pmr_allocator<>> SimTradableInstrument::coro_report_init(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderInitialUpdate update) {
-    instrument->flush_orders_stats();
     ord.update_order(std::move(update));
     co_return;
 }
 
-void SimTradableInstrument::flush_orders_stats() {
-    if (_new_order_stats) {
-        const auto &info = _instrument->get_info();
-        bool leveraged = info.is_leveraged();
-        bool has_wallet = info.asset_has_wallet();
-        if (leveraged) {
-            if (!_account->update_wallet(info.pnl_currency, [&](WalletInfo &w){
-                Decimal v = _position.get_volume(info);
-                Decimal b = _new_order_stats->buy_turnover;
-                Decimal s = _new_order_stats->sell_turnover;
-                if (_position.side == Side::buy) b+=v;
-                else if (_position.side == Side::sell) s+=v;
-                Decimal m = std::max(b,s)* reciprocal(info.leverage);
-                w.initial_margin = m;
-            },true)) {
-                liquidation();
-            }
-        } else {
-            _position_blocked = _new_order_stats->sell_quantity;
-            _account->update_wallet(info.quote_currency, [&](WalletInfo &w){
-                w.order_blocked = _new_order_stats->buy_turnover;
-            });
-            if (has_wallet) {
-                _account->update_wallet(info.quote_currency, [&](WalletInfo &w){
-                    w.order_blocked = _new_order_stats->sell_quantity;
-                });
-            } else{
-                _position_blocked = _new_order_stats->sell_quantity;
-            }
-        }
-        _new_order_stats.reset();
-    }
-
-}
 
 bool SimTradableInstrument::cancel_all_orders() {
     return _instrument->get_sim_exchange()->cancel_all_orders(shared_from_this());
@@ -160,7 +124,6 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
     );
 
     Order new_order(st);    
-    Decimal turnover = new_order.get_turnover(_last_price);
 
     const Info &info = _instrument->get_info();    
 
@@ -184,6 +147,7 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
                 new_order.update_order(OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::too_small});
                 return new_order;
             }
+            st->_turnover = info.calc_turnover_pnl_currency(params.limit_price, params.quantity);
         }
         if (is_stop_order(params.type)) {
             if (params.stop_price <= 0) {
@@ -194,38 +158,18 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
                 new_order.update_order(OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::too_small});
                 return new_order;
             }
+            st->_turnover = std::max(st->_turnover, info.calc_turnover_pnl_currency(params.stop_price, params.quantity));
         }
-    }
-
-    auto insufficient_funds = [&]{
-        new_order.update_order(OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::insufficient_funds});
-    };
-
-    if (info.is_leveraged()) {
-        _account->update_wallet(info.pnl_currency.id, [&](WalletInfo &w) {
-            Decimal margin = turnover * reciprocal(info.leverage);
-            if (w.remaining_balance() < margin ) insufficient_funds();
-            else w.initial_margin += margin;
-        });
     } else {
-        if (params.side == Side::buy) {
-            _account->update_wallet(info.quote_currency.id, [&](WalletInfo &w) {
-                if (w.remaining_balance() < turnover) insufficient_funds();
-                else w.order_blocked += turnover;
-            });
-        } else if (params.side == Side::sell) {
-            if (info.asset_has_wallet()) {
-                _account->update_wallet(info.asset_wallet->id, [&](WalletInfo &w){
-                    if (w.remaining_balance() < params.quantity) insufficient_funds();
-                    else w.order_blocked += params.quantity;
-                });
-            } else {
-                if (_position.amount - _position_blocked < params.quantity) insufficient_funds();
-                else _position_blocked += _position_blocked;
-            }
-        }
+        st->_turnover = info.calc_turnover_pnl_currency(_last_price, params.quantity);
     }
-    _instrument->get_sim_exchange()->place_order(new_order);
+
+    if (!add_order_blocking(new_order)) {
+        new_order.update_order(OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::insufficient_funds});
+        return new_order;
+    }
+
+    _instrument->get_sim_exchange()->place_order(new_order);    
     return new_order;
             
 }
@@ -263,8 +207,9 @@ void SimTradableInstrument::on_order_fill(const Order &ord, const Fill &fill) {
 }
 
 void SimTradableInstrument::on_order_status(const Order &ord, const OrderStatusUpdate &status){
-    OrderEx o(ord);
+    OrderEx o(ord);    
     auto st = o.get_state();
+    if (is_done_status(status.status)) remove_order_blocing(o);
     st->_worker->run(coro_report_status(&mem_pool,shared_from_this(),ord,status));
 }
 void SimTradableInstrument::on_order_accept(const Order &ord, const OrderInitialUpdate &init) {
@@ -273,22 +218,89 @@ void SimTradableInstrument::on_order_accept(const Order &ord, const OrderInitial
     st->_worker->run(coro_report_init(&mem_pool,shared_from_this(),ord, init));
 }
 
-void SimTradableInstrument::on_start_update_blocks() {
-    _new_order_stats.emplace();
-}
 
-void SimTradableInstrument::on_update_blocks(Side side, Decimal quantity, Decimal price) {
-    const Info &info = get_info();
-    if (side == Side::buy) {
-        _new_order_stats->buy_turnover += info.calc_turnover_pnl_currency(price,quantity);
-        _new_order_stats->buy_quantity += quantity;
-    } else if (side == Side::sell) {
-        _new_order_stats->sell_turnover += info.calc_turnover_pnl_currency(price,quantity);
-        _new_order_stats->sell_quantity += quantity;
+bool SimTradableInstrument::add_order_blocking(OrderEx ord) {
+    auto st = ord.get_state();
+    const auto &info = get_info();
+    auto prev_st = std::static_pointer_cast<OrderState>(st->replaced_order.lock());
+    Decimal sub_to = prev_st?prev_st->_turnover:0;
+    Decimal to = st->_turnover - sub_to;
+    bool ok = true;
 
+    if (info.is_leveraged()) {
+        _account->update_wallet(info.pnl_currency, [&](WalletInfo &w){
+            Decimal m = to * reciprocal(info.leverage);
+            Decimal b = w.margin_buys;
+            Decimal s = w.margin_sells;
+            if (st->parameters.side == Side::buy) b += m;
+            else if (st->parameters.side == Side::sell) s += m;            
+            Decimal im =  w.maintenance_margin + std::max(
+                std::max(b- (_position.side == Side::buy?b-_position.get_volume(info):0_dec),0_dec),
+                std::max(s- (_position.side == Side::sell?s-_position.get_volume(info):0_dec),0_dec));            
+            if (w.balance + w.unrealized_pnl < im) ok = false;
+            else {
+                w.initial_margin = im;
+                w.margin_buys = b;
+                w.margin_sells =s;
+            }
+        });
+    } else {
+        if (st->parameters.side == Side::buy) {
+            _account->update_wallet(info.quote_currency, [&](WalletInfo &w){
+                if (w.balance + w.unrealized_pnl + w.order_blocked < to) ok = false;
+                w.order_blocked += to;
+            });
+        }
+        if (info.asset_has_wallet()) {
+            _account->update_wallet(*info.asset_wallet, [&](WalletInfo &w){
+                if (w.balance + w.unrealized_pnl + w.order_blocked < st->parameters.quantity) ok = false;
+                w.order_blocked += st->parameters.quantity;
+            });
+        } else {
+            if (_position.amount - _position_blocked < st->parameters.quantity) ok = false;
+            else _position_blocked += st->parameters.quantity;
+        }
     }
-}
+    return ok;
 
+}
+void SimTradableInstrument::remove_order_blocing(OrderEx ord) {
+    auto st = ord.get_state();
+    const auto &info = get_info();
+    auto prev_st = std::static_pointer_cast<OrderState>(st->replaced_order.lock());
+    //note called before status applied, so check current status to determine whether order has been alredy opened - we know, that new status is done
+    Decimal sub_to = prev_st && st->status == OrderStatus::sent?prev_st->_turnover:0;
+    Decimal to = st->_turnover - sub_to;
+
+    if (info.is_leveraged()) {
+        _account->update_wallet(info.pnl_currency, [&](WalletInfo &w){
+            Decimal m = to * reciprocal(info.leverage);
+            Decimal b = w.margin_buys;
+            Decimal s = w.margin_sells;
+            if (st->parameters.side == Side::buy) b -= m;
+            else if (st->parameters.side == Side::sell) s -= m;            
+            Decimal im =  w.maintenance_margin + std::max(
+                std::max(b- (_position.side == Side::buy?b-_position.get_volume(info):0_dec),0_dec),
+                std::max(s- (_position.side == Side::sell?s-_position.get_volume(info):0_dec),0_dec));            
+            w.initial_margin = im;
+            w.margin_buys = b;
+            w.margin_sells =s;
+        });
+    } else {
+        if (st->parameters.side == Side::buy) {
+            _account->update_wallet(info.quote_currency, [&](WalletInfo &w){
+                w.order_blocked -= to;
+            });
+        }
+        if (info.asset_has_wallet()) {
+            _account->update_wallet(*info.asset_wallet, [&](WalletInfo &w){
+                w.order_blocked -= st->parameters.quantity;
+            });
+        } else {            
+             _position_blocked -= st->parameters.quantity;
+        }
+    }    
+}
 
 }
 

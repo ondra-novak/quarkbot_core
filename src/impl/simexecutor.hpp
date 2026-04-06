@@ -4,6 +4,7 @@
 #include "ifc/market_events.hpp"
 #include "ifc/order.hpp"
 #include "ifc/underlying.hpp"
+#include "impl/simaccount.hpp"
 #include <chrono>
 #include <memory>
 namespace quarkbot {
@@ -52,9 +53,10 @@ protected:
     void create_fill(ActiveOrder &order, Decimal price, Decimal quantity, Timestamp tp, bool taker);
 
     OrderType real_order_type(const ActiveOrder &order);
-    void update_order_blocking(const ActiveOrder & aord);    
 
     SimTradableInstrument &report(const ActiveOrder &aord);
+
+    
 
 
     static PSimInstrument extract_instrument(const Order &ord);

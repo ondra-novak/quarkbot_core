@@ -11,6 +11,8 @@ struct UnderlyingCurrency {
     std::string unified_id;
     ///associated exchange
     PExchange exchange;
+
+    bool operator==(const UnderlyingCurrency &) const = default;
 };
 
 }

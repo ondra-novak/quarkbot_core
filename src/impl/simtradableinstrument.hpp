@@ -6,6 +6,7 @@
 #include "ifc/order.hpp"
 #include "ifc/tradable_instrument.hpp"
 #include "ifc/types.hpp"
+#include "ifc/underlying.hpp"
 #include "simexecutor.hpp"
 #include "utils/decimal.hpp"
 
@@ -50,9 +51,7 @@ public:
 
     void on_order_fill(const Order &ord, const Fill &fill);
     void on_order_status(const Order &ord, const OrderStatusUpdate &status);        
-    void on_order_accept(const Order &ord, const OrderInitialUpdate &status);    
-    void on_start_update_blocks();    
-    void on_update_blocks(Side side, Decimal quantity, Decimal price);  
+    void on_order_accept(const Order &ord, const OrderInitialUpdate &status);        
 
 protected:
     std::shared_ptr<SimInstrument> _instrument;
@@ -67,6 +66,7 @@ protected:
     class OrderState: public Order::State {
     public:
         PExecutionWorker _worker;
+        Decimal _turnover;
 
         OrderState(OrderParametersGen<Decimal> params, 
               std::shared_ptr<SimTradableInstrument> instrument,
@@ -88,21 +88,16 @@ protected:
         }
     };
 
+    bool add_order_blocking(OrderEx ord);
+    void remove_order_blocing(OrderEx ord);
 
-    struct NewOrdersStats {
-        Decimal buy_turnover, buy_quantity;
-        Decimal sell_turnover, sell_quantity;
-    };
-
-    std::optional<NewOrdersStats> _new_order_stats;
-    void flush_orders_stats();
-
-    static coro::coroutine<void, coro::pmr_allocator<> > coro_report_fill(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument, Order ord, Fill fill );
+    static coro::coroutine<void, coro::pmr_allocator<>> coro_report_fill(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument, Order ord, Fill fill );
     static coro::coroutine<void, coro::pmr_allocator<>> coro_report_status(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderStatusUpdate update);
     static coro::coroutine<void, coro::pmr_allocator<>> coro_report_init(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderInitialUpdate update);
 
     void liquidation();
     std::optional<Order> liquidation_order; 
+
 
     virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderState> old_state, std::string_view name = {});
     

@@ -34,7 +34,6 @@ namespace quarkbot {
         if (match_order(aord,true)) return;
 
         _active_orders.push_back(std::move(aord));
-        update_order_blocking(_active_orders.back());
 
     }
     void SimExecutor::replace_order(Order ord, Order prev_order) {
@@ -66,7 +65,6 @@ namespace quarkbot {
             _active_orders.erase(found);
         } else {
             *found = std::move(aord);
-            update_order_blocking((*found));
         }
 
     }
@@ -78,7 +76,6 @@ namespace quarkbot {
         auto aord = std::move(*found);
         _active_orders.erase(found);
         report(aord).on_order_status(aord.ord, {OrderStatus::canceled});
-        update_order_blocking(aord);
     }
 
     bool SimExecutor::validate_order(ActiveOrder &order) {
@@ -270,26 +267,6 @@ namespace quarkbot {
     }
 
 
-    void SimExecutor::update_order_blocking(const ActiveOrder & aord) {        
-        Position buys {Side::buy};
-        Position sells {Side::sell};
-        auto instrument = aord.ord.get_instrument();
-        const auto &info = instrument->get_info();
-        for (auto &x: _active_orders) {
-            if (x.ord.get_instrument() == instrument) {
-                const auto &p = x.ord.get_parameters();
-                Position &cur = p.side == Side::sell?sells:buys;
-                auto t = real_order_type(x);
-                auto leaves = p.quantity - x.filled;
-                if (is_limit_order(t)) {
-                    cur.update(cur.side, p.limit_price, leaves, info);
-                } else if (is_stop_order(t)) {
-                    cur.update(cur.side, p.stop_price, leaves, info);
-                }
-            }
-        }
-
-    }       
 
 SimTradableInstrument &SimExecutor::report(const ActiveOrder &aord) {
     return *static_cast<SimTradableInstrument *>(aord.ord.get_instrument().get());

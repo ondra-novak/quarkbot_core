@@ -13,6 +13,12 @@ namespace quarkbot {
 class SimAccount final: public IAccount, public std::enable_shared_from_this<SimAccount> {
 public:
 
+
+    struct WalletInfoExt : WalletInfo {
+        Decimal margin_buys = {};
+        Decimal margin_sells = {};
+    };
+
     virtual std::string_view get_name() const override {
         return _name;
     }
@@ -34,7 +40,7 @@ public:
         iter->second.balance -= amount;
         auto to_iter = to_acc->_wallet.find(currency.id);
         if (to_iter == to_acc->_wallet.end()) {
-            to_acc->_wallet[currency.id] = WalletInfo{amount};
+            to_acc->_wallet[currency.id] = WalletInfoExt{{amount}};
         } else {
             to_iter->second.balance += amount;
         }
@@ -48,7 +54,7 @@ public:
 
 
     ///update wallet
-    template<std::invocable<WalletInfo &> Callback>
+    template<std::invocable<WalletInfoExt &> Callback>
     bool update_wallet(const std::string &id, Callback &&cb, bool create = false) {
         auto iter = _wallet.find(id);
         if (iter == _wallet.end()) {
@@ -60,7 +66,7 @@ public:
         return check_bankruptcy(iter->second);
     }
 
-    template<std::invocable<WalletInfo &> Callback>
+    template<std::invocable<WalletInfoExt &> Callback>
     bool update_wallet(const UnderlyingCurrency &currency, Callback &&cb, bool create = false) {
         return update_wallet(currency.id, std::forward<Callback>(cb), create);
     }
@@ -78,7 +84,7 @@ public:
 
 protected:    
     std::string _name;
-    std::unordered_map<std::string, WalletInfo> _wallet;
+    std::unordered_map<std::string, WalletInfoExt> _wallet;
 };
 
 }

@@ -4,6 +4,7 @@
 #include "ifc/underlying.hpp"
 #include "types.hpp"
 #include "ifc/streaming.hpp"
+#include "utils/decimal.hpp"
 #include <memory>
 namespace quarkbot {
 
@@ -33,6 +34,14 @@ public:
         bool is_leveraged() const {return leverage > 0;}
         ///there is a wallet for asset
         bool asset_has_wallet() const {return !is_leveraged() && asset_wallet.has_value();}
+
+        Decimal calc_initial_margin(Decimal price, Decimal quantity) const {
+            if (leverage) {
+                return calc_turnover_pnl_currency(price, quantity) * reciprocal(leverage);
+            } else {
+                return 0;
+            }
+        }
     
     };
     virtual ~IMarketInstrument() = default;
