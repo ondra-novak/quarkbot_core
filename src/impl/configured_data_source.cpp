@@ -121,6 +121,7 @@ bool ConfiguredDataSource::read_line(std::string &out) {
         if (!gzgets(reinterpret_cast<gzFile>(_gz), buf, sizeof(buf))) {
             int errnum = 0;
             gzerror(reinterpret_cast<gzFile>(_gz), &errnum);
+            // Z_OK or Z_STREAM_END both indicate clean EOF (behaviour varies by zlib version)
             if (errnum != Z_OK && errnum != Z_STREAM_END)
                 throw std::runtime_error("gz read error in ConfiguredDataSource::read_line");
             return !out.empty();
