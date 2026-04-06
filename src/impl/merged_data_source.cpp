@@ -11,9 +11,11 @@ MergedDataSource::MergedDataSource(std::vector<std::shared_ptr<IBacktestDataSour
     }
 }
 
+// Note: events with equal timestamps are returned in unspecified order
+// (std::priority_queue provides no stability guarantee).
 std::optional<IBacktestDataSource::Event> MergedDataSource::next_event() {
     if (_heap.empty()) return std::nullopt;
-    auto top = _heap.top();
+    auto top = std::move(const_cast<PeekedEvent&>(_heap.top()));
     _heap.pop();
     auto refill = _sources[top.source_idx]->next_event();
     if (refill) _heap.push(PeekedEvent{std::move(*refill), top.source_idx});
