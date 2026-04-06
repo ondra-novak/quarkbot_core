@@ -19,7 +19,7 @@ namespace quarkbot {
 class SimInstrument;
 class SimTradableInstrument;
 
-class SimExchange: public IExchange {
+class SimExchange final: public IExchange {
 public:
     
     using QuotePublisher = LockFreePublisher<Quote, 1>;
@@ -40,7 +40,7 @@ public:
     void set_instruments(std::span<IMarketInstrument::Info> instruments);
 
     ///create account, set up initial wallet
-    PAccount create_account(const std::string &name, std::span<std::pair<UnderlyingCurrency, Decimal> > wallet);
+    PAccount create_account(std::string name, std::span<std::pair<UnderlyingCurrency, Decimal> > wallet);
 
     void on_event(const std::string &instrument, Quote qt);
     void on_event(const std::string &instrument, Trade tr);

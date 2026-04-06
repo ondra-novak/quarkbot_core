@@ -20,7 +20,7 @@ namespace quarkbot {
 class SimInstrument;
 class SimAccount;
 
-class SimTradableInstrument: public ITradableInstrument, public std::enable_shared_from_this<SimTradableInstrument> {
+class SimTradableInstrument final: public ITradableInstrument, public std::enable_shared_from_this<SimTradableInstrument> {
 public:
     SimTradableInstrument(std::shared_ptr<SimInstrument> instr, std::shared_ptr<SimAccount> account)
         :_instrument(std::move(instr)), _account(std::move(account)) {}

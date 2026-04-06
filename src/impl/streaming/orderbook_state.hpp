@@ -14,7 +14,7 @@ class OrderbookState {
 public:
 
     static constexpr std::size_t increment_queue_len = 1024;
-    using IncrementPublisher = LockFreePublisher<OrderBookEntry, increment_queue_len>;
+    using IncrementPublisher = LockFreePublisher<OrderBookIncrement, increment_queue_len>;
     using SnapshotPublisher = LockFreePublisher<OrderBookView, 1>;
 
     static constexpr std::size_t max_levels = 64;
@@ -30,15 +30,15 @@ public:
         return std::make_shared<SnapshotPublisher>();
     }
 
-    bool accept_increment(std::span<OrderBookEntry> states) {
+    bool accept_increment(std::span<OrderBookIncrement> states) {
 
         bool any = false;
 
-        _manager.enum_all_publishers(_instrument, {}, OrderBookEntry::type, 
+        _manager.enum_all_publishers(_instrument, {}, OrderBookIncrement::type, 
             [&](const StreamParams *,  const PublisherManager::PPublisher &pub){
                 IncrementPublisher &p = static_cast<IncrementPublisher &>(*pub);
                 for (auto &x: states) {
-                    p.write([&](OrderBookEntry &t) noexcept{
+                    p.write([&](OrderBookIncrement &t) noexcept{
                         t = x;return true;
                     });
                 }

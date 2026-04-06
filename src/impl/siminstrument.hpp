@@ -8,7 +8,7 @@ namespace quarkbot {
 
 
 
-class SimInstrument: public IMarketInstrument, public std::enable_shared_from_this<SimInstrument> {
+class SimInstrument final: public IMarketInstrument, public std::enable_shared_from_this<SimInstrument> {
 public:
 
 

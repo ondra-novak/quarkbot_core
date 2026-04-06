@@ -32,11 +32,11 @@ struct OrderBookLevel {
     Decimal size = {};  // new size (if <= 0 then remove the level)
 };
 
-struct OrderBookEntry : OrderBookLevel, StreamTypeItem {
+struct OrderBookIncrement : OrderBookLevel, StreamTypeItem {
     Side side = {};
     std::chrono::system_clock::time_point time;
 
-    OrderBookEntry &view() {return *this;}
+    OrderBookIncrement &view() {return *this;}
     static constexpr Type type = "orderbook_increment";
 };
 
