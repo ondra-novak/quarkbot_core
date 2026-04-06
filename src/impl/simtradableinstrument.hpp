@@ -34,10 +34,8 @@ public:
         return _instrument;
     }
      
-    virtual Info get_info() const override ;
-    virtual PExchange get_exchange() const override ;
-    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams &params) override ;
-    virtual awaitable<PTradableInstrument> create_tradable_instrument(PAccount account) override ;
+    
+    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) override ;
     virtual PAccount get_account() const override ;
     virtual PMarketInstrument get_instrument() const override ;
     virtual Order place_order(const OrderRequest &params, Order order_to_replace, std::string_view name = {}) override;
@@ -59,6 +57,7 @@ protected:
 
     Position _position;
     Decimal _position_blocked = {}; //for spot
+    Decimal _upnl;
 
     Decimal _last_price = {};
 

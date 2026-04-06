@@ -4,6 +4,7 @@
 #include "execution_worker.hpp"
 #include "defs.hpp"
 #include "memory.hpp"
+#include <functional>
 #include <memory>
 #include <memory_resource>
 #include <vector>
@@ -23,6 +24,9 @@ namespace quarkbot {
             void *operator new(std::size_t sz) {return mem_pool.allocate(sz);}
             void operator delete(void *ptr, std::size_t sz) {return mem_pool.deallocate(ptr, sz);}
         };
+
+        StrategyFragment() = default;
+        StrategyFragment(coro::coroutine<void> x):coro::coroutine<void>(std::move(x)) {}
     };
 
    
@@ -42,36 +46,11 @@ namespace quarkbot {
         ///current strategy mode
         StrategyMode mode;
 
-
-
-        ///Start strategy fragment
+        ///co_await on this to wait on stop signal
         /**
-            Use this function to start strategy - initial fragment
-            You can start strategy fragments by calling them directly if they are called in context of other fragment
-            This function is useful to start fragmen from different thread
+        There can be multiple awaiting coroutines. All these coroutines are resumed on stop signal
          */
-        void start(StrategyFragment s) {exec_worker->run(std::move(s));}
-
-        ///Define startegy fragment or awaitable function which is executed when strategy is stopped
-        /**
-        
-        @code 
-        StrategyFragment stop_function() {
-            //...
-        }
-        context.on_stop(stop_function());
-        @endcode
-
-        The strategy is considered stopped when this function finishes. 
-
-        @note there can be only one stop function
-        @note if the stop function doesn't exits, there is no way to stop strategy at all
-        @note during stop execution, streams can be already stopped, but it should be possible to cancel orders
-        */
-
-        void on_stop(awaitable<void> s) {on_stop_awaitable = std::move(s);}
-    protected:
-        awaitable<void> on_stop_awaitable;
+        std::function<awaitable<coro::void_type>()> stop_signal;
 
     };
 

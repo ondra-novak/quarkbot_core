@@ -17,10 +17,13 @@ public:
     virtual awaitable<bool> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr = nullptr) override;
     virtual void cancel(coro::cancel_signal *cancel_signal) override;
 
+    void attach_to_thread();
+
 
     void flush_queue();
     void set_time(std::chrono::system_clock::time_point tp);
 
+    
 protected:
 
     coro::manual_scheduler<std::chrono::system_clock::time_point> _scheduler;

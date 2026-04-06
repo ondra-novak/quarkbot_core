@@ -12,9 +12,12 @@ struct StreamTypeItem {
 
 
 template<typename T>
-concept StreamType = std::derived_from<T, StreamTypeItem> && std::is_trivial_v<T> && requires(T v) {
+concept is_trivially_destructible = std::is_trivially_destructible_v<T>;
+
+template<typename T>
+concept StreamType = std::derived_from<T, StreamTypeItem> && requires(T v) {
     {T::type}->std::convertible_to<typename T::Type>;    
-    {v.view()};
+    {v.view()} -> is_trivially_destructible;
 };
 
 

@@ -1,18 +1,24 @@
 #include "simexchange.hpp"
+#include "ifc/underlying.hpp"
+#include "impl/simaccount.hpp"
 #include "siminstrument.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/market_events.hpp"
 #include "ifc/stream_defs.hpp"
 #include "impl/streaming/publisher_manager.hpp"
 #include "simtradableinstrument.hpp"
+#include <algorithm>
 #include <chrono>
+#include <initializer_list>
+#include <iterator>
 #include <memory>
 #include <system_error>
+#include <unordered_set>
 
 namespace quarkbot {
 
 template<typename T, typename Pub>
-std::shared_ptr<IEventStreamBase> SimExchange::connect_to(std::shared_ptr<SimInstrument> instrument, const StreamParams *params) {
+std::unique_ptr<IEventStreamBase> SimExchange::connect_to(std::shared_ptr<SimInstrument> instrument, const StreamParams *params) {
     PMarketInstrument gen_inst(instrument);
     auto r =_streams.connect_to(gen_inst, {}, T::type, params);
     if (!r) {
@@ -23,23 +29,30 @@ std::shared_ptr<IEventStreamBase> SimExchange::connect_to(std::shared_ptr<SimIns
 }
 
 
+PAccount SimExchange::create_account(std::string name, std::span<std::pair<std::string, Decimal> > wallet) {
+    std::vector<std::pair<UnderlyingCurrency, Decimal> > trn_wallet;
+    std::transform(wallet.begin(),wallet.end(),std::back_inserter(trn_wallet), [&](const auto &x){
+        return std::pair(create_currency(x.first), x.second);
+    });
+    auto simacc = std::make_shared<SimAccount>(std::move(name),trn_wallet);
+    return simacc;
+}
 
 
-
-std::shared_ptr<IEventStreamBase> SimExchange::subscribe_stream(
+std::unique_ptr<IEventStreamBase> SimExchange::subscribe_stream(
         std::shared_ptr<SimInstrument> instrument,
         std::shared_ptr<SimAccount> /*account*/,
          StreamTypeItem::Type type,
-          const StreamParams &params) {
+          const StreamParams *params) {
 
     if (type == Quote::type) {
-        return connect_to<Quote, QuotePublisher>(instrument,&params);
+        return connect_to<Quote, QuotePublisher>(instrument,params);
     } else if (type == Trade::type) {
-        return connect_to<Trade, TradePublisher>(instrument, &params);
+        return connect_to<Trade, TradePublisher>(instrument, params);
     } else if (type == ClosedBar::type) {
-        return connect_to<ClosedBar, TradePublisher>(instrument, &params);
+        return connect_to<ClosedBar, TradePublisher>(instrument, params);
     } else if (type == TradeCounter::type) {
-        return connect_to<TradeCounter, TradeCounterPublisher>(instrument, &params);
+        return connect_to<TradeCounter, TradeCounterPublisher>(instrument, params);
     } else {
         return {};
     }
@@ -144,6 +157,45 @@ void SimExchange::place_order(Order ord) {
         _executor.place_order(ord);
     }
 }
+
+PMarketInstrument SimExchange::create_instrument(IMarketInstrument::Info def) {
+    auto instr =  std::make_shared<SimInstrument>(def, shared_from_this());
+    _instrument_names.emplace(def.name, instr);
+    return instr;
+}
+UnderlyingCurrency SimExchange::create_currency(std::string_view name, bool is_unified) {
+    return UnderlyingCurrency{std::string(name), is_unified?std::string(name):std::string(), this};
+}
+PAccount SimExchange::create_account(const std::string &name, const std::string &) const {
+    return std::make_shared<SimAccount>(name, std::span<std::pair<UnderlyingCurrency, Decimal> >{});
+}
+std::vector<PMarketInstrument> SimExchange::get_market_instruments() const {
+    std::vector<PMarketInstrument> out;
+    for (auto &[k,v]:_instrument_names) {
+        auto lk = v.lock();
+        if (lk) out.push_back(std::move(lk));
+    }
+    return out;
+}
+std::vector<UnderlyingCurrency> SimExchange::get_all_currencies() const {
+    std::unordered_set<UnderlyingCurrency, UnderlyingCurrency::Hash> map;
+    for (auto &[k,v]:_instrument_names) {
+        auto lk = v.lock();
+        if (lk) {
+            const auto &info = lk->get_info();
+            map.insert(info.pnl_currency);
+            map.insert(info.quote_currency);
+            if (info.asset_has_wallet()) {
+                map.insert(*info.asset_wallet);
+            }
+        }
+    }
+    return {map.begin(), map.end()};
+}
+std::string_view SimExchange::get_name() const {
+    return "simulator";
+}
+
 
 
 }

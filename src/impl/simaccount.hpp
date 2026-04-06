@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ifc/account.hpp"
+#include "ifc/defs.hpp"
 #include "ifc/underlying.hpp"
 #include "utils/decimal.hpp"
 #include <concepts>
@@ -14,10 +15,20 @@ class SimAccount final: public IAccount, public std::enable_shared_from_this<Sim
 public:
 
 
+
     struct WalletInfoExt : WalletInfo {
         Decimal margin_buys = {};
         Decimal margin_sells = {};
     };
+
+    SimAccount(std::string name, std::span<std::pair<UnderlyingCurrency, Decimal> > wallet)
+        :_name(std::move(name))
+    {
+        for (auto &x: wallet) {
+            update_wallet(x.first,[&](WalletInfoExt &w){w.balance = x.second;},true);
+        }
+    }
+
 
     virtual std::string_view get_name() const override {
         return _name;
@@ -67,7 +78,7 @@ public:
     }
 
     template<std::invocable<WalletInfoExt &> Callback>
-    bool update_wallet(const UnderlyingCurrency &currency, Callback &&cb, bool create = false) {
+    bool update_wallet(const UnderlyingCurrency &currency, Callback &&cb, bool create) {
         return update_wallet(currency.id, std::forward<Callback>(cb), create);
     }
 

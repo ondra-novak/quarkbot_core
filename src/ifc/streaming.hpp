@@ -2,6 +2,7 @@
 
 #include "basic_coro/awaitable.hpp"
 #include "ifc/stream_defs.hpp"
+#include <memory>
 namespace quarkbot {
 
 
@@ -20,7 +21,7 @@ public:
     Function can be called from any thread, causes that awaiting coroutine is resolved with false.
     Stream cannot be reopened.
      */
-    virtual void close();
+    virtual void close() = 0;
 };
 
 template<typename ViewType>
@@ -73,9 +74,12 @@ public:
     using ViewType = decltype(std::declval<T>().view());
 
     ///default constructor creates closed stream
-    EventStream():_stream(std::make_unique<IEventStream<ViewType>::Null>()) {}
+    EventStream():_stream(std::make_unique<typename IEventStream<ViewType>::Null>()) {}
     ///constructor from IEventStreamBase pointer, stream is open if pointer is not null
     EventStream(std::unique_ptr<IEventStream<ViewType> > stream):_stream(std::move(stream)) {}  
+
+    EventStream(std::unique_ptr<IEventStreamBase> stream)
+        :_stream(static_cast<IEventStream<ViewType> *>(stream.release())) {}
 
     ///check if stream is open
     bool is_open() const {return _stream->is_open();}

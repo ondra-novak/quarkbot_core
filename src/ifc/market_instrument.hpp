@@ -48,10 +48,10 @@ public:
 
     virtual PExchange get_exchange() const = 0;
 
-    virtual Info get_info() const = 0;
+    virtual const Info &get_info() const = 0;
 
     ///Internal
-    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams &params) = 0;
+    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) = 0;
     
     ///Create tradable instrument from the instrument
     /**
@@ -61,18 +61,10 @@ public:
     virtual awaitable<PTradableInstrument> create_tradable_instrument(PAccount account) = 0;
 
     ///Subscribe market event stream
-    /**
-    @tparam T type of item determines type of stream. 
-    @return shared pointer to IMarketEventStream handling stream of given type. Can't return nullptr, but for unsupported
-    streams, it can return dummy stream which throws exception on access    
-
-    @note The stream is returned already subscribed. You can start reading from it immediately. To unsubscribe, 
-    just destroy the pointer or call close() on the stream.
-     */
     template<StreamType T>
-    EventStream<T> subscribe() const {
+    EventStream<T> subscribe() {
         auto x =  subscribe_stream_internal(T::type, stream_params<T>);
-        if (x) return EventStream<T>(std::static_pointer_cast<typename EventStream<T>::ViewType>(x));
+        if (x) return EventStream<T>(std::move(x));
         else return EventStream<T>();
     }
 

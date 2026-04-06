@@ -1,6 +1,7 @@
 
 
 add_library (quarkbot_impl  
+    mmbot_data_source.cpp
     backtest_executor.cpp
     simexecutor.cpp
     simexchange.cpp

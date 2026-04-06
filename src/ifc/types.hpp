@@ -27,16 +27,16 @@ enum class InstrumentType: int8_t {
 };
 
 struct ContractInfo {
-    InstrumentType type;
-    Decimal multiplier;      ///contract multiplier (amount * multiplier * price = turnover)
-    Decimal tick_scale;      ///price multiplier
+    InstrumentType type = InstrumentType::contract;
+    Decimal multiplier = 1;      ///contract multiplier (amount * multiplier * price = turnover)
+    Decimal tick_scale = 1;      ///price multiplier
 
     Decimal calc_pnl(Decimal open_price, Decimal close_price, Decimal amount) const {
         open_price *= tick_scale;
         close_price *= tick_scale;
         if (type == InstrumentType::spot || type == InstrumentType::contract) {
             return (close_price - open_price) * amount * multiplier;
-        } else if (type == InstrumentType::inverse_contract) {
+        } else if (type == InstrumentType::inverse_contract && amount) {
             return (reciprocal(open_price) - reciprocal(close_price)) * amount * multiplier;
         }
         return {};

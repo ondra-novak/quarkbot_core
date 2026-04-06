@@ -19,7 +19,7 @@ namespace quarkbot {
 class SimInstrument;
 class SimTradableInstrument;
 
-class SimExchange final: public IExchange {
+class SimExchange final: public IExchange, public std::enable_shared_from_this<SimExchange> {
 public:
     
     using QuotePublisher = LockFreePublisher<Quote, 1>;
@@ -33,14 +33,15 @@ public:
     virtual std::vector<UnderlyingCurrency> get_all_currencies() const override;
     virtual std::string_view get_name() const override;
 
-    std::shared_ptr<IEventStreamBase> subscribe_stream(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account, StreamTypeItem::Type type, const StreamParams &params);
+    std::unique_ptr<IEventStreamBase> subscribe_stream(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account, StreamTypeItem::Type type, const StreamParams *params);
     PTradableInstrument create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account);
 
-    ///Sets instruments , creates instrument map (removes existing)
-    void set_instruments(std::span<IMarketInstrument::Info> instruments);
+    PMarketInstrument create_instrument(IMarketInstrument::Info def);
+    UnderlyingCurrency create_currency(std::string_view name, bool is_unified = true);
+    
 
     ///create account, set up initial wallet
-    PAccount create_account(std::string name, std::span<std::pair<UnderlyingCurrency, Decimal> > wallet);
+    PAccount create_account(std::string name, std::span<std::pair<std::string, Decimal> > wallet);
 
     void on_event(const std::string &instrument, Quote qt);
     void on_event(const std::string &instrument, Trade tr);
@@ -61,7 +62,7 @@ protected:
 
 
     template<typename T, typename Pub>
-    std::shared_ptr<IEventStreamBase> connect_to(std::shared_ptr<SimInstrument> instrument, const StreamParams *params);
+    std::unique_ptr<IEventStreamBase> connect_to(std::shared_ptr<SimInstrument> instrument, const StreamParams *params);
 
 
 };

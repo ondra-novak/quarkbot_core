@@ -266,6 +266,21 @@ namespace quarkbot {
         report(order).on_order_fill(order.ord, f);
     }
 
+bool SimExecutor::cancel_all(PTradableInstrument instrument) {
+    auto iter = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](const ActiveOrder &x) {
+        if (x.ord.get_instrument() == instrument)    {
+            report(x).on_order_status(x.ord,{OrderStatus::canceled});
+            return true;
+        }
+        return false;
+    });
+    if (iter != _active_orders.end()) {
+        _active_orders.erase(iter, _active_orders.end());
+        return true;
+    }
+    return false;
+}
+
 
 
 SimTradableInstrument &SimExecutor::report(const ActiveOrder &aord) {

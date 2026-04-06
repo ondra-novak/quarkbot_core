@@ -3,6 +3,7 @@
 #include "ifc/execution_worker.hpp"
 #include "ifc/market_events.hpp"
 #include "ifc/order.hpp"
+#include "ifc/streaming.hpp"
 #include "ifc/types.hpp"
 #include "siminstrument.hpp"
 #include "simaccount.hpp"
@@ -37,25 +38,17 @@ void SimTradableInstrument::report_fill(const Fill &fill) {
 void SimTradableInstrument::report_price(Decimal price) {
     _last_price = price;
     const auto &info = _instrument->get_info();
-    if (!_account->update_wallet(info.pnl_currency, [&](WalletInfo &w){w.unrealized_pnl = _position.get_upnl(price, info);})) {
+    Decimal upnl = _position.get_upnl(price, info);
+    if (!_account->update_wallet(info.pnl_currency, [&](WalletInfo &w){w.unrealized_pnl += upnl-_upnl ;},false)) {
         liquidation();
     }
+    _upnl = upnl;
 }
 
 
-SimTradableInstrument::Info SimTradableInstrument::get_info() const {
-        return _instrument->get_info();
-    }
-
-PExchange SimTradableInstrument::get_exchange() const {
-        return _instrument->get_exchange();
-    }
-std::shared_ptr<IEventStreamBase> SimTradableInstrument::subscribe_stream_internal(std::string_view type, const StreamParams &params) {
-        return _instrument->subscribe_stream_internal(type, params);
-    }
-awaitable<PTradableInstrument> SimTradableInstrument::create_tradable_instrument(PAccount account) {
-        return _instrument->create_tradable_instrument(account);
-    }
+std::unique_ptr<IEventStreamBase> SimTradableInstrument::subscribe_stream_internal(std::string_view , const StreamParams *) {
+        return nullptr;
+}
 PAccount SimTradableInstrument::get_account() const {
         return _account;
     }
@@ -125,7 +118,7 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
 
     Order new_order(st);    
 
-    const Info &info = _instrument->get_info();    
+    const auto &info = _instrument->get_info();    
 
 
     const auto &params = new_order.get_parameters();
@@ -228,7 +221,7 @@ bool SimTradableInstrument::add_order_blocking(OrderEx ord) {
     bool ok = true;
 
     if (info.is_leveraged()) {
-        _account->update_wallet(info.pnl_currency, [&](WalletInfo &w){
+        if (!_account->update_wallet(info.pnl_currency, [&](WalletInfo &w){
             Decimal m = to * reciprocal(info.leverage);
             Decimal b = w.margin_buys;
             Decimal s = w.margin_sells;
@@ -243,19 +236,19 @@ bool SimTradableInstrument::add_order_blocking(OrderEx ord) {
                 w.margin_buys = b;
                 w.margin_sells =s;
             }
-        });
+        },false)) return false;
     } else {
         if (st->parameters.side == Side::buy) {
-            _account->update_wallet(info.quote_currency, [&](WalletInfo &w){
+            if (_account->update_wallet(info.quote_currency, [&](WalletInfo &w){
                 if (w.balance + w.unrealized_pnl + w.order_blocked < to) ok = false;
                 w.order_blocked += to;
-            });
+            },false)) return false;
         }
         if (info.asset_has_wallet()) {
-            _account->update_wallet(*info.asset_wallet, [&](WalletInfo &w){
+            if (_account->update_wallet(*info.asset_wallet, [&](WalletInfo &w){
                 if (w.balance + w.unrealized_pnl + w.order_blocked < st->parameters.quantity) ok = false;
                 w.order_blocked += st->parameters.quantity;
-            });
+            },false)) return false;
         } else {
             if (_position.amount - _position_blocked < st->parameters.quantity) ok = false;
             else _position_blocked += st->parameters.quantity;
@@ -285,17 +278,17 @@ void SimTradableInstrument::remove_order_blocing(OrderEx ord) {
             w.initial_margin = im;
             w.margin_buys = b;
             w.margin_sells =s;
-        });
+        },false);
     } else {
         if (st->parameters.side == Side::buy) {
             _account->update_wallet(info.quote_currency, [&](WalletInfo &w){
                 w.order_blocked -= to;
-            });
+            },false);
         }
         if (info.asset_has_wallet()) {
             _account->update_wallet(*info.asset_wallet, [&](WalletInfo &w){
                 w.order_blocked -= st->parameters.quantity;
-            });
+            },false);
         } else {            
              _position_blocked -= st->parameters.quantity;
         }

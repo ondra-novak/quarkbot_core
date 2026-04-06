@@ -2,16 +2,24 @@
 
 namespace quarkbot {
 
+
 void BacktestExecutor::flush_queue() {
     while (!_dispatch_queue.empty()) {
         _dispatch_queue.pop();
     }
 }
+
+void BacktestExecutor::attach_to_thread() {
+    _current_worker = weak_from_this();;
+}
+
+
 void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
     flush_queue();
     auto r = _scheduler.advance_time_until(tp);
     while (r) {
         r(true).lazy_resume();        
+        r = _scheduler.advance_time_until(tp);
     }
     flush_queue();
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "basic_coro/concepts.hpp"
 #include "ifc/account.hpp"
 #include "ifc/backtest_data_source.hpp"
 #include "ifc/context.hpp"
@@ -14,7 +15,7 @@ namespace quarkbot {
     public:
         Backtest(std::shared_ptr<IBacktestDataSource> data_source,
             std::string account_name, 
-            std::span<std::pair<UnderlyingCurrency, Decimal> > wallet
+            std::span<std::pair<std::string, Decimal> > wallet
         );
 
         SimExchange &get_exchange() {return *_exchange.get();}
@@ -27,16 +28,14 @@ namespace quarkbot {
         
     protected:
 
-        class Context: public StrategyContext {
-        public:
-            using StrategyContext::on_stop_awaitable;
-        };
 
-        Context _context;
+        StrategyContext _context;
         std::shared_ptr<SimExchange> _exchange;
         std::shared_ptr<IBacktestDataSource> _data;
         std::shared_ptr<BacktestExecutor> _executor;
         PAccount _account;
+        std::vector<ResultAndExecWorker<coro::void_type> > _stop_awaiting;
+        bool _stopped = false;
 
     };
 

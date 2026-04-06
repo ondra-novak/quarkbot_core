@@ -73,7 +73,7 @@ namespace quarkbot {
             return true;            
         }
 
-        std::shared_ptr<IEventStreamBase> connect_to(const PMarketInstrument &instrument,
+        std::unique_ptr<IEventStreamBase> connect_to(const PMarketInstrument &instrument,
                                                     const PAccount &account,
                                                     StreamTypeItem::Type type,
                                                     const StreamParams *params) {

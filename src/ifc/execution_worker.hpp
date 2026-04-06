@@ -5,6 +5,7 @@
 #include <basic_coro/result_proxy.hpp>
 #include "defs.hpp"
 #include <coroutine>
+#include <exception>
 #include <memory>
 #include <stdexcept>
 namespace quarkbot {
@@ -15,7 +16,7 @@ public:
     virtual ~IExecutionWorker() = default;
 
     virtual void resume(std::coroutine_handle<> h) noexcept = 0;
-    void resume(coro::prepared_coro h) {h.release();}
+    void resume(coro::prepared_coro h) {resume(h.release());}
     ///Run a coroutine in this executable worker
     /**
         The coroutine runs in new worker detached from current worker
@@ -71,7 +72,9 @@ public:
     ResultAndExecWorker(coro::awaitable_result<T> res):coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>(
         std::move(res), {IExecutionWorker::current()})
     {
-        if (!this->_executor._worker) throw std::runtime_error("Function can be called only from executor worker");
+        if (!this->_executor._worker) {
+            this->_result(std::make_exception_ptr(std::runtime_error("Function can be called only from executor worker")));
+        }
     }
     ResultAndExecWorker():coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>({},{}) {}
     operator bool() const {return this->_result.operator bool();}

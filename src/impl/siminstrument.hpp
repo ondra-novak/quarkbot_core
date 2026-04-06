@@ -16,8 +16,8 @@ public:
         :_exchange(std::move(exchange)),_cfg(config) {}
 
     virtual PExchange get_exchange() const override {return _exchange;}
-    virtual Info get_info() const override {return _cfg;}
-    virtual std::shared_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams &params)  override {
+    virtual const Info &get_info() const override {return _cfg;}
+    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params)  override {
         return _exchange->subscribe_stream(shared_from_this(), nullptr, type, params);
     }
     virtual awaitable<PTradableInstrument> create_tradable_instrument(PAccount account) override {

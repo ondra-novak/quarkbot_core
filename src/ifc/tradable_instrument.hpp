@@ -13,7 +13,7 @@ namespace quarkbot {
 
 
 
-class ITradableInstrument : public IMarketInstrument{
+class ITradableInstrument {
 public:
     virtual ~ITradableInstrument() = default;
 
@@ -69,9 +69,28 @@ public:
     ///converts tradable instrument into market instrument
     virtual PMarketInstrument get_instrument() const = 0;
 
+    ///Internal
+    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) = 0;
+
+    ///Subscribe account event stream
+    template<StreamType T>
+    EventStream<T> subscribe() {
+        auto x =  subscribe_stream_internal(T::type, stream_params<T>);
+        if (x) return EventStream<T>(std::move(x));
+        else return EventStream<T>();
+    }
+
+    
+    const IMarketInstrument::Info &get_info() const {
+        return get_instrument()->get_info();
+    }
+
+    PExchange get_exchange() const {
+        return get_instrument()->get_exchange();
+    }
 
     OrderParameters convert_request_to_params(OrderRequest req, Side cur_position_side) {
-        const Info &info = get_info();
+        const auto &info = get_info();
         int aps = static_cast<int>(req.side);
         int aqs = req.side == cur_position_side?1:-1;
         return {

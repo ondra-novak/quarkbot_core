@@ -43,9 +43,9 @@ namespace quarkbot {
             };
         }
 
-        LockFreePublisher():PublisherBase([](std::shared_ptr<PublisherBase> this_shared) -> std::shared_ptr<IEventStreamBase> {
+        LockFreePublisher():PublisherBase([](std::shared_ptr<PublisherBase> this_shared) -> std::unique_ptr<IEventStreamBase> {
             auto me = std::static_pointer_cast<LockFreePublisher>(this_shared);
-            return std::make_shared<StreamSubscriber<ViewType, LockFreePublisher> >(me);
+            return std::make_unique<StreamSubscriber<ViewType, LockFreePublisher> >(me);
         }) {}
         LockFreePublisher(Factory factory):PublisherBase(factory) {}
 

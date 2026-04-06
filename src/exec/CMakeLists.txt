@@ -1,0 +1,2 @@
+add_executable(print_events_backtest print_events.cpp)
+target_link_libraries(print_events_backtest PRIVATE print_events_strategy quarkbot_impl)

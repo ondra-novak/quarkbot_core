@@ -10,7 +10,7 @@ namespace quarkbot {
 
 class PublisherBase {
 public:
-        using Factory = std::shared_ptr<IEventStreamBase> (*)(std::shared_ptr<PublisherBase>);
+        using Factory = std::unique_ptr<IEventStreamBase> (*)(std::shared_ptr<PublisherBase>);
 
         PublisherBase(Factory factory):_factory(factory) {}
 
