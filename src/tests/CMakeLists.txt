@@ -1,40 +1,35 @@
-
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests/)
-#file(GLOB testFiles "*.cpp")
-set(testFiles
-	compile_test.cpp
-    decimal_test.cpp    
-#	loader.cpp
-#	config_desc.cpp
-#	wandering_bst.cpp
-#	decimal.cpp
-#	cluster_alloc.cpp
-#	dispatcher.cpp
-#	stream_merge.cpp
-#	structured_ini.cpp
-#	mq.cpp
-#	ta.cpp
-#	root.cpp
-#	integral.cpp
-	pubsub.cpp
+
+set(BASIC_TESTS
+    compile_test.cpp
+    decimal_test.cpp
+    pubsub.cpp
 )
 
-link_libraries(
-#     quarkbot_runtime
-#     quarkbot_mq
-	${STANDARD_LIBRARIES}
+set(IMPL_TESTS
+    instrument_spec_test.cpp
+    tardis_source_test.cpp
+    merged_source_test.cpp
 )
 
-foreach (testFile ${testFiles})
-	string(REGEX MATCH "([^\/]+$)" filename ${testFile})
-	string(REGEX MATCH "[^.]*" executable_name tests_${filename})
-	add_executable(${executable_name} ${testFile})
+foreach (testFile ${BASIC_TESTS})
+    string(REGEX MATCH "([^\/]+$)" filename ${testFile})
+    string(REGEX MATCH "[^.]*" executable_name tests_${filename})
+    add_executable(${executable_name} ${testFile})
     target_link_libraries(${executable_name} PRIVATE BasicCoro::basic_coro)
-	target_compile_definitions(${executable_name} PRIVATE
-	   MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-	 )
-	 #target_link_libraries(${executable_name} quarkbot_impl)
-	add_test(NAME "tests/${filename}" COMMAND ${executable_name})
-endforeach ()
+    target_compile_definitions(${executable_name} PRIVATE
+        MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+    )
+    add_test(NAME "tests/${filename}" COMMAND ${executable_name})
+endforeach()
 
+foreach (testFile ${IMPL_TESTS})
+    string(REGEX MATCH "([^\/]+$)" filename ${testFile})
+    string(REGEX MATCH "[^.]*" executable_name tests_${filename})
+    add_executable(${executable_name} ${testFile})
+    target_link_libraries(${executable_name} PRIVATE quarkbot_impl)
+    target_compile_definitions(${executable_name} PRIVATE
+        MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+    )
+    add_test(NAME "tests/${filename}" COMMAND ${executable_name})
+endforeach()

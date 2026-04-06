@@ -166,6 +166,9 @@ PMarketInstrument SimExchange::create_instrument(IMarketInstrument::Info def) {
 UnderlyingCurrency SimExchange::create_currency(std::string_view name, bool is_unified) {
     return UnderlyingCurrency{std::string(name), is_unified?std::string(name):std::string(), this};
 }
+UnderlyingCurrency SimExchange::create_currency(std::string_view name) const {
+    return UnderlyingCurrency{std::string(name), std::string(name), this};
+}
 PAccount SimExchange::create_account(const std::string &name, const std::string &) const {
     return std::make_shared<SimAccount>(name, std::span<std::pair<UnderlyingCurrency, Decimal> >{});
 }

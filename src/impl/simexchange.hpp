@@ -38,6 +38,7 @@ public:
 
     PMarketInstrument create_instrument(IMarketInstrument::Info def);
     UnderlyingCurrency create_currency(std::string_view name, bool is_unified = true);
+    UnderlyingCurrency create_currency(std::string_view name) const override;
     
 
     ///create account, set up initial wallet

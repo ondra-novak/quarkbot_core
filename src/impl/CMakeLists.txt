@@ -1,6 +1,6 @@
+find_package(ZLIB REQUIRED)
 
-
-add_library (quarkbot_impl  
+add_library(quarkbot_impl
     mmbot_data_source.cpp
     backtest_executor.cpp
     simexecutor.cpp
@@ -9,6 +9,12 @@ add_library (quarkbot_impl
     simaccount.cpp
     simtradableinstrument.cpp
     backtest.cpp
+    configured_data_source.cpp
+    tardis_data_source.cpp
+    merged_data_source.cpp
 )
 
-target_link_libraries(quarkbot_impl BasicCoro::basic_coro)
+target_link_libraries(quarkbot_impl
+    PUBLIC BasicCoro::basic_coro
+    PRIVATE ZLIB::ZLIB
+)
