@@ -1,5 +1,4 @@
 #include "tardis_data_source.hpp"
-#include "ifc/market_events.hpp"
 #include <chrono>
 #include <string>
 #include <string_view>
@@ -54,8 +53,8 @@ std::optional<IBacktestDataSource::Event> TardisTradesDataSource::next_event() {
         auto tp = parse_ns_timestamp(cols[static_cast<std::size_t>(_col_timestamp)]);
         Decimal price, amount;
         try {
-            price  = Decimal::from_string(std::string(cols[static_cast<std::size_t>(_col_price)]));
-            amount = Decimal::from_string(std::string(cols[static_cast<std::size_t>(_col_amount)]));
+            price  = Decimal::from_string(cols[static_cast<std::size_t>(_col_price)]);
+            amount = Decimal::from_string(cols[static_cast<std::size_t>(_col_amount)]);
         } catch (...) { continue; }
 
         Trade trade;
@@ -93,10 +92,10 @@ std::optional<IBacktestDataSource::Event> TardisQuotesDataSource::next_event() {
         auto tp = parse_ns_timestamp(cols[static_cast<std::size_t>(_col_timestamp)]);
         Decimal bid, bid_size, ask, ask_size;
         try {
-            bid      = Decimal::from_string(std::string(cols[static_cast<std::size_t>(_col_bid_price)]));
-            bid_size = Decimal::from_string(std::string(cols[static_cast<std::size_t>(_col_bid_size)]));
-            ask      = Decimal::from_string(std::string(cols[static_cast<std::size_t>(_col_ask_price)]));
-            ask_size = Decimal::from_string(std::string(cols[static_cast<std::size_t>(_col_ask_size)]));
+            bid      = Decimal::from_string(cols[static_cast<std::size_t>(_col_bid_price)]);
+            bid_size = Decimal::from_string(cols[static_cast<std::size_t>(_col_bid_size)]);
+            ask      = Decimal::from_string(cols[static_cast<std::size_t>(_col_ask_price)]);
+            ask_size = Decimal::from_string(cols[static_cast<std::size_t>(_col_ask_size)]);
         } catch (...) { continue; }
 
         Quote quote;
