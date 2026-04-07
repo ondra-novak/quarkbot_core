@@ -50,7 +50,7 @@ std::unique_ptr<IEventStreamBase> SimExchange::subscribe_stream(
     } else if (type == Trade::type) {
         return connect_to<Trade, TradePublisher>(instrument, params);
     } else if (type == ClosedBar::type) {
-        return connect_to<ClosedBar, TradePublisher>(instrument, params);
+        return connect_to<ClosedBar, ClosedBarPublisher>(instrument, params);
     } else if (type == TradeCounter::type) {
         return connect_to<TradeCounter, TradeCounterPublisher>(instrument, params);
     } else {
@@ -68,6 +68,24 @@ std::shared_ptr<SimInstrument> SimExchange::resolve_instrument(const std::string
 
 }
 
+
+inline void merge_closed_bar(ClosedBar &c, const Trade &t, size_t index) {
+    if (!c.trades) {
+        c.open = c.close = c.high = c.low = t.price;
+        c.volume = t.size;
+        c.trades = 1;
+        c.interval_index = index;
+    } else {
+        c.high = std::max(c.high, t.price);
+        c.low = std::min(c.low, t.price);
+        c.close = t.price;
+        c.trades++;
+        c.interval_index = index;
+        c.volume += t.size;
+    }
+}
+
+
 void SimExchange::on_event(const std::string &instrument, Quote qt) {
     auto mi = resolve_instrument(instrument);
     if (!mi) return;
@@ -76,6 +94,24 @@ void SimExchange::on_event(const std::string &instrument, Quote qt) {
         auto qtpub = std::static_pointer_cast<QuotePublisher>(pub);
         qtpub->write([&](Quote &s) noexcept {s = qt;return true;});        
     });
+    _streams.enum_all_publishers(mi, {}, ClosedBar::type, [&](const StreamParams *parm, PublisherManager::PPublisher pub){
+        auto cbpub = std::static_pointer_cast<ClosedBarPublisher>(pub);
+        auto p =  static_cast<const ClosedBar::ParamType *>(parm);
+        auto interval =p->param;
+        bool new_bar = false;
+        std::size_t new_tp = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::seconds>(qt.time.time_since_epoch()).count()/interval);
+        cbpub->write([&](ClosedBar &s) noexcept {            
+            if (s.interval_index != new_tp) {
+                new_bar = true;
+                return s.trades > 0;
+            } 
+            return false;
+        });
+        if (new_bar) cbpub->write([&](ClosedBar &s) noexcept {
+                s = {};
+                return false;
+        });
+    });
     for (auto &x: _tradable_instruments) {
         auto trad = x.lock();
         if (trad && trad->get_instrument().get() == mi.get()) {
@@ -83,6 +119,7 @@ void SimExchange::on_event(const std::string &instrument, Quote qt) {
             trad->report_price(mid_price);
         }
     }
+    
 
 }
 void SimExchange::on_event(const std::string &instrument, Trade tr) {
@@ -102,20 +139,16 @@ void SimExchange::on_event(const std::string &instrument, Trade tr) {
         cbpub->write([&](ClosedBar &s) noexcept {            
             if (s.interval_index != new_tp) {
                 new_bar = true;
-                return true;
+                return s.trades > 0;
             } else{
-                s.close = tr.price;
-                s.high = std::max(s.high, tr.price);
-                s.low = std::min(s.low, tr.price);
-                s.volume += tr.size;                
+                merge_closed_bar(s, tr, new_tp);
                 return false;
             }
         });
         if (new_bar) {
             cbpub->write([&](ClosedBar &s) noexcept {
-                s.open = s.close = s.high = s.low = tr.price;
-                s.volume = tr.size;
-                s.interval_index = new_tp;            
+                s = {};
+                merge_closed_bar(s, tr, new_tp);
                 return false;
             });
         }

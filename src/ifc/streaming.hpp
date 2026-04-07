@@ -71,7 +71,7 @@ template<StreamType T>
 class EventStream {
 public:
     ///Type of view returned by T::view() method
-    using ViewType = decltype(std::declval<T>().view());
+    using ViewType = std::decay_t<decltype(std::declval<T>().view())>;
 
     ///default constructor creates closed stream
     EventStream():_stream(std::make_unique<typename IEventStream<ViewType>::Null>()) {}

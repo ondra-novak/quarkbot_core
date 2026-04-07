@@ -20,8 +20,9 @@ namespace quarkbot {
         template<typename CBWriter>
         requires(std::is_nothrow_invocable_r_v<bool, CBWriter, ViewType &>)
         void write(CBWriter &&writer) {
-            _queue.write(std::forward<CBWriter>(writer));
-            flush_consumers(true);
+            if (_queue.write(std::forward<CBWriter>(writer))) {
+                flush_consumers(true);
+            }
         }
 
         template<typename X>
