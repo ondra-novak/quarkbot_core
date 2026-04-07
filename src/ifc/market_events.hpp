@@ -52,6 +52,7 @@ struct ClosedBar  {
     Decimal low = 0;
     Decimal close = 0;
     Decimal volume = 0; //volume is optional, if not available, it is set to zero
+    std::size_t trades = 0; //count of trades. Should be at least 1 otherwise structure is not valid. Value 1 means that no informations about trades available
     std::size_t interval_index = 0;
     ClosedBar &view() {return *this;}
     static constexpr StreamTypeItem::Type type = "closed_bar";
@@ -69,6 +70,7 @@ struct ClosedBarInterval: ClosedBar, StreamTypeItem{
     }
 };
 
+static_assert(HasStreamParams<ClosedBarInterval<300> >);
 
 struct OrderBookView {
     std::span<OrderBookLevel> bids = {};

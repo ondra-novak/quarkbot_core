@@ -18,7 +18,7 @@ void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
     flush_queue();
     auto r = _scheduler.advance_time_until(tp);
     while (r) {
-        r(true).lazy_resume();        
+        r.lazy_resume();        
         r = _scheduler.advance_time_until(tp);
     }
     flush_queue();

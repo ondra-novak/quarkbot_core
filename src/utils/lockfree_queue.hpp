@@ -31,10 +31,12 @@ public:
 
     template<typename CBWriter>
     requires(std::is_nothrow_invocable_r_v<bool, CBWriter, T &>)
-    void write(CBWriter &&writer) {
+    bool write(CBWriter &&writer) {
         if (writer(_queue[_next_index])) {
             _next_index = (_cur_seq.fetch_add(1, std::memory_order_release)+1) % nitems;
+            return true;
         }        
+        return false;
     }
 
     Seq get_top_seq() const {

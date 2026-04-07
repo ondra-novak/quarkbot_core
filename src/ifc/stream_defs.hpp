@@ -30,9 +30,11 @@ struct MarketStreamTypeItem :StreamTypeItem {};
 struct InstrumentStreamTypeItem :StreamTypeItem{};
 
 
+template<typename T, typename U>
+concept DecayIsDeriverFrom = std::is_base_of_v<U, std::decay_t<T> >;
 template<typename T>
 concept HasStreamParams = StreamType<T> && requires {
-    {T::params}->std::derived_from<StreamParams>;
+    {T::params} -> DecayIsDeriverFrom<StreamParams>;
 };
 
 
