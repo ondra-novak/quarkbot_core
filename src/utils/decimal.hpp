@@ -385,7 +385,7 @@ public:
 
   
     template<typename _Out>
-    constexpr _Out to_string_fixed(_Out out, int decimals) {
+    constexpr _Out to_string_fixed(_Out out, int decimals) const {
         Decimal v;
 
         if (sgn(*this) < 0) {
@@ -427,6 +427,30 @@ public:
         return out;
     }
 
+    std::string to_string() const {
+        char buff[mantissa_digits*2+5];
+        char *ptr;
+
+        auto remove_trailing = [&]{
+            while (ptr > buff && *(ptr-1) == '0') {
+                --ptr;
+            }
+        };
+
+        auto exp = exponent();
+        if (exp > mantissa_digits || exp < -2) {
+            Decimal adj = scaleb10(*this, -exp+1);
+            ptr = adj.to_string_fixed(buff, mantissa_digits);
+            remove_trailing();
+            *ptr++='E';
+            ptr = Decimal(exp-1).to_string_fixed(ptr, 0);
+            return {buff,ptr};
+        } else {
+            ptr = this->to_string_fixed(buff, mantissa_digits);
+            remove_trailing();
+            return {buff, ptr};
+        }
+    }
   
     protected:
 

@@ -104,7 +104,11 @@ static_assert(test_string(123456.789_dec, 2, "123456.79"));
 
 int main() {    
     std::vector<char> buff;
-    std::cout << to_string_number(Decimal(-3.141592), buff, 4) <<std::endl;
+    std::cout << Decimal(-3.141592).to_string() << std::endl;
+    std::cout << Decimal(12887841235.5787456315679).to_string() << std::endl;
+    std::cout << Decimal(-1287e53_dec).to_string() << std::endl;
+    std::cout << Decimal(-12414658e-5_dec).to_string() << std::endl;
+    std::cout << Decimal(-11258e-25_dec).to_string() << std::endl;
 }
 
 

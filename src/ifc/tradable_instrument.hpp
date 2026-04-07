@@ -72,6 +72,7 @@ public:
     ///Internal
     virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) = 0;
 
+
     ///Subscribe account event stream
     template<StreamType T>
     EventStream<T> subscribe() {

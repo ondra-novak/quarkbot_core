@@ -22,6 +22,7 @@ class IStorage;
 class IScheduler;
 class IExecutionWorker;
 class IBacktestDataSource;
+class IReporter;
 
 
 
@@ -34,5 +35,6 @@ using PScheduler = std::shared_ptr<IScheduler>;
 using PExecutionWorker = std::shared_ptr<IExecutionWorker>;
 using coroutine = coro::coroutine<void>;
 using PBacktestDataSource = std::shared_ptr<IBacktestDataSource>;
+using PReporter = std::shared_ptr<IReporter>;
 
 }

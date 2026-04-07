@@ -14,6 +14,8 @@ public:
     virtual std::vector<UnderlyingCurrency> get_all_currencies() const = 0;
     virtual std::string_view get_name() const = 0;
     virtual UnderlyingCurrency create_currency(std::string_view name) const = 0;
+    virtual void set_reporter(PReporter reporter) = 0;
+
 };
 
 } // namespace quarkbot
