@@ -5,6 +5,7 @@
 #include "ifc/order.hpp"
 #include "ifc/streaming.hpp"
 #include "ifc/types.hpp"
+#include "ifc/context.hpp"
 #include "siminstrument.hpp"
 #include "simaccount.hpp"
 #include "ifc/memory.hpp"
@@ -64,19 +65,19 @@ SimTradableInstrument::OrderState::OrderState(OrderParametersGen<Decimal> params
             ):Order::State(std::move(params),std::move(instrument), std::move(name), std::move(replaced_order))
             ,_worker(std::move(worker)) {}
 
-coro::coroutine<void, coro::pmr_allocator<>> SimTradableInstrument::coro_report_fill(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument, Order ord, Fill fill ) {
+StrategyFragment SimTradableInstrument::coro_report_fill(std::shared_ptr<SimTradableInstrument> instrument, Order ord, Fill fill ) {
     instrument->report_fill(fill);
     ord.update_order(std::move(fill));
     co_return;
 }
-coro::coroutine<void, coro::pmr_allocator<>> SimTradableInstrument::coro_report_status(coro::pmr_allocator<>,std::shared_ptr<SimTradableInstrument> instrument, Order ord,OrderStatusUpdate update) {
+StrategyFragment SimTradableInstrument::coro_report_status(std::shared_ptr<SimTradableInstrument> instrument, Order ord,OrderStatusUpdate update) {
     ord.update_order(std::move(update));
     if (instrument->liquidation_order && ord == *instrument->liquidation_order && ord.done()) {
         instrument->liquidation_order.reset();
     }
     co_return;
 }
-coro::coroutine<void, coro::pmr_allocator<>> SimTradableInstrument::coro_report_init(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderInitialUpdate update) {
+StrategyFragment SimTradableInstrument::coro_report_init( std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderInitialUpdate update) {
     ord.update_order(std::move(update));
     co_return;
 }
@@ -196,19 +197,19 @@ void SimTradableInstrument::cancel_order(Order order){
 void SimTradableInstrument::on_order_fill(const Order &ord, const Fill &fill) {
     OrderEx o(ord);
     auto st = o.get_state();
-    st->_worker->run(coro_report_fill(&mem_pool,shared_from_this(), ord, fill));
+    st->_worker->run(coro_report_fill(shared_from_this(), ord, fill));
 }
 
 void SimTradableInstrument::on_order_status(const Order &ord, const OrderStatusUpdate &status){
     OrderEx o(ord);    
     auto st = o.get_state();
     if (is_done_status(status.status)) remove_order_blocing(o);
-    st->_worker->run(coro_report_status(&mem_pool,shared_from_this(),ord,status));
+    st->_worker->run(coro_report_status(shared_from_this(),ord,status));
 }
 void SimTradableInstrument::on_order_accept(const Order &ord, const OrderInitialUpdate &init) {
     OrderEx o(ord);
     auto st = o.get_state();
-    st->_worker->run(coro_report_init(&mem_pool,shared_from_this(),ord, init));
+    st->_worker->run(coro_report_init(shared_from_this(),ord, init));
 }
 
 

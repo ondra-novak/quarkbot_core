@@ -19,6 +19,7 @@ namespace quarkbot {
 
 class SimInstrument;
 class SimAccount;
+class StrategyFragment;
 
 class SimTradableInstrument final: public ITradableInstrument, public std::enable_shared_from_this<SimTradableInstrument> {
 public:
@@ -90,9 +91,9 @@ protected:
     bool add_order_blocking(OrderEx ord);
     void remove_order_blocing(OrderEx ord);
 
-    static coro::coroutine<void, coro::pmr_allocator<>> coro_report_fill(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument, Order ord, Fill fill );
-    static coro::coroutine<void, coro::pmr_allocator<>> coro_report_status(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderStatusUpdate update);
-    static coro::coroutine<void, coro::pmr_allocator<>> coro_report_init(coro::pmr_allocator<>, std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderInitialUpdate update);
+    static StrategyFragment coro_report_fill(std::shared_ptr<SimTradableInstrument> instrument, Order ord, Fill fill );
+    static StrategyFragment coro_report_status(std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderStatusUpdate update);
+    static StrategyFragment coro_report_init(std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderInitialUpdate update);
 
     void liquidation();
     std::optional<Order> liquidation_order; 
