@@ -5,6 +5,7 @@
 #include "ifc/exchange.hpp"
 #include "ifc/market_events.hpp"
 #include "ifc/market_instrument.hpp"
+#include "ifc/reporter.hpp"
 #include "ifc/stream_defs.hpp"
 #include "ifc/streaming.hpp"
 #include "ifc/underlying.hpp"
@@ -40,6 +41,7 @@ public:
     UnderlyingCurrency create_currency(std::string_view name, bool is_unified = true);
     UnderlyingCurrency create_currency(std::string_view name) const override;
     
+    virtual void set_reporter(PReporter reporter) override {_executor.set_reporter(std::move(reporter));}
 
     ///create account, set up initial wallet
     PAccount create_account(std::string name, std::span<std::pair<std::string, Decimal> > wallet);
@@ -50,6 +52,7 @@ public:
     bool cancel_all_orders(PTradableInstrument instrument );
     void cancel_order(Order ord);
     void place_order(Order ord);
+
 
 protected:
 

@@ -4,6 +4,7 @@
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
 #include "ifc/types.hpp"
+#include "ifc/reporter.hpp"
 #include "utils/decimal.hpp"
 #include "utils/random_string.hpp"
 #include "simtradableinstrument.hpp"
@@ -20,17 +21,20 @@ namespace quarkbot {
 
     void SimExecutor::place_order(Order ord) {
 
+
         auto instrument = extract_instrument(ord);
         if (!instrument) {
-            ord.update_order(OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::not_tradable});
+            set_order_status(ord, OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::not_tradable});
             return;
         }
 
         ActiveOrder aord{
-            std::move(ord),std::move( instrument)
+            std::move(ord),std::move( instrument), ord.get_filled()
         };
         if (!validate_order(aord)) return;
-        report(aord).on_order_accept(aord.ord, { generate_random_string()});        
+        
+        accept_order(aord.ord);
+
         if (match_order(aord,true)) return;
 
         _active_orders.push_back(std::move(aord));
@@ -41,7 +45,7 @@ namespace quarkbot {
 
         auto instrument = extract_instrument(ord);
         if (!instrument) {
-            ord.update_order(OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::not_tradable});
+            set_order_status(ord, OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::not_tradable});
             return;
         }
 
@@ -49,17 +53,21 @@ namespace quarkbot {
             std::move(ord),std::move( instrument)
         };
         if (!validate_order(aord)) return;
+
+        accept_order(aord.ord);
+
         auto found = std::find_if(_active_orders.begin(), _active_orders.end(), [&](const ActiveOrder &a){
             return a.ord == prev_order;
         });
+
         if (found == _active_orders.end()) {
-            report(aord).on_order_status(ord, {OrderStatus::rejected, OrderRejectionReason::order_not_found});
+            set_order_status(aord.ord, {OrderStatus::rejected, OrderRejectionReason::order_not_found});
             return ;
         }
         if (!validate_order_replace(aord, *found)) return;
-        report(aord).on_order_accept(aord.ord, {generate_random_string()});
         aord.filled = found->filled; //copy filled 
-        report(aord).on_order_status(found->ord, {OrderStatus::replaced});        
+
+        set_order_status(found->ord, {OrderStatus::replaced});        
 
         if (match_order(aord,true)) {
             _active_orders.erase(found);
@@ -75,7 +83,7 @@ namespace quarkbot {
         if (found == _active_orders.end()) return;  
         auto aord = std::move(*found);
         _active_orders.erase(found);
-        report(aord).on_order_status(aord.ord, {OrderStatus::canceled});
+        set_order_status(aord.ord, {OrderStatus::canceled});
     }
 
     bool SimExecutor::validate_order(ActiveOrder &order) {
@@ -83,17 +91,17 @@ namespace quarkbot {
         const OrderParametersGen<Decimal> &params = ord.get_parameters();
 
         if (params.quantity <= 0) {
-            report(order).on_order_status(ord, { OrderStatus::rejected, OrderRejectionReason::invalid_params, "Invalid quantity" });
+            set_order_status(ord, { OrderStatus::rejected, OrderRejectionReason::invalid_params, "Invalid quantity" });
             return false;
         }
 
         if (params.type != OrderType::stop && params.type != OrderType::market && params.limit_price <= Decimal(0)) {
-            report(order).on_order_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params ,"Invalid or missing limit price"});
+            set_order_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params ,"Invalid or missing limit price"});
             return false;
         }
 
         if ((params.type == OrderType::stop || params.type == OrderType::stoplimit || params.type == OrderType::oco) && params.stop_price <= Decimal(0)) {
-            report(order).on_order_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params , "Invalid or missing stop price"});
+            set_order_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params , "Invalid or missing stop price"});
             return false;
         }
 
@@ -103,7 +111,7 @@ namespace quarkbot {
         const OrderParametersGen<Decimal> &params = order.ord.get_parameters();
         const OrderParametersGen<Decimal> &old_params = replacing_order.ord.get_parameters();
         if (params.side != old_params.side || params.type != old_params.type) {
-            report(order).on_order_status(order.ord, {OrderStatus::rejected , OrderRejectionReason::invalid_replace});
+            set_order_status(order.ord, {OrderStatus::rejected , OrderRejectionReason::invalid_replace});
             return false;
         }
         return true;
@@ -149,7 +157,7 @@ namespace quarkbot {
 
                 case OrderType::limit_post_only:
                     if (taker && sgn(dp) * sid < 0) {
-                        report(order).on_order_status(order.ord, {OrderStatus::rejected, OrderRejectionReason::post_only_taker});
+                        set_order_status(order.ord, {OrderStatus::rejected, OrderRejectionReason::post_only_taker});
                         return true;
                     }
                     [[fallthrough]];
@@ -164,14 +172,14 @@ namespace quarkbot {
                         break;
                     }                        
                     if (params.type == OrderType::limit_ioc) {
-                        report(order).on_order_status(order.ord, {OrderStatus::filled});
+                        set_order_status(order.ord, {OrderStatus::filled});
                         return true;
                     }
                     return false;                                                            
             }
         }
 
-        report(order).on_order_status(order.ord, {OrderStatus::filled});
+        set_order_status(order.ord, {OrderStatus::filled});
         return true;
     }
 
@@ -198,7 +206,7 @@ namespace quarkbot {
                 Decimal leave_quant = params.quantity - order.filled;
                 create_fill(order, params.limit_price, std::max(leave_quant, trade.size), trade.time,false);
                 bool filled = order.filled >= params.quantity;
-                if (filled) report(order).on_order_status(order.ord, {OrderStatus::filled});
+                if (filled) set_order_status(order.ord, {OrderStatus::filled});
                 return filled;
             }
         }
@@ -263,13 +271,15 @@ namespace quarkbot {
             1.0
         };
         order.filled += quantity;
-        report(order).on_order_fill(order.ord, f);
+        auto &simt = *static_cast<SimTradableInstrument *>(order.ord.get_instrument().get());
+        simt.on_order_fill(order.ord, f);
+        if (_reporter) _reporter->on_fill(f, order.ord);
     }
 
 bool SimExecutor::cancel_all(PTradableInstrument instrument) {
     auto iter = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](const ActiveOrder &x) {
         if (x.ord.get_instrument() == instrument)    {
-            report(x).on_order_status(x.ord,{OrderStatus::canceled});
+            set_order_status(x.ord,{OrderStatus::canceled});
             return true;
         }
         return false;
@@ -281,11 +291,22 @@ bool SimExecutor::cancel_all(PTradableInstrument instrument) {
     return false;
 }
 
-
-
-SimTradableInstrument &SimExecutor::report(const ActiveOrder &aord) {
-    return *static_cast<SimTradableInstrument *>(aord.ord.get_instrument().get());
+void SimExecutor::set_reporter(PReporter reporter) {
+    _reporter = std::move(reporter);
 }
+void SimExecutor::set_order_status(const Order &ord, const OrderStatusUpdate &st) {
+    auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get());
+    if (_reporter) _reporter->on_order_status(ord, st);
+    simt.on_order_status(ord, st);
+}
+
+void  SimExecutor::accept_order(const Order &ord) {
+    auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get());
+    if (_reporter) _reporter->on_order_placed(ord);
+    simt.on_order_accept(ord, { generate_random_string()});        
+
+}
+
 }
 
 

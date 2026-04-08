@@ -3,6 +3,7 @@
 #include "utils/decimal.hpp"
 #include <chrono>
 #include <cstdint>
+#include <tuple>
 namespace quarkbot {
 
 
@@ -108,6 +109,23 @@ struct Fill {
     formula: contract_currenct = fees * fee_rate;
      */
     Decimal fee_rate;
+    ///This is restored fill - need to check for duplication (field is not serialized)
+    bool restored = false;
+
+    template<typename Self>
+    auto fields(this Self &self) {
+        return std::tie(self.id,
+                        self.order_name,
+                        self.time,
+                        self.contract,
+                        self.side,
+                        self.reason,
+                        self.amount,
+                        self.price,
+                        self.fees,
+                        self.fee_rate);
+    }
+
 };
 
 struct Position {    
