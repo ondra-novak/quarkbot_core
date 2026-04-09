@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <string>
 
-static constexpr double slippage = 0.001;
+static constexpr double slippage = 0;
 
 auto define_source(std::filesystem::path p) {
     return [f = std::ifstream(p), p, ln = std::string()]() mutable ->std::optional<double>{
@@ -26,10 +26,10 @@ auto define_source(std::filesystem::path p) {
 
 
 int main() {
-    auto source = define_source("/home/ondra/Stažené/minute_bitfinex_BTC_USD (m).csv");
+    auto source = define_source("/home/ondra/Downloads/minute_bitfinex_BTC_USD (m).csv");
 
-    TrendingStrategyCore::Config cfg{300,1.0,0.001,
-        10,0.1,100,
+    TrendingStrategyCore::Config cfg{300,1,0,
+        10,0.01,100,
         false,0.00001};
 
     std::optional<TrendingStrategyCore::Result> orders;
@@ -47,17 +47,19 @@ int main() {
         double price = *v;
         if (orders) {
             if (price > orders->sell_order.price) {
-                fills.push_back({ orders->sell_order.price,  -orders->sell_order.size,'L'});
+                fills.push_back({ orders->sell_order.price,  -orders->sell_order.size,
+                    orders->sell_order.lev,'L'});
             } 
             if (price < orders->buy_order.price) {
-                fills.push_back({ orders->buy_order.price,  orders->buy_order.size,'L'});            
+                fills.push_back({ orders->buy_order.price,  orders->buy_order.size,
+                    orders->buy_order.lev,'L'});            
             } 
         }
         double cur_profit = 0;
         for (auto &f: fills) {
             cur_profit += cfg.calc_pnl(prev_price, f.price, position);
             position += f.size;
-            std::cout << f.price << "," << f.src << "," << f.size << ","  << position << "," << cur_profit << ", " << (profit+cur_profit) << std::endl;
+            std::cout << f.src << "," << f.lev << "," << f.price << "," <<  f.size << ","  << position << "," << cur_profit << ", " << (profit+cur_profit) << std::endl;
             prev_price = f.price;
         }
         profit += cur_profit;
@@ -67,9 +69,9 @@ int main() {
             int side = orders->market_side;
             double size = orders->market_size;
             if (side > 0) {
-                fills.push_back({price + price * slippage, size,'M'});
+                fills.push_back({price + price * slippage, size,0,'M'});
             } else if (side < 0) {
-                fills.push_back({price - price * slippage, -size,'M'});
+                fills.push_back({price - price * slippage, -size,0,'M'});
             }
             orders.reset();
         }

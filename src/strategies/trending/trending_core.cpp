@@ -14,7 +14,9 @@ double TrendingStrategyCore::Config::calc_pnl(double open, double close, double 
 
 TrendingStrategyCore::TrendingStrategyCore(Config cfg)
     :_cfg(cfg)
-    ,_bb(_bb.from_period(cfg.bb_interval, 0, {})) {}
+    ,_bb(_bb.from_period(cfg.bb_interval, 0, {})) {
+        _cur_loss = _cfg.target_per_minute * 1440;
+    }
 
     
 std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(const Input &input) {
@@ -24,15 +26,17 @@ std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(con
         _bb.update(price);
         return {};
     }
-    auto bbres = _bb.update(price);
+    auto bbres = _bb.value();
 
-    _cur_loss += _cfg.target_per_minute;
+    _next_target += _cfg.target_per_minute;
 
     for (auto &f: input.fills) {
         double pnl = calc_pnl(f.price);
         _cur_loss = std::max(0.0,_cur_loss - pnl);
         _cur_position += f.size;        
         _prev_price = f.price;
+        _cur_loss += _next_target;
+        _next_target = 0.0;
     }
     _cur_position = input.final_position;
     Order best_buy = {0,std::numeric_limits<double>::max()};
@@ -54,6 +58,7 @@ std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(con
         res.market_side = res.market_size >= _cfg.min_size?1:0;
     }
     
+    _bb.update(price);
     return res;
 }
 
@@ -74,24 +79,33 @@ double TrendingStrategyCore::calc_pnl(double price) {
 double TrendingStrategyCore::calc_new_loss(double pnl) {
     return std::max(_cur_loss - pnl,0.0);
 }
+
+static inline double sgn(double pos) {
+    return pos <0?-1:pos>0?1:0;
+}
+
 bool TrendingStrategyCore::calculate_levels(int dir, int level,const BB::Result &bbres, Order &best_buy, Order &best_sell, double bid, double ask) {
     double price = bbres.mean + bbres.dev * _cfg.bb_level_step * level;
-    double pos = calc_new_pos(calc_new_loss(calc_pnl(price)),price);
-    if (price <= bid) {        
+    double s= sgn(_cur_position);
+    if (s == 0) s = sgn(_prev_price - price);
+    double pos = calc_new_pos(calc_new_loss(calc_pnl(price)),price) * s;
+    if (price < bid) {        
         double diff = pos - _cur_position;
         if (diff < _cfg.min_size) return true;
         if (best_buy.size > diff) {
             best_buy.size = diff;
             best_buy.price = price;
+            best_buy.lev = level;
         }
         return dir != -1;
     } 
-    if (price >= ask) {
-        double diff = -pos - _cur_position;
+    if (price > ask) {
+        double diff = pos - _cur_position;
         if (diff > -_cfg.min_size) return true;
         if (best_sell.size > -diff) {
             best_sell.size = -diff;
             best_sell.price = price;
+            best_sell.lev = level;
         }
         return dir != 1;        
     }

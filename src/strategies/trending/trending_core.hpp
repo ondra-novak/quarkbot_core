@@ -23,11 +23,13 @@ public:
     struct Order {
         double price;
         double size;
+        int lev = 0;
     };
 
     struct Fill {
         double price;
         double size;
+        int lev;
         char src;
     };
 
@@ -58,8 +60,9 @@ protected:
     Config _cfg;
     BB _bb;    
     double _cur_loss = 0;
-    double _cur_position = 0;
+    double _cur_position = 0.000000000000001;
     double _prev_price = 1.0;
+    double _next_target = 0.0;
    
 
     double calc_new_pos(double loss, double price) const;
