@@ -76,7 +76,10 @@ inline std::vector<std::string> MemStorage::get_all_keys(const Key &filter) cons
         }
     } else {
         for (const auto &[k, e] : _seq) {
-            if (k.starts_with(filter.name)) result.push_back(k);
+            if (!k.starts_with(filter.name)) continue;
+            if (e.history.empty()) continue;
+            if (e.history.rbegin()->second.first)  // latest revision is live (exists=true)
+                result.push_back(k);
         }
     }
     return result;
@@ -97,7 +100,9 @@ inline IStorage::Revision MemStorage::apply_erase(Key key) {
         _plain.erase(std::string(key.name));
         return 0;
     }
-    auto &entry = _seq[std::string(key.name)];
+    auto it = _seq.find(std::string(key.name));
+    if (it == _seq.end()) return 0;  // nothing to erase, no-op
+    auto &entry = it->second;
     Revision rev = entry.next_rev++;
     entry.history.emplace(rev, std::make_pair(false, std::string{}));
     return rev;
