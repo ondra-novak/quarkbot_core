@@ -68,7 +68,7 @@ inline IStorage::Value MemStorage::get(Key key) const {
     return {last->first, last->second.first, last->second.second};
 }
 inline IStorage::Value MemStorage::get(Key key, Revision rev) const {
-    if (!key.sequence) return get(key);
+    if (!key.sequence) return get(key);  // revision has no meaning for non-sequence keys
     auto it = _seq.find(std::string(key.name));
     if (it == _seq.end()) return {0, false, {}};
     const auto &entry = it->second;
