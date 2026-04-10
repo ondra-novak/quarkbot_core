@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <string>
 
-static constexpr double slippage = 0;
+static constexpr double slippage = 0.001;
 
 auto define_source(std::filesystem::path p) {
     return [f = std::ifstream(p), p, ln = std::string()]() mutable ->std::optional<double>{
@@ -28,9 +28,9 @@ auto define_source(std::filesystem::path p) {
 int main() {
     auto source = define_source("/home/ondra/Downloads/minute_bitfinex_BTC_USD (m).csv");
 
-    TrendingStrategyCore::Config cfg{300,1,0,
-        10,0.01,100,
-        false,0.00001};
+    TrendingStrategyCore::Config cfg{10000,2,0.001,
+        30,30,300,
+        false,0.00001, false};
 
     std::optional<TrendingStrategyCore::Result> orders;
     std::vector<TrendingStrategyCore::Fill> fills;
@@ -56,12 +56,15 @@ int main() {
             } 
         }
         double cur_profit = 0;
+        std::cout << price << "," << strategy.get_position() << "," 
+            << (profit +strategy.get_config().calc_pnl(strategy.get_last_price(), price, strategy.get_position()));
         for (auto &f: fills) {
             cur_profit += cfg.calc_pnl(prev_price, f.price, position);
             position += f.size;
-            std::cout << f.src << "," << f.lev << "," << f.price << "," <<  f.size << ","  << position << "," << cur_profit << ", " << (profit+cur_profit) << std::endl;
-            prev_price = f.price;
+            prev_price = f.price;        
+            std::cout << "," << f.lev << "," << f.src << "," << f.price << "," << f.size;
         }
+        std::cout << std::endl;
         profit += cur_profit;
         orders = strategy({price,price, fills, position});
         fills.clear();

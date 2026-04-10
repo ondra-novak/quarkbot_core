@@ -3,6 +3,12 @@
 #include <iostream>
 #include <limits>
 
+
+static inline double sgn(double pos) {
+    return pos <0?-1:pos>0?1:0;
+}
+
+
 double TrendingStrategyCore::Config::calc_pnl(double open, double close, double size) const {
         if (inverse_market) {
             return  (1/open - 1/close) * size;
@@ -15,7 +21,6 @@ double TrendingStrategyCore::Config::calc_pnl(double open, double close, double 
 TrendingStrategyCore::TrendingStrategyCore(Config cfg)
     :_cfg(cfg)
     ,_bb(_bb.from_period(cfg.bb_interval, 0, {})) {
-        _cur_loss = _cfg.target_per_minute * 1440;
     }
 
     
@@ -26,17 +31,21 @@ std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(con
         _bb.update(price);
         return {};
     }
-    auto bbres = _bb.value();
+    auto bbres = _bb.update(price);
 
-    _next_target += _cfg.target_per_minute;
+    
 
     for (auto &f: input.fills) {
         double pnl = calc_pnl(f.price);
         _cur_loss = std::max(0.0,_cur_loss - pnl);
+        if (f.src == 'L' && f.lev != 999) {
+            if ((f.price - _prev_price)*_cur_position > 0) _hist = 0; 
+        } else  {
+            _hist += _cfg.hystersis;
+        }
         _cur_position += f.size;        
         _prev_price = f.price;
-        _cur_loss += _next_target;
-        _next_target = 0.0;
+        _avoid_line = f.lev;
     }
     _cur_position = input.final_position;
     Order best_buy = {0,std::numeric_limits<double>::max()};
@@ -48,22 +57,38 @@ std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(con
     
     Result res {best_buy, best_sell,0,0};
 
-    double buy_hyst = bbres.mean * std::exp(_cfg.hystersis);
-    double sell_hyst = bbres.mean * std::exp(-_cfg.hystersis);
+
+        
+    double buy_hyst = bbres.mean * std::exp(_hist);
+    double sell_hyst = bbres.mean * std::exp(-_hist);
     if (_cur_position >= 0 && input.ask < sell_hyst) {
-        res.market_size = _cur_position+calc_new_pos(_cur_loss - calc_pnl(input.ask),input.ask) ;
-        res.market_side = res.market_size >= _cfg.min_size?-1:0;
+        double p =  _cur_position+calc_new_pos(_cur_loss - calc_pnl(input.ask),input.ask) ;;
+        if (_cfg.no_market_order) {        
+            res.sell_order.price = input.ask;
+            res.sell_order.size = p;
+            res.sell_order.lev = 999;        
+        } else {
+            res.market_size = p;
+            res.market_side = res.market_size >= _cfg.min_size?-1:0;
+        }
     } else if (_cur_position <= 0 && input.bid > buy_hyst) { 
-        res.market_size = calc_new_pos(_cur_loss - calc_pnl(input.bid),input.bid) - _cur_position;
-        res.market_side = res.market_size >= _cfg.min_size?1:0;
-    }
+        double p=  calc_new_pos(_cur_loss - calc_pnl(input.bid),input.bid) - _cur_position;
+        if (_cfg.no_market_order) {        
+            res.buy_order.price = input.bid;
+            res.buy_order.size = p;
+            res.buy_order.lev = 999;
+        } else {
+            res.market_size = p;
+            res.market_side = res.market_size >= _cfg.min_size?1:0;
+        }
+    } 
     
-    _bb.update(price);
+    
     return res;
 }
 
 double TrendingStrategyCore::calc_new_pos(double loss, double price) const {
-    double my_loss = std::min(_cfg.max_loss, loss);
+    double my_loss = std::min(_cfg.max_loss, std::max(_cfg.min_loss,loss));
     if (_cfg.inverse_market) {
         return my_loss * _cfg.multiplier * price;
     } else {
@@ -80,11 +105,9 @@ double TrendingStrategyCore::calc_new_loss(double pnl) {
     return std::max(_cur_loss - pnl,0.0);
 }
 
-static inline double sgn(double pos) {
-    return pos <0?-1:pos>0?1:0;
-}
-
 bool TrendingStrategyCore::calculate_levels(int dir, int level,const BB::Result &bbres, Order &best_buy, Order &best_sell, double bid, double ask) {
+    if (level == _avoid_line) 
+        return true;
     double price = bbres.mean + bbres.dev * _cfg.bb_level_step * level;
     double s= sgn(_cur_position);
     if (s == 0) s = sgn(_prev_price - price);
@@ -100,10 +123,10 @@ bool TrendingStrategyCore::calculate_levels(int dir, int level,const BB::Result 
         return dir != -1;
     } 
     if (price > ask) {
-        double diff = pos - _cur_position;
-        if (diff > -_cfg.min_size) return true;
-        if (best_sell.size > -diff) {
-            best_sell.size = -diff;
+        double diff = _cur_position - pos;
+        if (diff < _cfg.min_size) return true;
+        if (best_sell.size > diff) {
+            best_sell.size = diff;
             best_sell.price = price;
             best_sell.lev = level;
         }

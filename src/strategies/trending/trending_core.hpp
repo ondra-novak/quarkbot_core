@@ -11,10 +11,11 @@ public:
         double bb_level_step;
         double hystersis;
         double multiplier;
-        double target_per_minute;
+        double min_loss;
         double max_loss;        
         bool inverse_market;
         double min_size;
+        bool no_market_order;
 
         double calc_pnl(double open, double close, double size) const;
 
@@ -52,17 +53,21 @@ public:
     std::optional<Result> operator()(const Input &input);
     
 
-
+    double get_mean() const {return _bb.value().mean;}
+    double get_last_price() const {return _prev_price;}
+    double get_position()  const {return _cur_position;}
+    const Config &get_config() const {return _cfg;}
 
 protected:
     using BB = quarkbot::Bollinger_Ema<double>;
 
     Config _cfg;
     BB _bb;    
+    int _avoid_line = 9999;
     double _cur_loss = 0;
     double _cur_position = 0.000000000000001;
-    double _prev_price = 1.0;
-    double _next_target = 0.0;
+    double _prev_price = 1.0;    
+    double _hist = 0;
    
 
     double calc_new_pos(double loss, double price) const;
