@@ -97,9 +97,50 @@ void test_plain_get_all_keys() {
     CHECK_EQUAL(keys2[0], "order:2");
 }
 
+void test_seq_put_get_latest() {
+    MemStorage storage;
+
+    // key absent
+    auto v0 = storage.get({"events", true});
+    CHECK(!v0.exists);
+    CHECK_EQUAL(v0.rev, 0u);
+
+    // first put → revision 1
+    auto tx = storage.write();
+    auto r1 = tx->put({"events", true}, "data1");
+    CHECK_EQUAL(r1, 1u);
+    tx->commit();
+
+    auto v1 = storage.get({"events", true});
+    CHECK(v1.exists);
+    CHECK_EQUAL(v1.rev, 1u);
+    CHECK_EQUAL(v1.data, "data1");
+
+    // second put → revision 2
+    auto tx2 = storage.write();
+    auto r2 = tx2->put({"events", true}, "data2");
+    CHECK_EQUAL(r2, 2u);
+    tx2->commit();
+
+    auto v2 = storage.get({"events", true});
+    CHECK(v2.exists);
+    CHECK_EQUAL(v2.rev, 2u);
+    CHECK_EQUAL(v2.data, "data2");
+
+    // third put → revision 3
+    auto tx3 = storage.write();
+    tx3->put({"events", true}, "data3");
+    tx3->commit();
+
+    auto v3 = storage.get({"events", true});
+    CHECK_EQUAL(v3.rev, 3u);
+    CHECK_EQUAL(v3.data, "data3");
+}
+
 int main() {
     test_plain_put_get();
     test_plain_erase();
     test_plain_get_all_keys();
+    test_seq_put_get_latest();
     return 0;
 }
