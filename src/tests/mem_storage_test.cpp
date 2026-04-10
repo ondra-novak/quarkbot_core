@@ -133,8 +133,17 @@ void test_seq_put_get_latest() {
     tx3->commit();
 
     auto v3 = storage.get({"events", true});
+    CHECK(v3.exists);
     CHECK_EQUAL(v3.rev, 3u);
     CHECK_EQUAL(v3.data, "data3");
+
+    // uncommitted transaction must not affect visible state
+    auto tx4 = storage.write();
+    tx4->put({"events", true}, "dropped");
+    // no commit — tx4 goes out of scope
+    auto v4 = storage.get({"events", true});
+    CHECK_EQUAL(v4.rev, 3u);
+    CHECK_EQUAL(v4.data, "data3");
 }
 
 int main() {
