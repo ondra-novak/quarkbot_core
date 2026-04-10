@@ -121,6 +121,7 @@ inline void MemStorage::apply_prune(Key key, Revision from, Revision to) {
     if (it == _seq.end() || it->second.history.empty()) return;
     auto &entry = it->second;
     Revision last_rev = entry.history.rbegin()->first;
+    if (last_rev == 0) return;  // safety: revision 0 should never exist, but guard against underflow
     Revision actual_to = std::min(to, last_rev - 1);
     if (from > actual_to) return;
     entry.history.erase(
