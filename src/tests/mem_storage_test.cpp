@@ -271,6 +271,67 @@ void test_seq_prune_history() {
     CHECK(storage.get({"plain", false}).exists);  // still there
 }
 
+void test_seq_get_all_keys() {
+    MemStorage storage;
+
+    auto tx = storage.write();
+    tx->put({"order:A", true}, "a");
+    tx->put({"order:B", true}, "b");
+    tx->put({"fill:1",  true}, "c");
+    tx->commit();
+
+    // prefix filter on sequence keys
+    auto keys = storage.get_all_keys({"order:", true});
+    CHECK_EQUAL(keys.size(), 2u);
+    bool hasA = false, hasB = false;
+    for (auto &k : keys) {
+        if (k == "order:A") hasA = true;
+        if (k == "order:B") hasB = true;
+    }
+    CHECK(hasA);
+    CHECK(hasB);
+
+    // empty prefix = all sequence keys
+    auto all = storage.get_all_keys({"", true});
+    CHECK_EQUAL(all.size(), 3u);
+}
+
+void test_namespace_separation() {
+    MemStorage storage;
+
+    // same name "key" in both namespaces — independent
+    auto tx = storage.write();
+    tx->put({"key", false}, "plain_value");
+    tx->put({"key", true},  "seq_value");
+    tx->commit();
+
+    auto vp = storage.get({"key", false});
+    CHECK(vp.exists);
+    CHECK_EQUAL(vp.data, "plain_value");
+    CHECK_EQUAL(vp.rev, 0u);
+
+    auto vs = storage.get({"key", true});
+    CHECK(vs.exists);
+    CHECK_EQUAL(vs.data, "seq_value");
+    CHECK_EQUAL(vs.rev, 1u);
+
+    // erasing plain doesn't affect sequence
+    auto tx2 = storage.write();
+    tx2->erase({"key", false});
+    tx2->commit();
+
+    CHECK(!storage.get({"key", false}).exists);
+    CHECK(storage.get({"key", true}).exists);
+
+    // get_all_keys respects namespace
+    auto plain_keys = storage.get_all_keys({"", false});
+    CHECK_EQUAL(plain_keys.size(), 0u);
+
+    auto seq_keys = storage.get_all_keys({"", true});
+    CHECK_EQUAL(seq_keys.size(), 1u);
+    CHECK_EQUAL(seq_keys[0], "key");
+}
+
 int main() {
     test_plain_put_get();
     test_plain_erase();
@@ -279,5 +340,7 @@ int main() {
     test_seq_get_by_revision();
     test_seq_erase_tombstone();
     test_seq_prune_history();
+    test_seq_get_all_keys();
+    test_namespace_separation();
     return 0;
 }
