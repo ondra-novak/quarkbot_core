@@ -68,7 +68,19 @@ inline IStorage::Value MemStorage::get(Key key) const {
     return {last->first, last->second.first, last->second.second};
 }
 inline IStorage::Value MemStorage::get(Key /*key*/, Revision /*rev*/) const { return {0, false, {}}; }
-inline std::vector<std::string> MemStorage::get_all_keys(const Key &/*filter*/) const { return {}; }
+inline std::vector<std::string> MemStorage::get_all_keys(const Key &filter) const {
+    std::vector<std::string> result;
+    if (!filter.sequence) {
+        for (const auto &[k, v] : _plain) {
+            if (k.starts_with(filter.name)) result.push_back(k);
+        }
+    } else {
+        for (const auto &[k, e] : _seq) {
+            if (k.starts_with(filter.name)) result.push_back(k);
+        }
+    }
+    return result;
+}
 inline PStorageTransaction MemStorage::write() { return std::make_unique<MemStorageTransaction>(*this); }
 inline IStorage::Revision MemStorage::apply_put(Key key, std::string_view data) {
     if (!key.sequence) {
@@ -80,7 +92,16 @@ inline IStorage::Revision MemStorage::apply_put(Key key, std::string_view data) 
     entry.history.emplace(rev, std::make_pair(true, std::string(data)));
     return rev;
 }
-inline IStorage::Revision MemStorage::apply_erase(Key /*key*/) { return 0; }
+inline IStorage::Revision MemStorage::apply_erase(Key key) {
+    if (!key.sequence) {
+        _plain.erase(std::string(key.name));
+        return 0;
+    }
+    auto &entry = _seq[std::string(key.name)];
+    Revision rev = entry.next_rev++;
+    entry.history.emplace(rev, std::make_pair(false, std::string{}));
+    return rev;
+}
 inline void MemStorage::apply_prune(Key /*key*/, Revision /*from*/, Revision /*to*/) {}
 inline IStorage::Revision MemStorage::next_seq_rev(std::string_view name) const {
     auto it = _seq.find(std::string(name));
