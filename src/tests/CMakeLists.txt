@@ -4,6 +4,7 @@ set(BASIC_TESTS
     compile_test.cpp
     decimal_test.cpp
     pubsub.cpp
+    mem_storage_test.cpp
 )
 
 set(IMPL_TESTS

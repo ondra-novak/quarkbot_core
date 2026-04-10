@@ -1,0 +1,95 @@
+#pragma once
+
+#include "ifc/storage.hpp"
+#include <map>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <variant>
+#include <vector>
+
+namespace quarkbot {
+
+class MemStorage;
+
+class MemStorageTransaction final : public IStorageTransaction {
+public:
+    explicit MemStorageTransaction(MemStorage &storage) : _storage(storage) {}
+
+    Revision put(Key key, std::string_view value_blob) override;
+    Revision erase(Key key) override;
+    void prune_history(Key key, Revision from, Revision to) override;
+    void commit() override;
+
+private:
+    struct OpPut   { std::string key_name; bool sequence; std::string data; };
+    struct OpErase { std::string key_name; bool sequence; };
+    struct OpPrune { std::string key_name; bool sequence; Revision from, to; };
+    using Op = std::variant<OpPut, OpErase, OpPrune>;
+
+    std::vector<Op> _ops;
+    MemStorage &_storage;
+};
+
+class MemStorage final : public IStorage {
+public:
+    Value get(Key key) const override;
+    Value get(Key key, Revision rev) const override;
+    std::vector<std::string> get_all_keys(const Key &filter) const override;
+    PStorageTransaction write() override;
+
+    Revision apply_put(Key key, std::string_view data);
+    Revision apply_erase(Key key);
+    void apply_prune(Key key, Revision from, Revision to);
+    Revision next_seq_rev(std::string_view name) const;
+
+private:
+    struct SeqEntry {
+        Revision next_rev = 1;
+        std::map<Revision, std::pair<bool, std::string>> history;
+    };
+
+    std::unordered_map<std::string, std::string> _plain;
+    std::unordered_map<std::string, SeqEntry> _seq;
+};
+
+// --- MemStorage ---
+
+inline IStorage::Value MemStorage::get(Key /*key*/) const { return {0, false, {}}; }
+inline IStorage::Value MemStorage::get(Key /*key*/, Revision /*rev*/) const { return {0, false, {}}; }
+inline std::vector<std::string> MemStorage::get_all_keys(const Key &/*filter*/) const { return {}; }
+inline PStorageTransaction MemStorage::write() { return std::make_unique<MemStorageTransaction>(*this); }
+inline IStorage::Revision MemStorage::apply_put(Key /*key*/, std::string_view /*data*/) { return 0; }
+inline IStorage::Revision MemStorage::apply_erase(Key /*key*/) { return 0; }
+inline void MemStorage::apply_prune(Key /*key*/, Revision /*from*/, Revision /*to*/) {}
+inline IStorage::Revision MemStorage::next_seq_rev(std::string_view /*name*/) const { return 1; }
+
+// --- MemStorageTransaction ---
+
+inline IStorageTransaction::Revision MemStorageTransaction::put(Key key, std::string_view value_blob) {
+    _ops.emplace_back(OpPut{std::string(key.name), key.sequence, std::string(value_blob)});
+    return key.sequence ? _storage.next_seq_rev(key.name) : 0;
+}
+inline IStorageTransaction::Revision MemStorageTransaction::erase(Key key) {
+    _ops.emplace_back(OpErase{std::string(key.name), key.sequence});
+    return key.sequence ? _storage.next_seq_rev(key.name) : 0;
+}
+inline void MemStorageTransaction::prune_history(Key key, Revision from, Revision to) {
+    _ops.emplace_back(OpPrune{std::string(key.name), key.sequence, from, to});
+}
+inline void MemStorageTransaction::commit() {
+    for (auto &op : _ops) {
+        std::visit([this](auto &o) {
+            using T = std::decay_t<decltype(o)>;
+            if constexpr (std::is_same_v<T, OpPut>)
+                _storage.apply_put({o.key_name, o.sequence}, o.data);
+            else if constexpr (std::is_same_v<T, OpErase>)
+                _storage.apply_erase({o.key_name, o.sequence});
+            else
+                _storage.apply_prune({o.key_name, o.sequence}, o.from, o.to);
+        }, op);
+    }
+    _ops.clear();
+}
+
+} // namespace quarkbot

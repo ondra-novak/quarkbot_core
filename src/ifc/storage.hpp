@@ -49,7 +49,7 @@ namespace quarkbot {
             operator bool() const {return exists;}
         };
         
-        virtual ~IStorage();
+        virtual ~IStorage() = default;
         ///returns last known value for key. If key is not found, or it is deleted, returned value has exists=false
         virtual Value get(Key key) const = 0;
         ///returns specified revision of value for key. If key is not found, or it is deleted, returned value has exists=false
