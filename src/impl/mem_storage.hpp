@@ -32,18 +32,19 @@ private:
 };
 
 class MemStorage final : public IStorage {
+    friend class MemStorageTransaction;
 public:
     Value get(Key key) const override;
     Value get(Key key, Revision rev) const override;
     std::vector<std::string> get_all_keys(const Key &filter) const override;
     PStorageTransaction write() override;
 
+private:
     Revision apply_put(Key key, std::string_view data);
     Revision apply_erase(Key key);
     void apply_prune(Key key, Revision from, Revision to);
     Revision next_seq_rev(std::string_view name) const;
 
-private:
     struct SeqEntry {
         Revision next_rev = 1;
         std::map<Revision, std::pair<bool, std::string>> history;
@@ -108,9 +109,7 @@ inline IStorage::Revision MemStorage::apply_erase(Key key) {
         _plain.erase(std::string(key.name));
         return 0;
     }
-    auto it = _seq.find(std::string(key.name));
-    if (it == _seq.end()) return 0;  // nothing to erase, no-op
-    auto &entry = it->second;
+    auto &entry = _seq[std::string(key.name)];
     Revision rev = entry.next_rev++;
     entry.history.emplace(rev, std::make_pair(false, std::string{}));
     return rev;
@@ -139,10 +138,13 @@ inline IStorage::Revision MemStorage::next_seq_rev(std::string_view name) const 
 
 inline IStorageTransaction::Revision MemStorageTransaction::put(Key key, std::string_view value_blob) {
     _ops.emplace_back(OpPut{std::string(key.name), key.sequence, std::string(value_blob)});
+    // Revision estimate based on current storage state — stale if same key is put multiple times
+    // in one transaction. This is by design (write-batch model); actual revision assigned on commit.
     return key.sequence ? _storage.next_seq_rev(key.name) : 0;
 }
 inline IStorageTransaction::Revision MemStorageTransaction::erase(Key key) {
     _ops.emplace_back(OpErase{std::string(key.name), key.sequence});
+    // Same stale-estimate caveat as put() above.
     return key.sequence ? _storage.next_seq_rev(key.name) : 0;
 }
 inline void MemStorageTransaction::prune_history(Key key, Revision from, Revision to) {
