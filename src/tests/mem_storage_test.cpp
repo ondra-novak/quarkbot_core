@@ -217,6 +217,60 @@ void test_seq_erase_tombstone() {
     CHECK_EQUAL(v3.data, "restored");
 }
 
+void test_seq_prune_history() {
+    MemStorage storage;
+
+    // Build history: revisions 1–5
+    auto tx = storage.write();
+    for (int i = 1; i <= 5; ++i) {
+        tx->put({"hist", true}, "v" + std::to_string(i));
+    }
+    tx->commit();
+
+    CHECK_EQUAL(storage.get({"hist", true}).rev, 5u);
+
+    // prune revisions 1–3 (keep 4, 5)
+    auto txp = storage.write();
+    txp->prune_history({"hist", true}, 1, 3);
+    txp->commit();
+
+    // 4 and 5 still accessible
+    CHECK(storage.get({"hist", true}, 4).exists);
+    CHECK_EQUAL(storage.get({"hist", true}, 4).data, "v4");
+    CHECK(storage.get({"hist", true}, 5).exists);
+    CHECK_EQUAL(storage.get({"hist", true}, 5).data, "v5");
+
+    // 1, 2, 3 are gone
+    CHECK(!storage.get({"hist", true}, 1).exists);
+    CHECK_EQUAL(storage.get({"hist", true}, 1).rev, 0u);
+    CHECK(!storage.get({"hist", true}, 2).exists);
+    CHECK(!storage.get({"hist", true}, 3).exists);
+
+    // latest still works
+    CHECK_EQUAL(storage.get({"hist", true}).rev, 5u);
+
+    // prune with to > last_rev: last revision is protected
+    auto txp2 = storage.write();
+    txp2->prune_history({"hist", true}, 4, 999);
+    txp2->commit();
+
+    // rev 5 (last) survives
+    CHECK(storage.get({"hist", true}, 5).exists);
+    CHECK_EQUAL(storage.get({"hist", true}).rev, 5u);
+
+    // rev 4 was pruned
+    CHECK(!storage.get({"hist", true}, 4).exists);
+
+    // prune on non-sequence key is a no-op
+    auto txs = storage.write();
+    txs->put({"plain", false}, "x");
+    txs->commit();
+    auto txp3 = storage.write();
+    txp3->prune_history({"plain", false}, 0, 99);
+    txp3->commit();
+    CHECK(storage.get({"plain", false}).exists);  // still there
+}
+
 int main() {
     test_plain_put_get();
     test_plain_erase();
@@ -224,5 +278,6 @@ int main() {
     test_seq_put_get_latest();
     test_seq_get_by_revision();
     test_seq_erase_tombstone();
+    test_seq_prune_history();
     return 0;
 }

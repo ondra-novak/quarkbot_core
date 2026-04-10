@@ -115,7 +115,19 @@ inline IStorage::Revision MemStorage::apply_erase(Key key) {
     entry.history.emplace(rev, std::make_pair(false, std::string{}));
     return rev;
 }
-inline void MemStorage::apply_prune(Key /*key*/, Revision /*from*/, Revision /*to*/) {}
+inline void MemStorage::apply_prune(Key key, Revision from, Revision to) {
+    if (!key.sequence) return;
+    auto it = _seq.find(std::string(key.name));
+    if (it == _seq.end() || it->second.history.empty()) return;
+    auto &entry = it->second;
+    Revision last_rev = entry.history.rbegin()->first;
+    Revision actual_to = std::min(to, last_rev - 1);
+    if (from > actual_to) return;
+    entry.history.erase(
+        entry.history.lower_bound(from),
+        entry.history.upper_bound(actual_to)
+    );
+}
 inline IStorage::Revision MemStorage::next_seq_rev(std::string_view name) const {
     auto it = _seq.find(std::string(name));
     if (it == _seq.end()) return 1;
