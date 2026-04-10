@@ -146,10 +146,83 @@ void test_seq_put_get_latest() {
     CHECK_EQUAL(v4.data, "data3");
 }
 
+void test_seq_get_by_revision() {
+    MemStorage storage;
+
+    auto tx = storage.write();
+    tx->put({"log", true}, "entry1");
+    tx->put({"log", true}, "entry2");  // two puts in one tx — both committed
+    tx->commit();
+
+    // After commit: rev 1 = "entry1", rev 2 = "entry2"
+    auto v1 = storage.get({"log", true}, 1);
+    CHECK(v1.exists);
+    CHECK_EQUAL(v1.rev, 1u);
+    CHECK_EQUAL(v1.data, "entry1");
+
+    auto v2 = storage.get({"log", true}, 2);
+    CHECK(v2.exists);
+    CHECK_EQUAL(v2.rev, 2u);
+    CHECK_EQUAL(v2.data, "entry2");
+
+    // latest is rev 2
+    auto vl = storage.get({"log", true});
+    CHECK_EQUAL(vl.rev, 2u);
+
+    // non-existent revision
+    auto vx = storage.get({"log", true}, 99);
+    CHECK(!vx.exists);
+    CHECK_EQUAL(vx.rev, 0u);
+}
+
+void test_seq_erase_tombstone() {
+    MemStorage storage;
+
+    auto tx = storage.write();
+    tx->put({"items", true}, "first");
+    tx->commit();
+
+    CHECK_EQUAL(storage.get({"items", true}).rev, 1u);
+    CHECK(storage.get({"items", true}).exists);
+
+    // erase → tombstone with next revision
+    auto tx2 = storage.write();
+    auto r = tx2->erase({"items", true});
+    CHECK_EQUAL(r, 2u);
+    tx2->commit();
+
+    // latest value: exists=false, rev=2 (tombstone)
+    auto v = storage.get({"items", true});
+    CHECK(!v.exists);
+    CHECK_EQUAL(v.rev, 2u);
+
+    // old revision still accessible and valid
+    auto v1 = storage.get({"items", true}, 1);
+    CHECK(v1.exists);
+    CHECK_EQUAL(v1.data, "first");
+
+    // tombstone accessible by revision
+    auto v2 = storage.get({"items", true}, 2);
+    CHECK(!v2.exists);
+    CHECK_EQUAL(v2.rev, 2u);
+
+    // further put after tombstone → revision 3
+    auto tx3 = storage.write();
+    tx3->put({"items", true}, "restored");
+    tx3->commit();
+
+    auto v3 = storage.get({"items", true});
+    CHECK(v3.exists);
+    CHECK_EQUAL(v3.rev, 3u);
+    CHECK_EQUAL(v3.data, "restored");
+}
+
 int main() {
     test_plain_put_get();
     test_plain_erase();
     test_plain_get_all_keys();
     test_seq_put_get_latest();
+    test_seq_get_by_revision();
+    test_seq_erase_tombstone();
     return 0;
 }

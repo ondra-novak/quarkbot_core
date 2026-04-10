@@ -67,7 +67,15 @@ inline IStorage::Value MemStorage::get(Key key) const {
     auto last = entry.history.rbegin();
     return {last->first, last->second.first, last->second.second};
 }
-inline IStorage::Value MemStorage::get(Key /*key*/, Revision /*rev*/) const { return {0, false, {}}; }
+inline IStorage::Value MemStorage::get(Key key, Revision rev) const {
+    if (!key.sequence) return get(key);
+    auto it = _seq.find(std::string(key.name));
+    if (it == _seq.end()) return {0, false, {}};
+    const auto &entry = it->second;
+    auto hit = entry.history.find(rev);
+    if (hit == entry.history.end()) return {0, false, {}};
+    return {rev, hit->second.first, hit->second.second};
+}
 inline std::vector<std::string> MemStorage::get_all_keys(const Key &filter) const {
     std::vector<std::string> result;
     if (!filter.sequence) {
