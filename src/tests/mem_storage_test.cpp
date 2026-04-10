@@ -294,6 +294,18 @@ void test_seq_get_all_keys() {
     // empty prefix = all sequence keys
     auto all = storage.get_all_keys({"", true});
     CHECK_EQUAL(all.size(), 3u);
+
+    // tombstoned key must not appear in results
+    auto tx2 = storage.write();
+    tx2->erase({"order:A", true});
+    tx2->commit();
+
+    auto after_erase = storage.get_all_keys({"order:", true});
+    CHECK_EQUAL(after_erase.size(), 1u);
+    CHECK_EQUAL(after_erase[0], "order:B");
+
+    auto all2 = storage.get_all_keys({"", true});
+    CHECK_EQUAL(all2.size(), 2u);  // order:B + fill:1; order:A tombstoned
 }
 
 void test_namespace_separation() {
