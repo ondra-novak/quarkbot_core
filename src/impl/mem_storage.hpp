@@ -82,7 +82,11 @@ inline IStorage::Revision MemStorage::apply_put(Key key, std::string_view data) 
 }
 inline IStorage::Revision MemStorage::apply_erase(Key /*key*/) { return 0; }
 inline void MemStorage::apply_prune(Key /*key*/, Revision /*from*/, Revision /*to*/) {}
-inline IStorage::Revision MemStorage::next_seq_rev(std::string_view /*name*/) const { return 1; }
+inline IStorage::Revision MemStorage::next_seq_rev(std::string_view name) const {
+    auto it = _seq.find(std::string(name));
+    if (it == _seq.end()) return 1;
+    return it->second.next_rev;
+}
 
 // --- MemStorageTransaction ---
 
