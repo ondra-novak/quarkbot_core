@@ -90,7 +90,7 @@ namespace quarkbot {
     
     template<std::invocable<Order> Callback>
     inline void order_restore(const PTradableInstrument &instrument, Callback &&cb) {        
-        auto keys = _storage->get_all_keys({_order_prefix, false});
+        auto keys = _storage->list({_order_prefix, false});
         for (auto &k:keys) {
             auto val = _storage->get({k, false});
             if (val.exists) {

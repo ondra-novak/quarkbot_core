@@ -1,36 +1,27 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests/)
 
+
+
 set(BASIC_TESTS
     compile_test.cpp
     decimal_test.cpp
     pubsub.cpp
     mem_storage_test.cpp
-)
-
-set(IMPL_TESTS
     instrument_spec_test.cpp
     tardis_source_test.cpp
     merged_source_test.cpp
 )
 
+
+
 foreach (testFile ${BASIC_TESTS})
     string(REGEX MATCH "([^\/]+$)" filename ${testFile})
     string(REGEX MATCH "[^.]*" executable_name tests_${filename})
     add_executable(${executable_name} ${testFile})
-    target_link_libraries(${executable_name} PRIVATE BasicCoro::basic_coro)
+    target_link_libraries(${executable_name} PRIVATE BasicCoro::basic_coro quarkbot_impl)
     target_compile_definitions(${executable_name} PRIVATE
         MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
     )
     add_test(NAME "tests/${filename}" COMMAND ${executable_name})
 endforeach()
 
-foreach (testFile ${IMPL_TESTS})
-    string(REGEX MATCH "([^\/]+$)" filename ${testFile})
-    string(REGEX MATCH "[^.]*" executable_name tests_${filename})
-    add_executable(${executable_name} ${testFile})
-    target_link_libraries(${executable_name} PRIVATE quarkbot_impl)
-    target_compile_definitions(${executable_name} PRIVATE
-        MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-    )
-    add_test(NAME "tests/${filename}" COMMAND ${executable_name})
-endforeach()

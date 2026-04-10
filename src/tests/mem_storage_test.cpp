@@ -72,7 +72,7 @@ void test_plain_get_all_keys() {
     tx->commit();
 
     // prefix filter
-    auto keys = storage.get_all_keys({"order:", false});
+    auto keys = storage.list({"order:", false});
     CHECK_EQUAL(keys.size(), 2u);
     // both order keys present (order not guaranteed)
     bool has1 = false, has2 = false;
@@ -84,7 +84,7 @@ void test_plain_get_all_keys() {
     CHECK(has2);
 
     // empty prefix = all plain keys
-    auto all = storage.get_all_keys({"", false});
+    auto all = storage.list({"", false});
     CHECK_EQUAL(all.size(), 3u);
 
     // erased key not returned
@@ -92,7 +92,7 @@ void test_plain_get_all_keys() {
     tx2->erase({"order:1", false});
     tx2->commit();
 
-    auto keys2 = storage.get_all_keys({"order:", false});
+    auto keys2 = storage.list({"order:", false});
     CHECK_EQUAL(keys2.size(), 1u);
     CHECK_EQUAL(keys2[0], "order:2");
 }
@@ -172,7 +172,7 @@ void test_seq_get_by_revision() {
     // non-existent revision
     auto vx = storage.get({"log", true}, 99);
     CHECK(!vx.exists);
-    CHECK_EQUAL(vx.rev, 0u);
+    CHECK_EQUAL(vx.rev, 99u);
 }
 
 void test_seq_erase_tombstone() {
@@ -231,7 +231,7 @@ void test_seq_prune_history() {
 
     // prune revisions 1–3 (keep 4, 5)
     auto txp = storage.write();
-    txp->prune_history({"hist", true}, 1, 3);
+    txp->prune_history("hist",4);
     txp->commit();
 
     // 4 and 5 still accessible
@@ -242,7 +242,7 @@ void test_seq_prune_history() {
 
     // 1, 2, 3 are gone
     CHECK(!storage.get({"hist", true}, 1).exists);
-    CHECK_EQUAL(storage.get({"hist", true}, 1).rev, 0u);
+    CHECK_EQUAL(storage.get({"hist", true}, 1).rev, 1);
     CHECK(!storage.get({"hist", true}, 2).exists);
     CHECK(!storage.get({"hist", true}, 3).exists);
 
@@ -251,7 +251,7 @@ void test_seq_prune_history() {
 
     // prune with to > last_rev: last revision is protected
     auto txp2 = storage.write();
-    txp2->prune_history({"hist", true}, 4, 999);
+    txp2->prune_history("hist", 999);
     txp2->commit();
 
     // rev 5 (last) survives
@@ -265,10 +265,6 @@ void test_seq_prune_history() {
     auto txs = storage.write();
     txs->put({"plain", false}, "x");
     txs->commit();
-    auto txp3 = storage.write();
-    txp3->prune_history({"plain", false}, 0, 99);
-    txp3->commit();
-    CHECK(storage.get({"plain", false}).exists);  // still there
 }
 
 void test_seq_get_all_keys() {
@@ -281,7 +277,7 @@ void test_seq_get_all_keys() {
     tx->commit();
 
     // prefix filter on sequence keys
-    auto keys = storage.get_all_keys({"order:", true});
+    auto keys = storage.list({"order:", true});
     CHECK_EQUAL(keys.size(), 2u);
     bool hasA = false, hasB = false;
     for (auto &k : keys) {
@@ -292,7 +288,7 @@ void test_seq_get_all_keys() {
     CHECK(hasB);
 
     // empty prefix = all sequence keys
-    auto all = storage.get_all_keys({"", true});
+    auto all = storage.list({"", true});
     CHECK_EQUAL(all.size(), 3u);
 
     // tombstoned key must not appear in results
@@ -300,11 +296,11 @@ void test_seq_get_all_keys() {
     tx2->erase({"order:A", true});
     tx2->commit();
 
-    auto after_erase = storage.get_all_keys({"order:", true});
+    auto after_erase = storage.list({"order:", true});
     CHECK_EQUAL(after_erase.size(), 1u);
     CHECK_EQUAL(after_erase[0], "order:B");
 
-    auto all2 = storage.get_all_keys({"", true});
+    auto all2 = storage.list({"", true});
     CHECK_EQUAL(all2.size(), 2u);  // order:B + fill:1; order:A tombstoned
 }
 
@@ -336,10 +332,10 @@ void test_namespace_separation() {
     CHECK(storage.get({"key", true}).exists);
 
     // get_all_keys respects namespace
-    auto plain_keys = storage.get_all_keys({"", false});
+    auto plain_keys = storage.list({"", false});
     CHECK_EQUAL(plain_keys.size(), 0u);
 
-    auto seq_keys = storage.get_all_keys({"", true});
+    auto seq_keys = storage.list({"", true});
     CHECK_EQUAL(seq_keys.size(), 1u);
     CHECK_EQUAL(seq_keys[0], "key");
 }

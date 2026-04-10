@@ -19,13 +19,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(BasicCoro)
 
-# Find LevelDB using pkg-config
-#find_package(PkgConfig REQUIRED)
+
+#Find LevelDB using pkg-config
+find_package(PkgConfig REQUIRED)
 #pkg_check_modules(LIBSSL REQUIRED openssl)
 #pkg_check_modules(LIBWEBSOCKETS REQUIRED libwebsockets)
 
 
-#find_library(LEVELDB_LIBRARIES leveldb)
+find_library(LEVELDB_LIBRARIES leveldb)
 #if(NOT LEVELDB_LIBRARIES)
   #message(FATAL_ERROR "libleveldb missing (libleveldb-dev)?")
 #endif()

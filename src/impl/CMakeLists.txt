@@ -12,9 +12,14 @@ add_library(quarkbot_impl
     configured_data_source.cpp
     tardis_data_source.cpp
     merged_data_source.cpp
+    leveldb_storage.cpp
 )
 
 target_link_libraries(quarkbot_impl
     PUBLIC BasicCoro::basic_coro
     PRIVATE ZLIB::ZLIB
+    PRIVATE leveldb
+    
 )
+
+

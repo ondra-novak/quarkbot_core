@@ -59,9 +59,12 @@ namespace quarkbot {
             @param filter key filter to apply - you can specify whether you want sequence or non sequence keys, or filter by name prefix. 
             @return vector of all keys matching the filter
          */
-        virtual std::vector<std::string> get_all_keys(const Key &filter) const = 0;        
+        virtual std::vector<std::string> list(const Key &filter) const = 0;        
         ///creates transaction for writing values. Transaction is used to write multiple values atomically. Transaction must be commited by calling commit() method. If transaction is not commited, all changes are discarded
-        virtual PStorageTransaction write() = 0;
+        /**
+          @param sync set true to force fsync.
+         */
+        virtual PStorageTransaction write(bool sync = false) = 0;
 
     };
 
@@ -85,14 +88,14 @@ namespace quarkbot {
             @return revision of tombstone value for sequence keys, or 0 for non sequence keys
          */        
         virtual Revision erase(Key key) = 0;
-        ///prune history of key. For sequence keys, it removes all revisions from "from" to "to" (inclusive). For non sequence keys, it does nothing
+        ///prune history of key. For sequence keys, it removes all revisions from lowest to "to" (exclusive). For non sequence keys, it does nothing
         /**
             @param key key to prune history for
-            @param from starting revision to prune
             @param to ending revision to prune
             @note always keeps last revision, even if it is in range. This means that if "to" is greater than last revision, it is set to last revision
+            @note changed API 
          */
-        virtual void prune_history(Key key, Revision from, Revision to) = 0;
+        virtual void prune_history(std::string_view key, Revision to) = 0;
         ///commit transaction. After commit, all changes are applied to storage. If transaction is not commited, all changes are discarded
         /**
           You should drop transaction object after commit, or if you don't want to commit, to discard changes.

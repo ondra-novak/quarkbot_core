@@ -14,6 +14,18 @@
 #include <type_traits>
 
 
+#if defined(__SIZEOF_INT128__)
+#  if defined(__clang__) || defined(__GNUC__)
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wpedantic"
+#  endif
+using int128_t = __int128;
+#  if defined(__clang__) || defined(__GNUC__)
+#    pragma GCC diagnostic pop
+#  endif
+#else
+#  error "Compiler must support int128_t for multiply_and_div64"
+#endif
 
 namespace _decimal_details {
 
@@ -58,7 +70,7 @@ namespace _decimal_details {
 
     template<int64_t k>
     inline constexpr std::int64_t multiply_and_div64(int64_t a, int64_t b) {
-        auto m = static_cast<__int128>(a) * static_cast<__int128>(b);
+        auto m = static_cast<int128_t>(a) * static_cast<int128_t>(b);
         return static_cast<int64_t>(m/ k);
     }
 
@@ -459,7 +471,7 @@ public:
         template<typename Iter>
         static constexpr Iter out_number2(Iter iter, std::int64_t number) {
             if (number) {
-                int z = number % 10;
+                int z = static_cast<int>(number % 10);
                 iter = out_number2(iter, number/10);
                 *iter++ = static_cast<char>(z + '0');
             }
