@@ -9,12 +9,14 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace quarkbot {
 
 
     class IStorageTransaction;
     using PStorageTransaction =  std::unique_ptr<IStorageTransaction> ;
+    
 
     ///Interface for storage of strategy data. 
     /* Storage is used to store strategy state, parameters, 
@@ -95,7 +97,16 @@ namespace quarkbot {
             @note always keeps last revision, even if it is in range. This means that if "to" is greater than last revision, it is set to last revision
             @note changed API 
          */
+
         virtual void prune_history(std::string_view key, Revision to) = 0;
+
+        ///Erase one revision of sequential key
+        /**
+          This erases exact revision of sequential key. It can be useful to erase old indicator data. The function
+          can be faster than prune_history, as it doesn't perform range iteration over old keys
+         */
+        virtual void erase(std::string_view key, Revision rev) = 0;
+
         ///commit transaction. After commit, all changes are applied to storage. If transaction is not commited, all changes are discarded
         /**
           You should drop transaction object after commit, or if you don't want to commit, to discard changes.
@@ -106,4 +117,27 @@ namespace quarkbot {
         virtual ~IStorageTransaction() = default;
     };
 
-};
+
+    class IStorageManager {
+    public:
+        ///returns storage for strategy. Storage is used to store strategy state, parameters, or any other data that needs to be preserved between runs. Storage is created on demand, so if it is not found, new storage is created and returned
+        /**
+            @param name name of storage. It must be unique for strategy.
+
+            @note there can be limit on number of storages, so it is recommended to reuse storages if possible. 
+            LevelDB implementation has limit of 127 storages.
+                                
+         */
+        virtual PStorage get_storage(std::string_view name) = 0;
+        ///deletes storage with specified name. After deletion, storage is not found and new storage is created 
+        /// on demand when get_storage() is called with the same name
+        virtual void delete_storage(std::string_view name) = 0;
+
+        ///retrieve list all storages in the database
+        virtual std::vector<std::string> list() = 0;
+
+        virtual ~IStorageManager() = default;
+    };
+
+}
+

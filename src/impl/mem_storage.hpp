@@ -20,14 +20,16 @@ public:
 
     Revision put(Key key, std::string_view value_blob) override;
     Revision erase(Key key) override;
+    void erase(std::string_view key, Revision rev) override;
     void prune_history(std::string_view key, Revision to) override;
     void commit() override;
 
 private:
     struct OpPut   { std::string key_name; bool sequence; std::string data; };
     struct OpErase { std::string key_name; bool sequence; };
+    struct OpEraseRev { std::string key_name; Revision rev; };
     struct OpPrune { std::string key_name;  Revision to; };
-    using Op = std::variant<OpPut, OpErase, OpPrune>;
+    using Op = std::variant<OpPut, OpErase, OpEraseRev, OpPrune>;
 
     std::vector<Op> _ops;
     MemStorage &_storage;
@@ -45,6 +47,7 @@ private:
     Revision apply_put(const Key &key, std::string_view data);
     Revision apply_erase(const Key &key);
     void apply_prune(const std::string &key,  Revision to);
+    void apply_erase_rev(const std::string &key, Revision rev);
     Revision next_seq_rev(std::string_view name) const;
 
     struct SeqEntry {
@@ -102,7 +105,7 @@ inline std::vector<std::string> MemStorage::list(const Key &filter) const {
     }
     return result;
 }
-inline PStorageTransaction MemStorage::write(bool) { return std::make_unique<MemStorageTransaction>(*this); }
+inline PStorageTransaction MemStorage::write(bool = false) { return std::make_unique<MemStorageTransaction>(*this); }
 inline IStorage::Revision MemStorage::apply_put(const Key &key, std::string_view data) {
     if (!key.sequence) {
         _plain[std::string(key.name)] = std::string(data);
@@ -122,6 +125,18 @@ inline IStorage::Revision MemStorage::apply_erase(const Key &key) {
     Revision rev = ++entry.last_rev;
     entry.history.push_back(std::nullopt);
     return rev;
+}
+inline void MemStorage::apply_erase_rev(const std::string &key, Revision rev) {
+    auto iter = _seq.find(key);
+    if (iter == _seq.end()) return;
+    auto &v = iter->second;
+    auto minrev = v.last_rev - v.history.size() + 1;
+    if (rev < minrev || rev > v.last_rev) return;
+    v.history[rev].reset();
+    auto iter2 = std::find_if(v.history.begin(), v.history.end(), [&](auto &x){return x.has_value();});
+    if (iter2 != v.history.begin()) {
+        v.history.erase(v.history.begin(), iter2);
+    }
 }
 inline void MemStorage::apply_prune(const std::string &key, Revision to) {
     auto it = _seq.find(std::string(key));
@@ -156,6 +171,9 @@ inline IStorageTransaction::Revision MemStorageTransaction::erase(Key key) {
     // Same stale-estimate caveat as put() above.
     return key.sequence ? _storage.next_seq_rev(key.name) : 0;
 }
+inline void MemStorageTransaction::erase(std::string_view key, Revision rev) {
+    _ops.emplace_back(OpEraseRev{std::string(key), rev});
+}
 inline void MemStorageTransaction::prune_history(std::string_view key, Revision to) {
     _ops.emplace_back(OpPrune{std::string(key),  to});
 }
@@ -167,6 +185,8 @@ inline void MemStorageTransaction::commit() {
                 _storage.apply_put({o.key_name, o.sequence}, o.data);
             else if constexpr (std::is_same_v<T, OpErase>)
                 _storage.apply_erase({o.key_name, o.sequence});
+            else if constexpr(std::is_same_v<T,OpEraseRev>)
+                _storage.apply_erase_rev(o.key_name, o.rev);
             else
                 _storage.apply_prune(o.key_name,  o.to);
         }, op);
