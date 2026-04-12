@@ -1,6 +1,8 @@
 #pragma once
 #include "ta/bb_ema.hpp"
+#include "ta/ema.hpp"
 #include <optional>
+#include <queue>
 #include <vector>
 
 class TrendingStrategyCore {
@@ -9,13 +11,12 @@ public:
     struct Config {
         std::size_t bb_interval;
         double bb_level_step;
-        double hystersis;
         double multiplier;
         double min_loss;
         double max_loss;        
         bool inverse_market;
         double min_size;
-        bool no_market_order;
+        std::size_t ema_trend;
 
         double calc_pnl(double open, double close, double size) const;
 
@@ -54,20 +55,25 @@ public:
     
 
     double get_mean() const {return _bb.value().mean;}
+    double get_trend_rev_price() const {return _ema.value();}
     double get_last_price() const {return _prev_price;}
     double get_position()  const {return _cur_position;}
     const Config &get_config() const {return _cfg;}
 
 protected:
     using BB = quarkbot::Bollinger_Ema<double>;
+    using EMA = quarkbot::Ema<double>;
 
     Config _cfg;
     BB _bb;    
+    EMA _ema;
+    
     int _avoid_line = 9999;
     double _cur_loss = 0;
     double _cur_position = 0.000000000000001;
     double _prev_price = 1.0;    
     double _hist = 0;
+    double _prev_ema = 0;
    
 
     double calc_new_pos(double loss, double price) const;

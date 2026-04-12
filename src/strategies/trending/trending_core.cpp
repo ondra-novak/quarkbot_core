@@ -20,7 +20,8 @@ double TrendingStrategyCore::Config::calc_pnl(double open, double close, double 
 
 TrendingStrategyCore::TrendingStrategyCore(Config cfg)
     :_cfg(cfg)
-    ,_bb(_bb.from_period(cfg.bb_interval, 0, {})) {
+    ,_bb(_bb.from_period(cfg.bb_interval, 0, {}))
+    ,_ema(_ema.from_period(_cfg.ema_trend, 0)) {
     }
 
     
@@ -28,6 +29,8 @@ std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(con
     double price = (input.ask + input.bid)*0.5;
     if (_bb.value().mean == 0) {
         _bb = _bb.from_period(_cfg.bb_interval, 0, {price, price *0.01});
+        _ema = _ema.from_period(_cfg.ema_trend, price);
+        _prev_ema = price;
         _bb.update(price);
         return {};
     }
@@ -38,14 +41,13 @@ std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(con
     for (auto &f: input.fills) {
         double pnl = calc_pnl(f.price);
         _cur_loss = std::max(0.0,_cur_loss - pnl);
-        if (f.src == 'L' && f.lev != 999) {
-            if ((f.price - _prev_price)*_cur_position > 0) _hist = 0; 
-        } else  {
-            _hist += _cfg.hystersis;
-        }
         _cur_position += f.size;        
         _prev_price = f.price;
         _avoid_line = f.lev;
+        if (&f == &input.fills[0]) {
+            _prev_ema = _ema.value();
+            _ema.update(f.price);
+        }
     }
     _cur_position = input.final_position;
     Order best_buy = {0,std::numeric_limits<double>::max()};
@@ -55,12 +57,12 @@ std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(con
     lev = -1;
     while (calculate_levels(-1, lev, bbres, best_buy, best_sell, input.bid, input.ask) && lev > -100) lev--;
     
-    Result res {best_buy, best_sell,0,0};
 
-
-        
-    double buy_hyst = bbres.mean * std::exp(_hist);
-    double sell_hyst = bbres.mean * std::exp(-_hist);
+/*
+    _hist = _cfg.hystersis;
+    
+    double buy_hyst = _ema.value() *(1.0+_hist);
+    double sell_hyst = _ema.value() *(1.0-_hist);
     if (_cur_position >= 0 && input.ask < sell_hyst) {
         double p =  _cur_position+calc_new_pos(_cur_loss - calc_pnl(input.ask),input.ask) ;;
         if (_cfg.no_market_order) {        
@@ -83,7 +85,34 @@ std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(con
         }
     } 
     
-    
+  */
+    double market_size = 0;
+    int market_side = 0;
+
+    if (best_sell.price < _ema.value() && _cur_position > 0) {
+        best_sell.size += 2*_cur_position;
+        best_buy.size = 0;
+        _avoid_line = 9999;
+/*        if (price < best_sell.price - 2*bbres.dev) {
+            market_size = best_sell.size;
+            market_side = -1;     
+        }*/
+    }
+    if (best_buy.price > _ema.value() && _cur_position < 0) {
+        best_buy.size += -2*_cur_position;
+        best_sell.size = 0;
+        _avoid_line = 9999;
+        /*
+        if (price > best_buy.price - 2*bbres.dev) {
+            market_size = best_buy.size;
+            market_side = 1;     
+        }
+            */
+    }
+
+    Result res {best_buy, best_sell,market_size,market_side};
+
+
     return res;
 }
 
