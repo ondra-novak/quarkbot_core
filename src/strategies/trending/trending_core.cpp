@@ -50,6 +50,14 @@ std::optional<TrendingStrategyCore::Result> TrendingStrategyCore::operator()(con
         }
     }
     _cur_position = input.final_position;
+
+    auto newloss = calc_new_loss(calc_pnl(price));
+    if (newloss > _cfg.max_loss && newloss >= _cur_loss) {
+        _cur_loss = newloss;
+        _prev_price = price;
+    }
+    
+
     Order best_buy = {0,std::numeric_limits<double>::max()};
     Order best_sell = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max()};
     int lev = 0;
@@ -134,13 +142,21 @@ double TrendingStrategyCore::calc_new_loss(double pnl) {
     return std::max(_cur_loss - pnl,0.0);
 }
 
+double TrendingStrategyCore::calc_position_from_pnl(double price) {
+    double pnl = calc_pnl(price);
+    double new_loss = calc_new_loss(pnl);
+    double pos1 = calc_new_pos(new_loss, price);
+    double pos2 = calc_new_pos(std::max(_cfg.min_loss,_cfg.max_loss-pnl), price);
+    return std::min(pos1, pos2);
+}
+
 bool TrendingStrategyCore::calculate_levels(int dir, int level,const BB::Result &bbres, Order &best_buy, Order &best_sell, double bid, double ask) {
     if (level == _avoid_line) 
         return true;
     double price = bbres.mean + bbres.dev * _cfg.bb_level_step * level;
     double s= sgn(_cur_position);
     if (s == 0) s = sgn(_prev_price - price);
-    double pos = calc_new_pos(calc_new_loss(calc_pnl(price)),price) * s;
+    double pos = calc_position_from_pnl(price)*s;
     if (price < bid) {        
         double diff = pos - _cur_position;
         if (diff < _cfg.min_size) return true;

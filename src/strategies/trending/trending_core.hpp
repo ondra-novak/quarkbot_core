@@ -80,6 +80,7 @@ protected:
     bool calculate_levels(int dir, int level, const BB::Result &bbres,  Order &best_buy, Order &best_sell, double bid, double ask);
     double calc_pnl(double price);
     double calc_new_loss(double pnl);
+    double calc_position_from_pnl(double price);
 
 
 };
