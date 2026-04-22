@@ -175,7 +175,13 @@ namespace quarkbot {
                         set_order_status(order.ord, {OrderStatus::filled});
                         return true;
                     }
-                    return false;                                                            
+                    return false;     
+                case OrderType::alert:
+                    if (sgn(dp) * sid < 0) {
+                        set_order_status(order.ord, {OrderStatus::filled});
+                        return true;
+                    }
+                    return false;                                                       
             }
         }
 
