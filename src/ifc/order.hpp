@@ -15,6 +15,9 @@ namespace quarkbot {
 
 
 enum class OrderType {
+    ///alert - not order exactly, limit_price is mandatory, amount must be zero, is marked filled when price is reached from given side 
+    /** alerts can be emulated if not supported on exchange */
+    alert,
     ///market order - amount is mandarory
     market,
     ///limit order - amount and limit_price are mandatory
@@ -35,7 +38,8 @@ inline constexpr bool is_limit_order(OrderType type) {
     return type == OrderType::limit
         || type == OrderType::limit_post_only
         || type == OrderType::limit_ioc
-        || type == OrderType::oco;
+        || type == OrderType::oco
+        || type == OrderType::alert;
 }
 
 inline constexpr bool is_stop_order(OrderType type) {
@@ -63,6 +67,8 @@ struct OrderParametersGen {
     bool reduce_only = false;
     ///create or increase to hedge side - can open reverse position if supported on exchange
     bool hedge = false;
+    ///Enforce that stop or alert is triggered on local side, not on exchange, even if exchange supports it.    
+    bool local_trigger = false;
     ///sets execution reason for given order 
     /**
       Allows to override execution reason for strategy orders. 

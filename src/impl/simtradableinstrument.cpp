@@ -77,7 +77,7 @@ StrategyFragment SimTradableInstrument::coro_report_status(std::shared_ptr<SimTr
     }
     co_return;
 }
-StrategyFragment SimTradableInstrument::coro_report_init( std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderInitialUpdate update) {
+StrategyFragment SimTradableInstrument::coro_report_init( std::shared_ptr<SimTradableInstrument> ,Order ord, OrderInitialUpdate update) {
     ord.update_order(std::move(update));
     co_return;
 }
@@ -97,6 +97,7 @@ void SimTradableInstrument::liquidation() {
                 {},
                 {},
                 {},
+                false,
                 false,
                 false,
                 ExecutionReason::liquidation
