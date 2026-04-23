@@ -9,15 +9,22 @@ struct StreamTypeItem {
     using Type = std::string_view;
 };
 
+///base class for all MarketInstrument events 
+struct MarketInstrumentStreamTypeItem: StreamTypeItem {};
+///base class for all TradableInstrument events
+struct TradableInstrumentStreamTypeItem: StreamTypeItem {};
 
 
 template<typename T>
-concept is_trivially_destructible = std::is_trivially_destructible_v<T>;
+concept is_copy_assignable_type = std::is_copy_assignable_v<T>;
 
-template<typename T>
-concept StreamType = std::derived_from<T, StreamTypeItem> && requires(T v) {
+
+template<typename T, typename Base = StreamTypeItem>
+concept StreamType = (std::same_as<Base,StreamTypeItem> || std::derived_from<Base, StreamTypeItem>)
+          && std::derived_from<T, Base> 
+&& requires(T v) {
     {T::type}->std::convertible_to<typename T::Type>;    
-    {v.view()} -> is_trivially_destructible;
+    {v.view()} -> is_copy_assignable_type;
 };
 
 
@@ -25,9 +32,6 @@ struct StreamParams {
 };
 
 inline constexpr StreamParams emptyStreamParams = {};
-
-struct MarketStreamTypeItem :StreamTypeItem {};
-struct InstrumentStreamTypeItem :StreamTypeItem{};
 
 
 template<typename T, typename U>
@@ -51,6 +55,7 @@ struct ExtractStreamParams<T> {
 
 template<StreamType T>
 constexpr const StreamParams *stream_params = ExtractStreamParams<T>::value;
+
 
 
 

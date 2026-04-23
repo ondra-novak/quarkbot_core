@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ifc/stream_defs.hpp"
 #include "types.hpp"
 #include "defs.hpp"
 #include <chrono>
@@ -351,6 +352,7 @@ protected:
 };
 
 using SerializedOrder = std::string;
+
 
 }
     

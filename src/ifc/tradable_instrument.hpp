@@ -2,6 +2,7 @@
 
 #include <basic_coro/awaitable.hpp>
 #include "ifc/defs.hpp"
+#include "ifc/stream_defs.hpp"
 #include "ifc/streaming.hpp"
 #include "market_instrument.hpp"
 #include "order.hpp"
@@ -74,7 +75,7 @@ public:
 
 
     ///Subscribe account event stream
-    template<StreamType T>
+    template<StreamType<TradableInstrumentStreamTypeItem> T>
     EventStream<T> subscribe() {
         auto x =  subscribe_stream_internal(T::type, stream_params<T>);
         if (x) return EventStream<T>(std::move(x));
@@ -108,10 +109,47 @@ public:
 
 };
 
+///Streaming type - listen on fills from other sources - for example from other strategies, liquidation engine or user's manual trades.
+struct ExternalFill : public Fill, public TradableInstrumentStreamTypeItem {
+    static constexpr Type type = "external_fill";
+    Fill &view() {return *this;}
+};
+
+///Streaming type - listen on funding events, if applicable for the instrument
+struct FundingEvent : public TradableInstrumentStreamTypeItem {
+    /// amount for this funding
+    Decimal amount;
+    /// rate,  if the funding is in different currency,
+    double rate = 1.0;
+
+    static constexpr Type type = "funding";
+    FundingEvent &view() {return *this;}
+};
+
+///Streaming type - listen on order status updates
+/**
+This events are intended for storing data into storage
+Stream is active when order state is changed or fill is detected
+
+@note recommended use - store fill and state atomically.
+ */
+class OrderEvent: public TradableInstrumentStreamTypeItem {
+public:
+    ///contains order id (key type, must be unique) (depend on exchange)
+    std::string order_id;
+    ///contains serialized state of the order . If missing, order is done and need to be no longer stored 
+    std::optional<std::string> serialized_state;
+    ///contains fill, if detected - you should put order state and fill into single database transaction
+    std::optional<Fill> fill;
+};
+
+///implementation of cancel_order for order
 inline void Order::cancel() {
     _state->instrument->cancel_order(*this);
 }
 
+///implementation of get_turnover for order
+/** Because Order definition doesn't see ITradableInstrument, the implementation is done here */
 inline Decimal Order::get_turnover(Decimal price, Decimal filled) const {
         const auto &params = get_parameters();
         const auto &info = get_instrument()->get_info();
@@ -131,6 +169,5 @@ inline Decimal Order::get_turnover(Decimal price, Decimal filled) const {
         return info.calc_turnover_pnl_currency(price,leaves);
     }
 
-
-
 }
+

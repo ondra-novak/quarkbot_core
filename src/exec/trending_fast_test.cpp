@@ -161,7 +161,7 @@ void test_runner(unsigned int threads) {
 
     std::cout << "rrr,profit,turnover,bb_interval,bb_level_step, ema_interval,minloss,maxloss,multiplier,best" << std::endl;
     double balance = 1000;
-    int seed_interval = 100;
+    int seed_interval = 20;
     int cur_seed_cycle = 0;
  
 
@@ -181,13 +181,14 @@ void test_runner(unsigned int threads) {
                         cur_seed_cycle++;
                     } else {
                         cfg.bb_interval = static_cast<std::size_t>(rand_int(6, 100)*10);
-                        cfg.bb_level_step = rand_int(1, 30)*0.1;
-                        cfg.ema_trend = static_cast<std::size_t>(rand_int(1, 200));
+                        cfg.bb_level_step = rand_int(1, 4)*0.5;
+                        cfg.ema_trend = static_cast<std::size_t>(rand_int(1, 10));
+                        cfg.ema_trend *= cfg.ema_trend;
                         cfg.min_size = 0.00001;
                         cfg.inverse_market = false;
                         cfg.min_loss = balance *0.02;
                         cfg.max_loss = balance;
-                        cfg.multiplier = static_cast<double>(rand_int(1, 100));                        
+                        cfg.multiplier = static_cast<double>(rand_int(10, 50));                        
                         cur_seed_cycle = 1;
                     }
                     auto s = std::string(reinterpret_cast<const char *>(&cfg), sizeof(cfg));    
@@ -262,6 +263,7 @@ void test_runner(unsigned int threads) {
     }
     std::string ln;
     std::getline(std::cin, ln);
+    for (auto &thr: thrs) thr.request_stop();
 
 }
 

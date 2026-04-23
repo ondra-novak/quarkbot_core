@@ -13,6 +13,7 @@ namespace quarkbot {
 
 
     template<typename ViewType, std::size_t queue_len>
+    requires(std::is_trivially_destructible_v<ViewType>)
     class LockFreePublisher: public PublisherBase {
     public:
 
