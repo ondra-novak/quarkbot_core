@@ -47,6 +47,15 @@ public:
         return _current_worker.lock();
     }
 
+    ///Schedule current coroutine (StrategyFragment) on this execution worker
+    /**
+    Execution is transfered to new execution worker. It can be called from thread which has no execution worker
+     */
+    awaitable<void> schedule() {
+        return [this](auto promise) {
+            resume(promise());
+        };
+    }
     
 protected:
 

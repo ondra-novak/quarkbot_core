@@ -113,6 +113,8 @@ public:
 struct ExternalFill : public Fill, public TradableInstrumentStreamTypeItem {
     static constexpr Type type = "external_fill";
     Fill &view() {return *this;}
+
+    ExternalFill(Fill f):Fill(std::move(f)) {};
 };
 
 ///Streaming type - listen on funding events, if applicable for the instrument
@@ -141,6 +143,8 @@ public:
     std::optional<std::string> serialized_state;
     ///contains fill, if detected - you should put order state and fill into single database transaction
     std::optional<Fill> fill;
+
+    static constexpr auto type = Type("order_event");
 };
 
 ///implementation of cancel_order for order

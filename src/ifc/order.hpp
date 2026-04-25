@@ -1,14 +1,20 @@
 #pragma once
 
+#include "basic_coro/coro_frame.hpp"
+#include "basic_coro/prepared_coro.hpp"
+#include "ifc/execution_worker.hpp"
 #include "ifc/stream_defs.hpp"
 #include "types.hpp"
 #include "defs.hpp"
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <system_error>
+#include <variant>
 #include "utils/decimal.hpp"
+#include "utils/double_buffer.hpp"
 #include "utils/round.hpp"
 
 
@@ -166,8 +172,9 @@ struct OrderInitialUpdate {
 class Order {
 public:
 
+    using Update = std::variant<Fill, OrderStatusUpdate>;
 
-    struct State {
+    struct State : coro::coro_frame<State> {
         ///original parameters -  adjusted
         const OrderParameters parameters = {};
         ///associated instrument
@@ -186,19 +193,12 @@ public:
         OrderRejectionReason reject_reason = {};
         ///if order rejected, there is message if any
         std::string rejection_message = {};
-        ///revision of last change
-        /** @note connector must update order in strategy's thread */
-        unsigned int rev = 0;
-        ///revision of last seen change
-        unsigned int seen_rev = 0;     
-        ///queue of unprocessed fills
-        std::queue<Fill> fills;
-        ///awaiting coroutine
-        awaitable<bool>::result awaiting = {};
-        ///contains timestamp of last seen fill pulled from fills
-        std::chrono::system_clock::time_point _last_seen_fill_time = {};
-        ///contains index of last seen fill, if timestamp was same
-        std::size_t _last_seen_fill_counter = 0;
+
+        std::mutex mx;
+
+        DoubleBufferQueue<Update> updates;
+
+        ResultAndExecWorker<bool> awaiting = {};
         
 
         State(OrderParametersGen<Decimal> params, 
@@ -208,7 +208,42 @@ public:
         ):parameters(std::move(params))
          ,instrument(std::move(instrument))
          ,name(std::move(name))
-         ,replaced_order(std::move(replaced_order)) {}
+         ,replaced_order(std::move(replaced_order))
+         ,updates(mx)
+         {}
+
+
+        void flush_state() {
+            while (!updates.empty() && std::holds_alternative<OrderStatusUpdate>(updates.front())) {
+                auto st = std::get<OrderStatusUpdate>(updates.front());
+                status = st.status;
+                if (status == OrderStatus::open) {
+                    id = std::move(st.string_param);
+                } else if (is_done_status(status)) {
+                    reject_reason = st.rej_status;
+                    rejection_message = std::move(st.string_param);
+                }
+                updates.pop();
+            }
+        }
+        void update(Update &&u) {
+            std::scoped_lock _(mx);
+            updates.push(std::move(u));
+            if (awaiting) {
+                flush_state();
+                awaiting(true);                
+            }
+        }
+
+        std::optional<bool> pull() {
+            std::scoped_lock _(mx);
+            if (updates.empty()) {
+                if (is_done_status(status)) return false;
+                return {};
+            }
+            flush_state();
+            return true;
+        }
     };
         
     Order(std::shared_ptr<State> st):_state(std::move(st)) {}
@@ -227,25 +262,28 @@ public:
 
     ///Wait for next event (awaitable)
     /**
-    @retval true a state of order has been changed, or there are unprocessed fill
+    @retval true a state of order has been changed, or there are unprocessed fill. State update is applied to order instance.
     @retval false order is done
-
-    @note The function always returns immediatelly if there is unprocessed fill. It returns true, if there is posibility that
-      state has been changed, and this information was note pulled out yet. Otherwise the function blocks, if co_awaited
-      If the order is done, function immediatelly returns false
+    @note If co_awaited, the function will suspend until there is new event (fill or status update) for this order. 
+    @note only one co_await can be active at the same time, otherwise behavior is undefined. 
+           You must co_await from execution thread, otherwise exception is thrown. However it is 
+           possible to co_await in different execution thread than order has been created.
     */
     awaitable<bool> next_event() {
-        if (!_state->fills.empty()) return true;
-        if (_state->seen_rev != _state->rev) {_state->seen_rev = _state->rev; return true;}
-        if (is_done_status(_state->status)) return false;
-        return [st = _state](auto promise) {
-            st->awaiting = std::move(promise);
+        auto &st = *_state;
+        auto r = st.pull();
+        if (r.has_value()) return *r;
+        return [state = _state](auto promise) {
+            auto r = state->pull();
+            if (r.has_value()) return promise(r.value());
+            state->awaiting = std::move(promise);
+            return coro::prepared_coro{};
         };
     }
 
     ///returns true if there is any unprocessed fill
     bool any_fill() const {
-        return !_state->fills.empty();
+        return _state->updates.empty() || std::holds_alternative<OrderStatusUpdate>(_state->updates.front());        
     }
 
     ///reads next fill, 
@@ -255,13 +293,9 @@ public:
     std::optional<Fill> read_fill() {
         std::optional<Fill> out;
         if (any_fill()) {
-            out.emplace(std::move(_state->fills.front()));
-            _state->fills.pop();
-            if (_state->_last_seen_fill_time  == out->time) _state->_last_seen_fill_counter++;
-            else {
-                _state->_last_seen_fill_time = out->time;
-                _state->_last_seen_fill_counter = 0;
-            }
+            out.emplace(std::move(std::get<Fill>(_state->updates.front())));
+            _state->updates.pop();
+            _state->flush_state();
         }
         return out;
     }
@@ -302,42 +336,11 @@ public:
 
     ///update order status
     /**
-    @note function is not MT safe. Ensure that it is called in strategy's thread
     */
-    void update_order(OrderStatusUpdate &&update) {
-        _state->status = update.status;
-        _state->reject_reason = update.rej_status;
-        if (!update.string_param.empty()) {
-            if (update.rej_status == OrderRejectionReason::none) {
-                _state->id = std::move(update.string_param);
-            } else {
-                _state->rejection_message = std::move(update.string_param);
-            }
-        }
-         ++_state->rev;
-        if (_state->awaiting) {
-            _state->seen_rev = _state->rev;
-            _state->awaiting(true);
-        }
+    void update_order(Update &&update) {
+        _state->update(std::move(update));
     }
 
-    ///update order status
-    /**
-    @note function is not MT safe. Ensure that it is called in strategy's thread
-    */
-    void update_order(Fill &&fill) {
-        _state->filled += fill.amount; 
-        _state->fills.push(std::move(fill));
-
-        if (_state->awaiting) {
-            _state->awaiting(true);
-        }
-    }
-
-    void update_order(OrderInitialUpdate &&st) {
-        _state->status = OrderStatus::open;
-        _state->id = st.id;
-    }
 
     void cancel();
     Decimal get_turnover(Decimal price, Decimal filled = {}) const;

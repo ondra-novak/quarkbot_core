@@ -309,7 +309,7 @@ void SimExecutor::set_order_status(const Order &ord, const OrderStatusUpdate &st
 void  SimExecutor::accept_order(const Order &ord) {
     auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get());
     if (_reporter) _reporter->on_order_placed(ord);
-    simt.on_order_accept(ord, { generate_random_string()});        
+    simt.on_order_status(ord, {OrderStatus::open, {}, generate_random_string()});        
 
 }
 

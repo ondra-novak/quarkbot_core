@@ -35,7 +35,8 @@ public:
     @retval false stream is closed or no new event is available
     */
     coro::awaitable<bool> next(ViewType &ref) {
-        return read_internal(ref, nullptr);
+        std::size_t dummy;
+        return read_internal(ref, dummy);
     }
     ///read next event, if available, and copy it to ref, also report count of missed events
     /**
@@ -45,13 +46,13 @@ public:
     @retval false stream is closed or no new event is available
     */
     coro::awaitable<bool> next(ViewType &ref, std::size_t &missed) {
-        return read_internal(ref, &missed);
+        return read_internal(ref, missed);
     }    
 
     class Null;
 
 protected:
-    virtual coro::awaitable<bool> read_internal(ViewType &ref, std::size_t *missed)  = 0;
+    virtual coro::awaitable<bool> read_internal(ViewType &ref, std::size_t &missed)  = 0;
 
 };
 
@@ -59,7 +60,7 @@ template<typename ViewType>
 class IEventStream<ViewType>::Null: public IEventStream<ViewType> {
     virtual bool is_open() const {return false;}
     virtual void close() {}
-    virtual coro::awaitable<bool> read_internal(ViewType &, std::size_t *) {return false;};
+    virtual coro::awaitable<bool> read_internal(ViewType &, std::size_t &) {return false;};
 };
 
 

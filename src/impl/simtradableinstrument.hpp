@@ -1,17 +1,14 @@
 #pragma once
 
-#include "basic_coro/coroutine.hpp"
-#include "basic_coro/pmr_allocator.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
 #include "ifc/tradable_instrument.hpp"
 #include "ifc/types.hpp"
-#include "ifc/underlying.hpp"
+#include "impl/streaming/queue_event_stream.hpp"
 #include "simexecutor.hpp"
 #include "utils/decimal.hpp"
 
 #include <memory>
-#include <memory_resource>
 #include <optional>
 
 
@@ -50,56 +47,96 @@ public:
 
     void on_order_fill(const Order &ord, const Fill &fill);
     void on_order_status(const Order &ord, const OrderStatusUpdate &status);        
-    void on_order_accept(const Order &ord, const OrderInitialUpdate &status);        
 
 protected:
-    std::shared_ptr<SimInstrument> _instrument;
-    std::shared_ptr<SimAccount> _account;   
 
-    Position _position;
-    Decimal _position_blocked = {}; //for spot
-    Decimal _upnl;
-
-    Decimal _last_price = {};
-
-
-    class OrderState: public Order::State {
-    public:
-        PExecutionWorker _worker;
-        Decimal _turnover;
-
-        OrderState(OrderParametersGen<Decimal> params, 
-              std::shared_ptr<SimTradableInstrument> instrument,
-              std::string name,
-              std::weak_ptr<State> replaced_order,
-              PExecutionWorker worker
-            );
-
-
+    struct RegOrder {
+        Order order;
+        Decimal turnover;        
+        Decimal filled = {};
     };
 
+    std::shared_ptr<SimInstrument> _instrument;
+    std::shared_ptr<SimAccount> _account;   
+    std::vector<RegOrder> _active_orders;
+    
+
+    Position _position = {}; //current position
+    Decimal _position_blocked = {};
+    Decimal _margin;   //margin for position and orders
+    Decimal _last_price = {};
+    Decimal _upnl = {};
+
+    std::weak_ptr<QueueEventPublisher<OrderEvent> > _order_update_stream;
+    std::weak_ptr<QueueEventPublisher<ExternalFill> > _liquidation_stream;
+
+    bool update_margin() {
+        const auto &info = get_info();
+        bool ok = true;
+        if (info.is_leveraged()) {
+            Decimal buy_orders = {};
+            Decimal sell_orders = {};
+            Decimal position_turnover = _position.get_volume(info);
+            for (auto &[o, t,f]: _active_orders) {
+                const auto &params = o.get_parameters();
+                auto to = o.get_turnover(_last_price, f);
+                if (params.side == _position.side) {
+                    to = to - position_turnover;
+                }
+                 if (to>0) {
+                    if (params.side == Side::buy) buy_orders += to;
+                    else if (params.side == Side::sell) sell_orders += to;                    
+                }
+            }
+            Decimal bigger = std::max(buy_orders, sell_orders);
+            Decimal margin = bigger / info.leverage;
+            ok = _account->update_wallet(info.pnl_currency, [&](SimAccount::WalletInfoExt &w){
+                w.initial_margin  = margin - _margin;
+            }, true) || ok;
+            _margin = margin;
+        } else {
+            Decimal cur_blocked = {};
+            Decimal pos_blocked = {};
+            for (auto &[o, t,f]: _active_orders) {
+                const auto &params = o.get_parameters();
+                if (params.side == Side::buy) {
+                    auto to = o.get_turnover(_last_price, f);
+                    cur_blocked+=to;
+                } else {
+                    pos_blocked += std::max<Decimal>(params.quantity - f,0);                    
+                }
+            }
+            ok = _account->update_wallet(info.quote_currency, [&](SimAccount::WalletInfoExt &w){
+                w.order_blocked = cur_blocked - _margin;
+            }, true) || ok;
+            _margin = cur_blocked;
+            if (info.asset_has_wallet()) {
+                ok = _account->update_wallet(*info.asset_wallet, [&](SimAccount::WalletInfoExt &w){
+                    w.order_blocked = pos_blocked - _position_blocked;
+                }, true) || ok;
+            }
+            _position_blocked = pos_blocked;
+        }
+        return ok;
+    }
 
     class OrderEx: public Order {
     public:
+        using State = Order::State;
+
         OrderEx(Order ord):Order(std::move(ord)) {}
 
-        std::shared_ptr<OrderState> get_state() const {
-            return std::static_pointer_cast<OrderState>(_state);
+        std::shared_ptr<State> get_state() const {
+            return this->_state;
         }
     };
 
-    bool add_order_blocking(OrderEx ord);
-    void remove_order_blocing(OrderEx ord);
-
-    static StrategyFragment coro_report_fill(std::shared_ptr<SimTradableInstrument> instrument, Order ord, Fill fill );
-    static StrategyFragment coro_report_status(std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderStatusUpdate update);
-    static StrategyFragment coro_report_init(std::shared_ptr<SimTradableInstrument> instrument,Order ord, OrderInitialUpdate update);
 
     void liquidation();
     std::optional<Order> liquidation_order; 
 
 
-    virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderState> old_state, std::string_view name = {});
+    virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderEx::State> old_state, std::string_view name = {});
     
 
 };

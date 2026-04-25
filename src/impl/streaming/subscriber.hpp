@@ -20,13 +20,13 @@ public:
         _closed = true;
         _publisher->cancel(&sig);
     }
-    virtual coro::awaitable<bool> read_internal(ViewType &ref, std::size_t *missed) override {
+    virtual coro::awaitable<bool> read_internal(ViewType &ref, std::size_t &missed) override {
         if (_closed) return false;
-        return _trn(_publisher->next(_seq, &sig),[this, missed, &ref](bool b){
+        return _trn(_publisher->next(_seq, &sig),[this, &missed, &ref](bool b){
             if (b) {
                 Seq cur = _seq;
                 _publisher->read(ref, _seq);
-                if (missed) *missed = _seq - cur - 1;                
+                missed = _seq - cur - 1;                
             } 
             return b;
         });
@@ -43,5 +43,6 @@ protected:
     coro::cancel_signal sig;
 
 };
+
 
 }
