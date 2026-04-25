@@ -22,7 +22,7 @@ public:
     }
 
     bool empty() const {
-        if (is_buffer2_empty() || _has_new_data.load()) return false;
+        if (!is_buffer2_empty() || _has_new_data.load()) return false;
         return  true;
     }
 
