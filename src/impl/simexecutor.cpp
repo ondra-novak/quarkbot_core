@@ -28,11 +28,12 @@ namespace quarkbot {
             return;
         }
 
+        Decimal filled = ord.get_filled();
         ActiveOrder aord{
-            std::move(ord),std::move( instrument), ord.get_filled()
+            std::move(ord),std::move( instrument), filled
         };
         if (!validate_order(aord)) return;
-        
+
         accept_order(aord.ord);
 
         if (match_order(aord,true)) return;
@@ -156,26 +157,26 @@ namespace quarkbot {
                     break;                
 
                 case OrderType::limit_post_only:
-                    if (taker && sgn(dp) * sid < 0) {
+                    if (taker && sgn(dp) * sid > 0) {
                         set_order_status(order.ord, {OrderStatus::rejected, OrderRejectionReason::post_only_taker});
                         return true;
                     }
                     [[fallthrough]];
                 case OrderType::limit_ioc:
                 case OrderType::limit:
-                    if (dp == 0 && dq > 0) {
-                        create_fill(order,p, dq, quote.time, taker);                            
+                    if (dp == 0) {
+                        create_fill(order, p, leave_quant, quote.time, taker);
                         break;
                     }
-                    else if (sgn(dp) * sid < 0) {
+                    else if (sgn(dp) * sid > 0) {
                         create_fill(order, params.limit_price, leave_quant, quote.time, taker);
                         break;
-                    }                        
+                    }
                     if (params.type == OrderType::limit_ioc) {
                         set_order_status(order.ord, {OrderStatus::filled});
                         return true;
                     }
-                    return false;     
+                    return false;
                 case OrderType::alert:
                     if (sgn(dp) * sid < 0) {
                         set_order_status(order.ord, {OrderStatus::filled});
@@ -240,6 +241,7 @@ namespace quarkbot {
     }
 
     void SimExecutor::on_event(PSimInstrument instrument, Quote &quote){
+        _last_quote = quote;
         Quote new_quote = quote;
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
             if (ord.instrument == instrument) {

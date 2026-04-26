@@ -30,11 +30,11 @@ struct OrderFixture {
         spec.quote_currency    = "USD";
         spec.pnl_currency      = "USD";
         spec.asset_wallet      = "BTC";
-        spec.min_lot_size      = Decimal(1, -5);
-        spec.lot_size_increment= Decimal(1, -5);
-        spec.price_increment   = Decimal(1, -2);
-        spec.fee_rate_maker    = Decimal(1, -3);
-        spec.fee_rate_taker    = Decimal(2, -3);
+        spec.min_lot_size      = 1_dec;
+        spec.lot_size_increment= 1_dec;
+        spec.price_increment   = 1_dec;
+        spec.fee_rate_maker    = 0.001_dec;
+        spec.fee_rate_taker    = 0.002_dec;
         spec.multiplier        = Decimal(1);
         spec.tick_scale        = Decimal(1);
 
@@ -65,8 +65,68 @@ static void drain_until_done(Order &order) {
     }
 }
 
-// --- placeholder tests (added in later tasks) ---
+static void test_limit_buy_fills_on_quote() {
+    OrderFixture fx;
+
+    Order order = fx.instrument->place_order(
+        OrderRequest{.side = Side::buy, .type = OrderType::limit,
+                     .quantity = 1_dec, .limit_price = 100_dec},
+        "buy_test");
+    drain_status(order);
+    CHECK(order.get_status() == OrderStatus::open);
+
+    // Unfavorable quote (ask=101 > limit=100) — must NOT fill
+    fx.exchange->on_event("BTCUSD",
+        Quote{.bid=99_dec, .bid_size=10_dec, .ask=101_dec, .ask_size=10_dec, .time=fx.t0});
+    CHECK(order.get_status() == OrderStatus::open);
+    CHECK(!order.any_fill());
+
+    // Favorable quote (ask=99 < limit=100) — must fill at limit_price
+    fx.exchange->on_event("BTCUSD",
+        Quote{.bid=98_dec, .bid_size=10_dec, .ask=99_dec, .ask_size=10_dec, .time=fx.t0});
+
+    auto fill = order.read_fill();
+    CHECK(fill.has_value());
+    CHECK(fill->price == 100_dec);
+    CHECK(fill->amount == 1_dec);
+    CHECK(fill->side == Side::buy);
+
+    coro::sync_await(order.next_event());
+    CHECK(order.get_status() == OrderStatus::filled);
+}
+
+static void test_limit_sell_fills_on_quote() {
+    OrderFixture fx;
+
+    Order order = fx.instrument->place_order(
+        OrderRequest{.side = Side::sell, .type = OrderType::limit,
+                     .quantity = 1_dec, .limit_price = 102_dec},
+        "sell_test");
+    drain_status(order);
+    CHECK(order.get_status() == OrderStatus::open);
+
+    // Unfavorable quote (bid=100 < limit=102) — must NOT fill
+    fx.exchange->on_event("BTCUSD",
+        Quote{.bid=100_dec, .bid_size=10_dec, .ask=103_dec, .ask_size=10_dec, .time=fx.t0});
+    CHECK(order.get_status() == OrderStatus::open);
+    CHECK(!order.any_fill());
+
+    // Favorable quote (bid=103 > limit=102) — must fill at limit_price
+    fx.exchange->on_event("BTCUSD",
+        Quote{.bid=103_dec, .bid_size=10_dec, .ask=105_dec, .ask_size=10_dec, .time=fx.t0});
+
+    auto fill = order.read_fill();
+    CHECK(fill.has_value());
+    CHECK(fill->price == 102_dec);
+    CHECK(fill->amount == 1_dec);
+    CHECK(fill->side == Side::sell);
+
+    coro::sync_await(order.next_event());
+    CHECK(order.get_status() == OrderStatus::filled);
+}
 
 int main() {
+    test_limit_buy_fills_on_quote();
+    test_limit_sell_fills_on_quote();
     return 0;
 }
