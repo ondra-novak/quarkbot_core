@@ -211,7 +211,7 @@ namespace quarkbot {
                 || (params.side == Side::sell && trade.price >= params.limit_price))
             {                
                 Decimal leave_quant = params.quantity - order.filled;
-                create_fill(order, params.limit_price, std::max(leave_quant, trade.size), trade.time,false);
+                create_fill(order, params.limit_price, std::min(leave_quant, trade.size), trade.time,false);
                 bool filled = order.filled >= params.quantity;
                 if (filled) set_order_status(order.ord, {OrderStatus::filled});
                 return filled;

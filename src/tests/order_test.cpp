@@ -125,8 +125,34 @@ static void test_limit_sell_fills_on_quote() {
     CHECK(order.get_status() == OrderStatus::filled);
 }
 
+static void test_limit_buy_fills_on_trade() {
+    OrderFixture fx;
+
+    Order order = fx.instrument->place_order(
+        OrderRequest{.side = Side::buy, .type = OrderType::limit,
+                     .quantity = 1_dec, .limit_price = 100_dec},
+        "buy_trade_test");
+    drain_status(order);
+    CHECK(order.get_status() == OrderStatus::open);
+
+    // Trade at price=99 (below limit=100) with size=2 — must fill at limit_price,
+    // capped at leave_quant=1 (verifies std::min fix, not std::max).
+    fx.exchange->on_event("BTCUSD",
+        Trade{.price=99_dec, .size=2_dec, .time=fx.t0});
+
+    auto fill = order.read_fill();
+    CHECK(fill.has_value());
+    CHECK(fill->price == 100_dec);
+    CHECK(fill->amount == 1_dec);   // must be 1, not 2
+    CHECK(fill->side == Side::buy);
+
+    coro::sync_await(order.next_event());
+    CHECK(order.get_status() == OrderStatus::filled);
+}
+
 int main() {
     test_limit_buy_fills_on_quote();
     test_limit_sell_fills_on_quote();
+    test_limit_buy_fills_on_trade();
     return 0;
 }
