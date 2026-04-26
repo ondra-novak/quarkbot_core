@@ -232,6 +232,58 @@ static void test_replace_order() {
     CHECK(replacement.get_status() == OrderStatus::filled);
 }
 
+static void test_order_next_event_coroutine() {
+    OrderFixture fx;
+
+    Order order = fx.instrument->place_order(
+        OrderRequest{.side = Side::buy, .type = OrderType::limit,
+                     .quantity = 1_dec, .limit_price = 100_dec},
+        "coro_test");
+    drain_status(order);
+    CHECK(order.get_status() == OrderStatus::open);
+
+    // Shared variables for communication with the coroutine
+    bool coro_got_event = false;
+    bool coro_ran = false;
+
+    // Define and launch a StrategyFragment coroutine that co_awaits next_event()
+    auto launch_coro = [&]() -> StrategyFragment {
+        bool result = co_await order.next_event();
+        coro_got_event = result;
+        coro_ran = true;
+    };
+
+    StrategyFragment frag = launch_coro();
+    // Enqueue the coroutine on the executor and run until it suspends
+    fx.executor->run(std::move(frag));
+    fx.executor->flush_queue();
+
+    // Coroutine should have suspended waiting for an update — not yet done
+    CHECK(!coro_ran);
+
+    // Push a fill update directly into the order
+    Fill fill{
+        .id         = "f1",
+        .order_name = "coro_test",
+        .time       = fx.t0,
+        .contract   = {},
+        .side       = Side::buy,
+        .reason     = ExecutionReason::strategy_order,
+        .amount     = 1_dec,
+        .price      = 100_dec,
+        .fees       = Decimal(0),
+        .fee_rate   = Decimal(1),
+    };
+    order.update_order(Order::Update{std::move(fill)});
+
+    // Pump the executor so the coroutine resumes
+    fx.executor->flush_queue();
+
+    // Coroutine should now have run to completion
+    CHECK(coro_ran);
+    CHECK(coro_got_event);
+}
+
 int main() {
     test_limit_buy_fills_on_quote();
     test_limit_sell_fills_on_quote();
@@ -239,5 +291,6 @@ int main() {
     test_market_buy_fills_immediately();
     test_cancel_order();
     test_replace_order();
+    test_order_next_event_coroutine();
     return 0;
 }
