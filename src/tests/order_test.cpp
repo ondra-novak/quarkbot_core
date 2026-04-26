@@ -150,9 +150,34 @@ static void test_limit_buy_fills_on_trade() {
     CHECK(order.get_status() == OrderStatus::filled);
 }
 
+static void test_market_buy_fills_immediately() {
+    OrderFixture fx;
+    fx.exchange->set_slippage(0.0);  // disable slippage so fill price == ask exactly
+
+    Order order = fx.instrument->place_order(
+        OrderRequest{.side = Side::buy, .type = OrderType::market, .quantity = 1_dec},
+        "mkt_buy_test");
+    drain_status(order);
+    CHECK(order.get_status() == OrderStatus::open);
+
+    // Feed a quote — market order should fill immediately on ask
+    fx.exchange->on_event("BTCUSD",
+        Quote{.bid=99_dec, .bid_size=10_dec, .ask=100_dec, .ask_size=10_dec, .time=fx.t0});
+
+    auto fill = order.read_fill();
+    CHECK(fill.has_value());
+    CHECK(fill->price == 100_dec);   // ask price (slippage=0)
+    CHECK(fill->amount == 1_dec);
+    CHECK(fill->side == Side::buy);
+
+    coro::sync_await(order.next_event());
+    CHECK(order.get_status() == OrderStatus::filled);
+}
+
 int main() {
     test_limit_buy_fills_on_quote();
     test_limit_sell_fills_on_quote();
     test_limit_buy_fills_on_trade();
+    test_market_buy_fills_immediately();
     return 0;
 }

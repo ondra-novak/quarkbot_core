@@ -29,6 +29,7 @@ public:
     void cancel_order(Order ord);
     bool cancel_all(PTradableInstrument instrument);
     void set_reporter(PReporter reporter);
+    void set_slippage(double slippage) { _slippage = slippage; }
 
 
 protected:

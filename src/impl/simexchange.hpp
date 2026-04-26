@@ -42,6 +42,7 @@ public:
     UnderlyingCurrency create_currency(std::string_view name) const override;
     
     virtual void set_reporter(PReporter reporter) override {_executor.set_reporter(std::move(reporter));}
+    void set_slippage(double slippage) { _executor.set_slippage(slippage); }
 
     ///create account, set up initial wallet
     PAccount create_account(std::string name, std::span<std::pair<std::string, Decimal> > wallet);
