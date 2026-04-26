@@ -174,10 +174,26 @@ static void test_market_buy_fills_immediately() {
     CHECK(order.get_status() == OrderStatus::filled);
 }
 
+static void test_cancel_order() {
+    OrderFixture fx;
+
+    Order order = fx.instrument->place_order(
+        OrderRequest{.side = Side::buy, .type = OrderType::limit,
+                     .quantity = 1_dec, .limit_price = 100_dec},
+        "cancel_test");
+    drain_status(order);
+    CHECK(order.get_status() == OrderStatus::open);
+
+    order.cancel();
+    drain_until_done(order);
+    CHECK(order.get_status() == OrderStatus::canceled);
+}
+
 int main() {
     test_limit_buy_fills_on_quote();
     test_limit_sell_fills_on_quote();
     test_limit_buy_fills_on_trade();
     test_market_buy_fills_immediately();
+    test_cancel_order();
     return 0;
 }
