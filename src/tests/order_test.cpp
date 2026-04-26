@@ -189,11 +189,55 @@ static void test_cancel_order() {
     CHECK(order.get_status() == OrderStatus::canceled);
 }
 
+static void test_replace_order() {
+    OrderFixture fx;
+
+    // Place original limit buy @ 100
+    Order original = fx.instrument->place_order(
+        OrderRequest{.side = Side::buy, .type = OrderType::limit,
+                     .quantity = 1_dec, .limit_price = 100_dec},
+        "orig_test");
+    drain_status(original);
+    CHECK(original.get_status() == OrderStatus::open);
+
+    // Replace with lower limit @ 98
+    Order replacement = fx.instrument->place_order(
+        OrderRequest{.side = Side::buy, .type = OrderType::limit,
+                     .quantity = 1_dec, .limit_price = 98_dec},
+        original,
+        "replace_test");
+    drain_status(replacement);
+    // original should now be replaced
+    drain_until_done(original);
+    CHECK(original.get_status() == OrderStatus::replaced);
+    CHECK(replacement.get_status() == OrderStatus::open);
+
+    // Unfavorable quote (ask=99 > limit=98) — must NOT fill
+    fx.exchange->on_event("BTCUSD",
+        Quote{.bid=97_dec, .bid_size=10_dec, .ask=99_dec, .ask_size=10_dec, .time=fx.t0});
+    CHECK(replacement.get_status() == OrderStatus::open);
+    CHECK(!replacement.any_fill());
+
+    // Favorable quote (ask=97 < limit=98) — must fill at limit_price
+    fx.exchange->on_event("BTCUSD",
+        Quote{.bid=95_dec, .bid_size=10_dec, .ask=97_dec, .ask_size=10_dec, .time=fx.t0});
+
+    auto fill = replacement.read_fill();
+    CHECK(fill.has_value());
+    CHECK(fill->price == 98_dec);
+    CHECK(fill->amount == 1_dec);
+    CHECK(fill->side == Side::buy);
+
+    coro::sync_await(replacement.next_event());
+    CHECK(replacement.get_status() == OrderStatus::filled);
+}
+
 int main() {
     test_limit_buy_fills_on_quote();
     test_limit_sell_fills_on_quote();
     test_limit_buy_fills_on_trade();
     test_market_buy_fills_immediately();
     test_cancel_order();
+    test_replace_order();
     return 0;
 }
