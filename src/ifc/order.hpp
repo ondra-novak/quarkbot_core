@@ -283,7 +283,7 @@ public:
 
     ///returns true if there is any unprocessed fill
     bool any_fill() const {
-        return _state->updates.empty() || std::holds_alternative<OrderStatusUpdate>(_state->updates.front());        
+        return !_state->updates.empty() && std::holds_alternative<Fill>(_state->updates.front());
     }
 
     ///reads next fill, 
