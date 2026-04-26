@@ -174,7 +174,7 @@ public:
 
     using Update = std::variant<Fill, OrderStatusUpdate>;
 
-    struct State : coro::coro_frame<State> {
+    struct State{
         ///original parameters -  adjusted
         const OrderParameters parameters = {};
         ///associated instrument
@@ -227,19 +227,19 @@ public:
             }
         }
         void update(Update &&u) {
-            std::scoped_lock _(mx);
             updates.push(std::move(u));
             if (awaiting) {
-                flush_state();
-                awaiting(true);                
+                awaiting(true);
             }
         }
 
         std::optional<bool> pull() {
-            std::scoped_lock _(mx);
-            if (updates.empty()) {
-                if (is_done_status(status)) return false;
-                return {};
+            {
+                std::scoped_lock _(mx);
+                if (updates.empty()) {
+                    if (is_done_status(status)) return false;
+                    return {};
+                }
             }
             flush_state();
             return true;
