@@ -21,7 +21,7 @@
 namespace quarkbot {
 
 
-enum class OrderType {
+enum class OrderType : char{
     ///alert - not order exactly, limit_price is mandatory, amount must be zero, is marked filled when price is reached from given side 
     /** alerts can be emulated if not supported on exchange */
     alert,
@@ -31,8 +31,6 @@ enum class OrderType {
     limit,
     ///limit post only - order is reject when it would fill immediately - amount and limit_price are mandatory
     limit_post_only,
-    ///immediate or cancel - amount and limit_price are mandatory
-    limit_ioc,
     ///stop order - amount and stop_price are mandatory
     stop,
     ///stop limit order - amount, stop_price and limit_price are mandatory
@@ -41,10 +39,24 @@ enum class OrderType {
     oco
 };
 
+enum class TimeInForce : char {
+    ///Good until canceled
+    gtc,
+    ///Day only, canceled at close
+    day,
+    ///immediate or cancel
+    ioc,
+    ///at close
+    atc,
+    ///at open
+    ato,    
+    ///at crossing
+    crossing    
+};
+
 inline constexpr bool is_limit_order(OrderType type) {
     return type == OrderType::limit
         || type == OrderType::limit_post_only
-        || type == OrderType::limit_ioc
         || type == OrderType::oco
         || type == OrderType::alert;
 }
@@ -76,6 +88,8 @@ struct OrderParametersGen {
     bool hedge = false;
     ///Enforce that stop or alert is triggered on local side, not on exchange, even if exchange supports it.    
     bool local_trigger = false;
+    ///time in force
+    TimeInForce time_in_force = TimeInForce::gtc;
     ///sets execution reason for given order 
     /**
       Allows to override execution reason for strategy orders. 

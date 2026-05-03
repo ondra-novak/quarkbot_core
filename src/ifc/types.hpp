@@ -32,6 +32,14 @@ struct ContractInfo {
     Decimal multiplier = 1;      ///contract multiplier (amount * multiplier * price = turnover)
     Decimal tick_scale = 1;      ///price multiplier
 
+    bool operator==(const ContractInfo &) const = default;
+
+    template<typename Self>
+    auto fields(this Self &self) {
+        return std::tie(self.type, self.multiplier, self.tick_scale);
+    }
+
+
     Decimal calc_pnl(Decimal open_price, Decimal close_price, Decimal amount) const {
         open_price *= tick_scale;
         close_price *= tick_scale;
@@ -111,6 +119,8 @@ struct Fill {
     Decimal fee_rate;
     ///This is restored fill - need to check for duplication (field is not serialized)
     bool restored = false;
+
+    bool operator==(const Fill &other) const = default;
 
     template<typename Self>
     auto fields(this Self &self) {

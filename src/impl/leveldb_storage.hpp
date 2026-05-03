@@ -69,6 +69,7 @@ namespace quarkbot {
         virtual Value get(Key key, Revision rev) const override;
         virtual std::vector<std::string> list(const Key &filter) const override;
         virtual PStorageTransaction write(bool sync) override;
+        virtual Value get_schema_raw(SchemaHash schema_hash) const override;
     protected:
         PDB _proxy;
         uint8_t _keyspace_id;
@@ -86,6 +87,7 @@ public:
     virtual void erase(std::string_view key, Revision rev) override;
     virtual void prune_history(std::string_view key, Revision to) override;
     virtual void commit() override;
+    virtual void put_schema(SchemaHash hash, std::string_view schema) override;
 
 protected:
     leveldb::WriteBatch _batch;    

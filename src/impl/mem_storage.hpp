@@ -22,6 +22,7 @@ public:
     Revision erase(Key key) override;
     void erase(std::string_view key, Revision rev) override;
     void prune_history(std::string_view key, Revision to) override;
+    void put_schema(SchemaHash hash, std::string_view schema) override;
     void commit() override;
 
 private:
@@ -29,7 +30,8 @@ private:
     struct OpErase { std::string key_name; bool sequence; };
     struct OpEraseRev { std::string key_name; Revision rev; };
     struct OpPrune { std::string key_name;  Revision to; };
-    using Op = std::variant<OpPut, OpErase, OpEraseRev, OpPrune>;
+    struct OpPutSchema { SchemaHash hash; std::string schema; };
+    using Op = std::variant<OpPut, OpErase, OpEraseRev, OpPrune, OpPutSchema>;
 
     std::vector<Op> _ops;
     MemStorage &_storage;
@@ -42,12 +44,15 @@ public:
     Value get(Key key, Revision rev) const override;
     std::vector<std::string> list(const Key &filter) const override;
     PStorageTransaction write(bool sync) override;
+    virtual Value get_schema_raw(SchemaHash schema_hash) const override;
+
 
 private:
     Revision apply_put(const Key &key, std::string_view data);
     Revision apply_erase(const Key &key);
     void apply_prune(const std::string &key,  Revision to);
     void apply_erase_rev(const std::string &key, Revision rev);
+    void apply_put_schema(SchemaHash h, const std::string &schema);
     Revision next_seq_rev(std::string_view name) const;
 
     struct SeqEntry {
@@ -57,6 +62,7 @@ private:
 
     std::unordered_map<std::string, std::string> _plain;
     std::unordered_map<std::string, SeqEntry> _seq;
+    std::unordered_map<SchemaHash, std::string> _schemas;
 };
 
 // --- MemStorage ---
@@ -88,6 +94,14 @@ inline IStorage::Value MemStorage::get(Key key, Revision rev) const {
     auto &val = entry.history[rev - minindex];
     if (!val) return {rev, false, {}};
     return {rev, true, *val};
+}
+inline MemStorage::Value MemStorage::get_schema_raw(SchemaHash h) const {
+    auto iter = _schemas.find(h);
+    if (iter == _schemas.end()) {
+        return Value{0,false,{}};
+    } else {
+        return Value{1,true, iter->second};
+    }
 }
 
 inline std::vector<std::string> MemStorage::list(const Key &filter) const {
@@ -138,6 +152,9 @@ inline void MemStorage::apply_erase_rev(const std::string &key, Revision rev) {
         v.history.erase(v.history.begin(), iter2);
     }
 }
+inline void MemStorage::apply_put_schema(SchemaHash h, const std::string &schema) {
+    _schemas[h] = schema;
+}
 inline void MemStorage::apply_prune(const std::string &key, Revision to) {
     auto it = _seq.find(std::string(key));
     if (it == _seq.end() || it->second.history.empty()) return;
@@ -177,6 +194,10 @@ inline void MemStorageTransaction::erase(std::string_view key, Revision rev) {
 inline void MemStorageTransaction::prune_history(std::string_view key, Revision to) {
     _ops.emplace_back(OpPrune{std::string(key),  to});
 }
+inline void MemStorageTransaction::put_schema(SchemaHash hash, std::string_view schema) {
+    _ops.emplace_back(OpPutSchema{hash, std::string(schema)});
+}
+
 inline void MemStorageTransaction::commit() {
     for (auto &op : _ops) {
         std::visit([this](auto &o) {
@@ -187,6 +208,8 @@ inline void MemStorageTransaction::commit() {
                 _storage.apply_erase({o.key_name, o.sequence});
             else if constexpr(std::is_same_v<T,OpEraseRev>)
                 _storage.apply_erase_rev(o.key_name, o.rev);
+            else if constexpr(std::is_same_v<T,OpPutSchema>)
+                _storage.apply_put_schema(o.hash, o.schema);
             else
                 _storage.apply_prune(o.key_name,  o.to);
         }, op);

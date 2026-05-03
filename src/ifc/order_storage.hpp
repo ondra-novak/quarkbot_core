@@ -3,9 +3,10 @@
 #include "defs.hpp"
 #include "order.hpp"
 #include "storage.hpp"
-#include "serializer.hpp"
 #include "tradable_instrument.hpp"
 namespace quarkbot {    
+
+    #if 0
 
     ///Class responsible for storing and restoring orders in storage and also store their fills
     /**
@@ -108,7 +109,7 @@ namespace quarkbot {
     };
 
 
-
+#endif
    
 
 }

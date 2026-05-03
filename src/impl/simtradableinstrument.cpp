@@ -89,6 +89,7 @@ void SimTradableInstrument::liquidation() {
                 false,
                 false,
                 false,
+                TimeInForce::gtc,
                 ExecutionReason::liquidation
             }));
         }

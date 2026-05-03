@@ -4,11 +4,18 @@
 #include "defs.hpp"
 #include "market_instrument.hpp"
 
+#include <bit>
 #include <chrono>
+#include <concepts>
+#include <cstddef>
+#include <mutex>
 #include <optional>
 #include <span>
+#include "../utils/serialize.hpp"
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 namespace quarkbot {
@@ -17,6 +24,80 @@ namespace quarkbot {
     class IStorageTransaction;
     using PStorageTransaction =  std::unique_ptr<IStorageTransaction> ;
     
+
+    using SchemaHash = std::uint64_t;
+
+
+    ///manages schema hashes and type mapping
+    class SchemaHashMapping {
+    public:
+
+        ///generate schema hash from type, and write its binary from into DB
+        /**
+        @tparam type to generate hash
+        @param store_cb function called to store hash and binary schema
+        @return generated hash
+        */
+        template<typename T, std::invocable<SchemaHash, std::string> WriteCallback> 
+        requires(!std::is_reference_v<T>)
+        SchemaHash generate_hash(WriteCallback &&store_cb) {            
+            return generate_hash_internal<T, WriteCallback>(&store_cb);
+        }   
+
+        ///generate schema hash from type, do not store anything
+        /**
+        @tparam type to generate hash
+        @return generated hash        
+        */
+        template<typename T> 
+        SchemaHash generate_hash() {            
+            return generate_hash_internal<T, decltype([](auto,auto){})>(nullptr);
+        }   
+
+        
+        static SchemaHashMapping instance;
+
+    protected:
+        //rember hash and whether data has been stored into database
+        std::unordered_map<std::string_view, std::pair<SchemaHash,bool> > _mapping;
+        std::mutex _mx;
+
+        template<typename T, std::invocable<SchemaHash, std::string> WriteCallback> 
+        requires(!std::is_reference_v<T>)
+        SchemaHash generate_hash_internal(WriteCallback *cb) {            
+            auto tn = srl::schema_type_name<T>;
+            {
+                std::lock_guard _(_mx);
+                auto iter = _mapping.find(tn);
+                if (iter != _mapping.end()) {
+                    if (!cb || iter->second.second ) return iter->second.first;
+                }
+            }    
+
+            srl::BinarySchemaGenerator gen;
+            gen.build_schema<T>();
+            auto schema = gen.get_schema();
+            std::string s;
+            srl::BinarySerializer srl([&](std::span<const std::uint8_t> z){
+                s.append(reinterpret_cast<const char *>(z.data()), z.size());
+            });
+            srl(schema);
+            std::hash<std::string> hasher;
+            SchemaHash h = hasher(s);
+            bool stored = cb;
+            if (stored) (*cb)(s, h);
+            {
+                std::lock_guard _(_mx);
+                _mapping[tn] = std::pair(h, stored);
+            }
+            return h;
+        }
+
+    };
+
+
+    inline SchemaHashMapping  SchemaHashMapping::instance = {};
+
 
     ///Interface for storage of strategy data. 
     /* Storage is used to store strategy state, parameters, 
@@ -49,6 +130,56 @@ namespace quarkbot {
             std::string data;
             ///return true if value exists, false if it is tombstone or key is not found
             operator bool() const {return exists;}
+
+            ///Extract data to given type
+            /** 
+            @param var variable which receives data
+            @param h receives hash of the schema of stored dat
+            @retval true success
+            @retval false cannot extract, schema is different, data corrupted
+            */
+
+            template<typename T>
+            bool extract(T &var, SchemaHash &h) const {
+                h = SchemaHashMapping::instance.generate_hash<T>();
+                if (extract_schema_hash() != h) return false;
+                try {
+                    srl::BinaryParser parser([&, pos = std::size_t(0)](std::span<std::uint8_t> to) mutable{
+                        if (pos + to.size() > data.length()) throw false;
+                        std::copy_n(data.begin()+static_cast<std::ptrdiff_t>(pos), to.size(), to.begin());
+                        pos+=to.size();
+                    });
+                    parser(var);
+                    return true;
+                } catch (bool) {
+                    return false;
+                }
+            }
+
+            
+            ///Extract data to given type
+            /** 
+            @param var variable which receives data
+            @param h receives hash of the schema of stored dat
+            @retval true success
+            @retval false cannot extract, schema is different, data corrupted
+            */
+            template<typename T>
+            bool extract(T &var) const {
+                SchemaHash h;
+                return extract(var, h);
+            }
+
+            ///Extract schema hash
+            SchemaHash extract_schema_hash() const {
+                if (data.size()>sizeof(SchemaHash)) {
+                    std::array<std::uint8_t, sizeof(SchemaHash)> buff;
+                    std::copy_n(data.begin()+static_cast<std::ptrdiff_t>(data.size())-buff.size(), buff.size(), buff.begin());
+                    return std::bit_cast<SchemaHash>(buff);                    
+                } else {
+                    return 0;
+                }
+            }
         };
         
         virtual ~IStorage() = default;
@@ -67,6 +198,33 @@ namespace quarkbot {
           @param sync set true to force fsync.
          */
         virtual PStorageTransaction write(bool sync = false) = 0;
+
+        
+        ///Retrieve serialized schema
+        /**
+            @param schema_hash hash
+            @return value
+        */
+        virtual Value get_schema_raw(SchemaHash schema_hash) const = 0;
+
+        ///Retrieve schema from database for given hash
+        /**
+        @param hash schema hash
+        @param schema variable receives the schema
+        @retval true success
+        @retval false schema not found
+         */
+        bool get_schema(SchemaHash hash, srl::BinarySchemaGenerator::Schema &schema)  {
+            Value tmp = get_schema_raw(hash);
+            if (tmp.exists) {
+                if (tmp.extract(schema)) {
+                    return true;
+                }
+            } 
+            return false;
+        }
+
+
 
     };
 
@@ -114,8 +272,41 @@ namespace quarkbot {
          */
         virtual void commit() = 0;
 
+        ///Put schema hash
+        /**
+        @param hash schema hash
+        @param schema serialized schema
+        */
+        virtual void put_schema(SchemaHash hash, std::string_view schema) = 0;
+
         virtual ~IStorageTransaction() = default;
+
+        ///Store variable under given key
+        /**
+            @param key key
+            @param data variable's value as serialized type 
+            
+            @note function uses serializer to serialize data. It also stores schema (only once), and appends schema hash
+            to serialized data. The schema can be used to extract data outside of the code
+
+        */
+        template<typename T>
+        void store(const Key &key, const T &data) {
+            SchemaHash h = SchemaHashMapping::instance.generate_hash<T>([&](SchemaHash h, const std::string &bin_schema){
+                put_schema(h, bin_schema);
+            });
+
+            std::string s;            
+            const std::string_view type_name = srl::schema_type_name<T>;
+            srl::BinarySerializer srl([&](std::span<const std::uint8_t> z){
+                s.append(reinterpret_cast<const char *>(z.data()), z.size());
+            });
+            srl(data);
+            srl(std::bit_cast<std::array<std::uint8_t, sizeof(SchemaHash)> >(h));
+            put(key, s);
+        }
     };
+
 
 
     class IStorageManager {

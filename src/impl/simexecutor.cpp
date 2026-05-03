@@ -105,6 +105,10 @@ namespace quarkbot {
             set_order_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params , "Invalid or missing stop price"});
             return false;
         }
+        if (params.time_in_force != TimeInForce::gtc && params.time_in_force != TimeInForce::ioc) {
+            set_order_status(ord, {OrderStatus::rejected, OrderRejectionReason::invalid_params, "Unsupported time in force"});
+            return false;
+        }
 
         return true;
     }
@@ -162,7 +166,6 @@ namespace quarkbot {
                         return true;
                     }
                     [[fallthrough]];
-                case OrderType::limit_ioc:
                 case OrderType::limit:
                     if (dp == 0) {
                         create_fill(order, p, leave_quant, quote.time, taker);
@@ -172,7 +175,7 @@ namespace quarkbot {
                         create_fill(order, params.limit_price, leave_quant, quote.time, taker);
                         break;
                     }
-                    if (params.type == OrderType::limit_ioc) {
+                    if (params.time_in_force == TimeInForce::ioc) {
                         set_order_status(order.ord, {OrderStatus::filled});
                         return true;
                     }

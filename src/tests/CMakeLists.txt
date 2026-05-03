@@ -11,6 +11,7 @@ set(BASIC_TESTS
     tardis_source_test.cpp
     merged_source_test.cpp
     order_test.cpp
+    serializer.cpp
 )
 
 
