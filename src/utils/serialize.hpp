@@ -646,7 +646,7 @@ void serialize_rule(T &val, Ar &ar) {
         ar(var);
         if constexpr(Ar::reading) {
             ([&]<size_t ... I>(std::index_sequence<I...>){
-                ((I == var?(val.template emplace<I>(),true):false) || ...);
+                return ((I == var?(val.template emplace<I>(),true):false) || ...); //return value is ignored
             })(std::make_index_sequence<std::variant_size_v<DT> >());
         }
         std::visit([&](auto &v){

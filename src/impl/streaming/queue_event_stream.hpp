@@ -3,7 +3,6 @@
 #include "basic_coro/prepared_coro.hpp"
 #include "ifc/execution_worker.hpp"
 #include "ifc/streaming.hpp"
-#include "utils/double_buffer.hpp"
 #include <algorithm>
 #include <memory>
 #include <mutex>
@@ -14,7 +13,7 @@ template<typename T>
 class QueueEventStream: public IEventStream<T> {
 public:
 
-    QueueEventStream(std::function<void()> unsub_fn):_q(_mx), _unsub_fn(std::move(unsub_fn) ) {}
+    QueueEventStream(std::function<void()> unsub_fn): _unsub_fn(std::move(unsub_fn) ) {}
     ~QueueEventStream() {
         close();
     }
@@ -87,7 +86,7 @@ public:
 protected:
 
     mutable std::mutex _mx;
-    DoubleBufferQueue<T> _q;
+    std::queue<T> _q;
     ResultAndExecWorker<bool> _awaiting = {};
     T *_awaiting_value = nullptr;
     bool _closed;
