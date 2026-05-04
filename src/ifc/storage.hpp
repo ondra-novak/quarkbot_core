@@ -2,6 +2,8 @@
 
 #include <basic_coro/awaitable.hpp>
 #include "defs.hpp"
+#include "ifc/tradable_instrument.hpp"
+#include "ifc/types.hpp"
 #include "market_instrument.hpp"
 
 #include <bit>
@@ -98,9 +100,104 @@ namespace quarkbot {
 
     inline SchemaHashMapping  SchemaHashMapping::instance = {};
 
+    class IStorage {
+    public:
+        
+        using Buffer = std::string;
 
+        struct Value {
+            std::string data;
+            bool exists;
+            RecordKey key;            
+        };
+
+        struct ValueView {
+            std::string_view data;
+            static constexpr bool exists = true;
+            RecordKey key;            
+        };
+
+        ///get latest value of the variable
+        /** 
+        @param variable_name name of variable
+        @return value result, always check for exists
+        */
+        virtual Value get(std::string_view variable_name) const = 0;
+
+        ///get specified value of the variable
+        /**
+        @param variable_name name of variable
+        @param key record key specifies which value to return. Must be exact
+        @return value result, always check for exists
+        */
+        virtual Value get(std::string_view variable_name, const RecordKey &key) = 0;
+
+        ///enumerate all values for given range
+        /**
+            @param variable_name name of variable
+            @param since record key when to start (keys are ordered). You should set random key to 0 (inclusive)
+            @param until record key to stop. You should set random key to 0 (exclusive)
+        */
+        virtual void enumerate(std::string_view variable_name, 
+                const RecordKey &since,
+                const RecordKey &until,
+                function_view<void(const ValueView &val)> callback
+            ) const = 0;
+
+        ///List all existing variables
+        /**
+            @return list of variables
+            @note if there are a lot of data in database, the function can be slow. Use only once
+            for UI or debugging purpose
+        */
+        virtual std::vector<std::string> list() const = 0;
+        
+        
+        ///create write transaction
+        virtual PStorageTransaction write() = 0;
+
+
+        virtual ~IStorage() = default;
+    };
+
+
+    class IStorageTransaction {
+    public:
+        
+        ///retrieve associated storage of this transaction
+        virtual PStorage get_storage() const = 0; 
+        ///commit the write
+        /**
+        @note state of the transaction after commit is undefined. You need to destroy transaction and recreate its
+         */
+        virtual void commit() = 0;
+
+        ///Put single value to a variable
+        /**
+            @param variable_name name of variable
+            @param content content of variable
+            @return generated RecordKey value
+
+            @note this is effectively put with RecordKey(timestamp,random) - 
+            You can get this value by calling get() without record key
+        */
+        virtual RecordKey put(std::string_view variable_name, std::string_view content) = 0;
+
+        ///Put value under variable and record key
+        virtual void put(std::string_view variable_name, const RecordKey &key, std::string_view content) = 0;
+
+        ///Erase all values for single variable
+        virtual void erase(std::string_view variable_name) = 0;
+
+        ///Erase single value
+        virtual void erase(std::string_view variable_name, const RecordKey &key) = 0;
+
+        virtual ~IStorageTransaction() = default;
+    }
+
+#if 0 
     ///Interface for storage of strategy data. 
-    /* Storage is used to store strategy state, parameters, 
+    /* Storage is used to store strateg3y state, parameters, 
        or any other data that needs to be preserved between runs.    
     */
     class IStorage {
@@ -307,7 +404,7 @@ namespace quarkbot {
         }
     };
 
-
+#endif
 
     class IStorageManager {
     public:
@@ -329,6 +426,8 @@ namespace quarkbot {
 
         virtual ~IStorageManager() = default;
     };
+
+
 
 }
 

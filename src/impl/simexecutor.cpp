@@ -270,6 +270,7 @@ namespace quarkbot {
         double volume = price.to_double() * quantity.to_double();
         double fees = (taker?_taker_fees:_maker_fees) * volume;
         Fill f{
+            {static_cast<std::uint64_t>(tp.time_since_epoch().count()),_random_key++},
             generate_random_string(),
             order.ord.get_name(),
             tp,
