@@ -263,6 +263,7 @@ static void test_order_next_event_coroutine() {
 
     // Push a fill update directly into the order
     Fill fill{
+        .key        = {1,1},
         .id         = "f1",
         .order_name = "coro_test",
         .time       = fx.t0,

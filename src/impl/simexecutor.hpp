@@ -48,6 +48,7 @@ protected:
     std::vector<ActiveOrder> _active_orders;
     std::optional<Quote> _last_quote;
     PReporter _reporter;
+    std::uint64_t _random_key = 0;
 
     bool validate_order(ActiveOrder &order);
     bool validate_order_replace(ActiveOrder &order, const ActiveOrder &replacing_order);
