@@ -1,17 +1,18 @@
 #pragma once
 
+#include <atomic>
 #include <basic_coro/awaitable.hpp>
 #include "defs.hpp"
 #include "ifc/tradable_instrument.hpp"
 #include "ifc/types.hpp"
-#include "market_instrument.hpp"
 
 #include <bit>
-#include <chrono>
 #include <concepts>
 #include <cstddef>
+#include <iterator>
+#include <memory>
 #include <mutex>
-#include <optional>
+#include <ranges>
 #include <span>
 #include "../utils/serialize.hpp"
 #include <string>
@@ -19,6 +20,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
+#include <generator>
 
 namespace quarkbot {
 
@@ -100,23 +102,131 @@ namespace quarkbot {
 
     inline SchemaHashMapping  SchemaHashMapping::instance = {};
 
+    template<typename T>
+    inline std::string serialize_schema() {
+        std::vector<std::uint8_t> buff;
+        srl::BinarySerializer serializer([&](std::span<const std::uint8_t> data){
+            buff.insert(buff.end(), data.begin(), data.end());
+        });
+        srl::BinarySchemaGenerator sch;
+        sch.build_schema<T>();
+        serializer(sch.get_schema());
+        return {buff.begin(), buff.end()};
+    }
+
+
+    template<typename T>
+    inline std::optional<SchemaHash> schema_hash_for_type = {};
+    template<typename T>
+    inline bool schema_is_stored = false;
+
     class IStorage {
     public:
         
         using Buffer = std::string;
 
-        struct Value {
+        struct Extractor {
+
+            template<typename Self, typename T>
+            bool extract(this Self &&self, T &val, SchemaHash &h) {
+                if (!self.exists || self.data.size() < sizeof(SchemaHash)) return false;
+
+                std::array<char, sizeof(SchemaHash)> buff;
+                std::string_view value(self.data);
+                std::string_view tail = value.substr(value.size() - sizeof(SchemaHash));
+                std::copy(tail.begin(), tail.end(),buff.begin());
+                
+                SchemaHash record_hash = std::bit_cast<SchemaHash>(buff);
+                
+                auto th = schema_hash_for_type<T>;
+                if (!th.has_value()) {
+                    std::string schema_bin = serialize_schema<T>();
+                    std::hash<std::string> hasher;
+                    th = hasher(schema_bin);
+                }
+
+                h = th.value();
+
+                if (record_hash != h) return false;
+
+                bool valid = false;
+                try {
+                    srl::BinaryParser parser([&, pos = std::size_t(0)](std::span<std::uint8_t> buff) mutable {
+                        if (pos + value.size() > value.size()) throw true;
+                        std::copy_n(value.begin()+static_cast<std::ptrdiff_t>(pos), buff.size(), buff.begin());
+                        pos += buff.size();
+                    });
+                    parser(val);
+                    valid = true;
+                } catch (...) {
+                    valid = false;
+                }
+                return valid;
+            }
+
+            template<typename Self, typename T>
+            bool extract(this Self &&self, T &val) {
+                SchemaHash h;
+                return self.extract(val,h);
+            }
+
+            template<typename Self, typename T>
+            bool operator >> (this Self &&self, T &val) {
+                return self.extract(val);
+            }
+        };
+
+
+        struct Value : Extractor{
             std::string data;
             bool exists;
             RecordKey key;            
         };
 
-        struct ValueView {
-            std::string_view data;
+        struct ValueView : Extractor{
             static constexpr bool exists = true;
+            std::string_view data;
             RecordKey key;            
+            operator Value() const {
+                return Value{{}, std::string(data), true, key};
+            }
         };
 
+        using Enumerator = std::function<bool(ValueView &)>;
+
+        class Iterator {
+        public:
+            using iterator_category = std::input_iterator_tag;
+            using value_type = Value;
+            using difference_type = std::ptrdiff_t;
+            using pointer = void;
+            using reference = ValueView;
+
+            Iterator() = default;
+            Iterator(Enumerator enumerator): _enumerator(std::move(enumerator)) {
+                //assume enumerator is always valid and not empty, so we can call it immediately
+                _is_end = !_enumerator(_current);
+            }
+            reference operator*() const {
+                return _current;
+            }
+            Iterator &operator++() {                
+                if (_is_end) return *this;
+                _is_end = !_enumerator(_current);   
+                return *this;
+            }
+            void operator++(int) { this->operator++(); }
+            bool operator==(const Iterator &other) const {
+                return _is_end == other._is_end && (_is_end || _current.key == other._current.key);
+            }
+
+        protected:
+            Enumerator _enumerator;
+            ValueView _current;
+            bool _is_end = true;
+        };
+
+        
         ///get latest value of the variable
         /** 
         @param variable_name name of variable
@@ -130,36 +240,108 @@ namespace quarkbot {
         @param key record key specifies which value to return. Must be exact
         @return value result, always check for exists
         */
-        virtual Value get(std::string_view variable_name, const RecordKey &key) = 0;
+        virtual Value get(std::string_view variable_name, const RecordKey &key) const = 0;
 
-        ///enumerate all values for given range
+        ///Retrieve iterator 
         /**
-            @param variable_name name of variable
-            @param since record key when to start (keys are ordered). You should set random key to 0 (inclusive)
-            @param until record key to stop. You should set random key to 0 (exclusive)
-        */
-        virtual void enumerate(std::string_view variable_name, 
-                const RecordKey &since,
-                const RecordKey &until,
-                function_view<void(const ValueView &val)> callback
-            ) const = 0;
+        @param variable_name name of variable to iteratoe
+        @param since start record (inclusive)
+        @param until end record (exclusive)
+        @return iterator (never returns empty)
+        @note Use ranges, see select_range
+        @note if since and until are reversed, performs reverse iteration
+        @see select_range
+         */
+        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const =0;
+        
 
+        ///Creates range object to iterate range of values
+        /**
+            @param variable_name name of variable to iterate
+            @param since start record (inclusive)
+            @param until end record (exclusive)
+            @note if since and until are reversed, performs reverse iteration
+            @return range object - even empty if variable doesn't exists or range is not defined
+         */
+        auto select_range(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const {
+            auto en= get_enumerator(variable_name, since, until);
+            return std::ranges::subrange(Iterator(en), Iterator());
+        }
+        
         ///List all existing variables
         /**
+            @param prefix filter list for given prefix
             @return list of variables
             @note if there are a lot of data in database, the function can be slow. Use only once
             for UI or debugging purpose
         */
-        virtual std::vector<std::string> list() const = 0;
+        virtual std::vector<std::string> list(std::string_view prefix = {}) const = 0;
         
-        
+        ///Retrieve binary version of schema
+        virtual Value get_schema_binary(SchemaHash h) const = 0;
+
         ///create write transaction
         virtual PStorageTransaction write() = 0;
 
+        
+        ///Retrieve schema from database
+        /**
+        @param h schema hash. This hash can be retrieved as last 8 bytes of the value
+        @return schema if exists        
+        */
+        std::optional<srl::BinarySchemaGenerator::Schema> get_schema(SchemaHash h) const  {
+            std::optional<srl::BinarySchemaGenerator::Schema> out;
+            out.emplace();
+            if (!(get_schema_binary(h) >> out.value())) {
+                out.reset();
+            }
+            return out;
+            
+        }
+
+        ///Retrieve current namespace if defined (default is not defined)
+        virtual std::string_view get_namespace() const {return {};}
+
+        ///Retrieve root storage. 
+        /**
+        @note the function can return nullptr, which means, that this is root storage
+        */
+        virtual PStorage get_root_storage() const {return  {};}
 
         virtual ~IStorage() = default;
+
+        ///Create namespace 
+        /**
+            Creates new storage as namespace of this storage. All keys in namespaced storage
+            are prefixed by prefix
+            @param root smart pointer to storage (PStorage) which can be used as root. It
+            is allowed to put already namespaced storage. In this case, you create namespace
+            inside namespace. Note that function get_root_storage() still returns real root
+            storage, not parent storage.
+
+            @param prefix prefix for namespace. Note use some separator. For example, 
+            this is valid prefix "my_namespace/" (separator /)
+
+            @note root storage can see all keys, 
+
+            @return storage for namespace
+
+            @note namespace is not MT safe!. If you need to access namespace from multiple execution
+            workers or threads, create namespace object for each thread. You can create multiple
+            objects for single namespace.
+
+            @note ensure, you include "storage_namespace.hpp". You just need to include this
+            into source which creates the storage, it doesn't need to be in source which
+            uses the storage
+
+        */
+        static PStorage create_namespace(PStorage root, std::string_view prefix) ;
     };
 
+    enum class UpdateLastRevision {
+        enable,
+        disable
+    };
 
     class IStorageTransaction {
     public:
@@ -169,8 +351,10 @@ namespace quarkbot {
         ///commit the write
         /**
         @note state of the transaction after commit is undefined. You need to destroy transaction and recreate its
+        @param sync set true causes that data are immediately copied to external storage. If false, OS caching
+        can delay the write.
          */
-        virtual void commit() = 0;
+        virtual void commit(bool sync = false) = 0;
 
         ///Put single value to a variable
         /**
@@ -184,7 +368,15 @@ namespace quarkbot {
         virtual RecordKey put(std::string_view variable_name, std::string_view content) = 0;
 
         ///Put value under variable and record key
-        virtual void put(std::string_view variable_name, const RecordKey &key, std::string_view content) = 0;
+        /**
+        @param variable_name name of variable
+        @param key record key
+        @param content content to store
+        @param update_last_revision set to disable, to skip update last revision. This make write slightly faster, but
+            changes behaviour of get() without recordkey. Set only if your code doesn't use that version of function get()
+        */
+        virtual void put(std::string_view variable_name, const RecordKey &key, std::string_view content, 
+                UpdateLastRevision update_last_revision = UpdateLastRevision::enable) = 0;
 
         ///Erase all values for single variable
         virtual void erase(std::string_view variable_name) = 0;
@@ -192,219 +384,62 @@ namespace quarkbot {
         ///Erase single value
         virtual void erase(std::string_view variable_name, const RecordKey &key) = 0;
 
-        virtual ~IStorageTransaction() = default;
-    }
-
-#if 0 
-    ///Interface for storage of strategy data. 
-    /* Storage is used to store strateg3y state, parameters, 
-       or any other data that needs to be preserved between runs.    
-    */
-    class IStorage {
-    public:
-
-        ///revision of value, used for sequence keys
-        using Revision = std::size_t;
-
-        ///Key for storage value
-        struct Key {
-            ///key name - must be unique for strategy
-            std::string_view name;
-            ///if true, storage keeps history of values and allows to retrieve value by revision. If false, only last value is kept and revision is ignored
-            bool sequence;
-
-            Key(std::string_view name, bool sequence = true):name(name),sequence(sequence) {}
-        };
+        ///Puts schema to database as binary
+        virtual void put_schema_binary(SchemaHash hash, std::string_view binary) = 0;
 
 
-        ///value stored in storage
-        struct Value {
-            ///Revision of value, if key is sequence. For non sequence keys, revision is always 0
-            Revision rev;
-            ///true if value exists, false if key is not found or it is tombstone (deleted value)
-            bool exists;
-            ///data blob
-            std::string data;
-            ///return true if value exists, false if it is tombstone or key is not found
-            operator bool() const {return exists;}
-
-            ///Extract data to given type
-            /** 
-            @param var variable which receives data
-            @param h receives hash of the schema of stored dat
-            @retval true success
-            @retval false cannot extract, schema is different, data corrupted
-            */
-
-            template<typename T>
-            bool extract(T &var, SchemaHash &h) const {
-                h = SchemaHashMapping::instance.generate_hash<T>();
-                if (extract_schema_hash() != h) return false;
-                try {
-                    srl::BinaryParser parser([&, pos = std::size_t(0)](std::span<std::uint8_t> to) mutable{
-                        if (pos + to.size() > data.length()) throw false;
-                        std::copy_n(data.begin()+static_cast<std::ptrdiff_t>(pos), to.size(), to.begin());
-                        pos+=to.size();
-                    });
-                    parser(var);
-                    return true;
-                } catch (bool) {
-                    return false;
-                }
-            }
-
-            
-            ///Extract data to given type
-            /** 
-            @param var variable which receives data
-            @param h receives hash of the schema of stored dat
-            @retval true success
-            @retval false cannot extract, schema is different, data corrupted
-            */
-            template<typename T>
-            bool extract(T &var) const {
-                SchemaHash h;
-                return extract(var, h);
-            }
-
-            ///Extract schema hash
-            SchemaHash extract_schema_hash() const {
-                if (data.size()>sizeof(SchemaHash)) {
-                    std::array<std::uint8_t, sizeof(SchemaHash)> buff;
-                    std::copy_n(data.begin()+static_cast<std::ptrdiff_t>(data.size())-buff.size(), buff.size(), buff.begin());
-                    return std::bit_cast<SchemaHash>(buff);                    
-                } else {
-                    return 0;
-                }
-            }
-        };
-        
-        virtual ~IStorage() = default;
-        ///returns last known value for key. If key is not found, or it is deleted, returned value has exists=false
-        virtual Value get(Key key) const = 0;
-        ///returns specified revision of value for key. If key is not found, or it is deleted, returned value has exists=false
-        virtual Value get(Key key, Revision rev) const = 0;
-        ///returns all keys in storage
+        ///Serialize value, store schema
         /**
-            @param filter key filter to apply - you can specify whether you want sequence or non sequence keys, or filter by name prefix. 
-            @return vector of all keys matching the filter
-         */
-        virtual std::vector<std::string> list(const Key &filter) const = 0;        
-        ///creates transaction for writing values. Transaction is used to write multiple values atomically. Transaction must be commited by calling commit() method. If transaction is not commited, all changes are discarded
-        /**
-          @param sync set true to force fsync.
-         */
-        virtual PStorageTransaction write(bool sync = false) = 0;
-
-        
-        ///Retrieve serialized schema
-        /**
-            @param schema_hash hash
-            @return value
-        */
-        virtual Value get_schema_raw(SchemaHash schema_hash) const = 0;
-
-        ///Retrieve schema from database for given hash
-        /**
-        @param hash schema hash
-        @param schema variable receives the schema
-        @retval true success
-        @retval false schema not found
-         */
-        bool get_schema(SchemaHash hash, srl::BinarySchemaGenerator::Schema &schema)  {
-            Value tmp = get_schema_raw(hash);
-            if (tmp.exists) {
-                if (tmp.extract(schema)) {
-                    return true;
-                }
-            } 
-            return false;
-        }
-
-
-
-    };
-
-
-    class IStorageTransaction {
-    public:
-        using Key = IStorage::Key;
-        using Revision = IStorage::Revision;
-
-        ///put value to storage. 
-        /** If key is sequence, value is added as new revision, and revision number is automatically incremented. 
-            If key is not sequence, value is overwritten and revision is set to 0
-            @param key key to put value for
-            @param value_blob data blob to store
-            @return revision of stored value. For sequence keys, it is automatically incremented. For non sequence keys, it is always 0
-        */
-        virtual Revision put(Key key, std::string_view value_blob) = 0;
-        ///erase value for key. For sequence keys, it adds tombstone value with next revision. For non sequence keys, it deletes value and sets revision to 0
-        /**
-            @param key key to erase
-            @return revision of tombstone value for sequence keys, or 0 for non sequence keys
-         */        
-        virtual Revision erase(Key key) = 0;
-        ///prune history of key. For sequence keys, it removes all revisions from lowest to "to" (exclusive). For non sequence keys, it does nothing
-        /**
-            @param key key to prune history for
-            @param to ending revision to prune
-            @note always keeps last revision, even if it is in range. This means that if "to" is greater than last revision, it is set to last revision
-            @note changed API 
-         */
-
-        virtual void prune_history(std::string_view key, Revision to) = 0;
-
-        ///Erase one revision of sequential key
-        /**
-          This erases exact revision of sequential key. It can be useful to erase old indicator data. The function
-          can be faster than prune_history, as it doesn't perform range iteration over old keys
-         */
-        virtual void erase(std::string_view key, Revision rev) = 0;
-
-        ///commit transaction. After commit, all changes are applied to storage. If transaction is not commited, all changes are discarded
-        /**
-          You should drop transaction object after commit, or if you don't want to commit, to discard changes.
-          The state of the transaction after commit is undefined, and should not be used.
-         */
-        virtual void commit() = 0;
-
-        ///Put schema hash
-        /**
-        @param hash schema hash
-        @param schema serialized schema
-        */
-        virtual void put_schema(SchemaHash hash, std::string_view schema) = 0;
-
-        virtual ~IStorageTransaction() = default;
-
-        ///Store variable under given key
-        /**
-            @param key key
-            @param data variable's value as serialized type 
-            
-            @note function uses serializer to serialize data. It also stores schema (only once), and appends schema hash
-            to serialized data. The schema can be used to extract data outside of the code
-
+            @param val value to serialize - must be serializable
+            @return binary version of the value
+            @note Function also serializes schema into database. This is done once per application life time and type T
         */
         template<typename T>
-        void store(const Key &key, const T &data) {
-            SchemaHash h = SchemaHashMapping::instance.generate_hash<T>([&](SchemaHash h, const std::string &bin_schema){
-                put_schema(h, bin_schema);
+        std::string serialize_value(const T &val) {
+            std::vector<char> buffer;
+            buffer.reserve(sizeof(val));
+            srl::BinarySerializer serializer([&](std::span<const std::uint8_t> data){
+                buffer.insert(buffer.end(), data.begin(), data.end());
             });
-
-            std::string s;            
-            const std::string_view type_name = srl::schema_type_name<T>;
-            srl::BinarySerializer srl([&](std::span<const std::uint8_t> z){
-                s.append(reinterpret_cast<const char *>(z.data()), z.size());
-            });
-            srl(data);
-            srl(std::bit_cast<std::array<std::uint8_t, sizeof(SchemaHash)> >(h));
-            put(key, s);
+            serializer(val);
+            auto hash = schema_hash_for_type<T>;
+            if (!hash.has_value() || !schema_is_stored<T>) {
+                std::string binschema = serialize_schema<T>();
+                std::hash<std::string> hasher;
+                hash = schema_hash_for_type<T> = hasher(binschema);
+                schema_is_stored<T> = true;
+                put_schema_binary(hash.value(), binschema);
+            }
+            auto hash_bin = std::bit_cast<std::array<char, sizeof(SchemaHash)> >(hash.value());
+            buffer.insert(buffer.end(), hash_bin.begin(), hash_bin.end());            
+            return {buffer.begin(), buffer.end()};
         }
-    };
 
-#endif
+        ///Store value under variable
+        /**
+            @param variable_name name of variable
+            @param val value
+
+            @note final format of value is <binary><schemehash> . You need to use extract to convert binary back to value
+            @return RecordKey of new value. 
+            
+            @note function doesn't delete old value. 
+        */
+        template<typename T>
+        RecordKey store(std::string_view variable_name, const T &val) {
+            return put(variable_name, serialize_value(val));            
+        }
+
+
+        ///Store value under variable
+        template<typename T>
+        void store(std::string_view variable_name, const RecordKey &key,  const T &val, UpdateLastRevision update_last_revision = UpdateLastRevision::enable) {
+            return put(variable_name,key, serialize_value(val),update_last_revision);            
+        }
+
+
+        virtual ~IStorageTransaction() = default;
+    };
 
     class IStorageManager {
     public:
@@ -427,7 +462,6 @@ namespace quarkbot {
         virtual ~IStorageManager() = default;
     };
 
-
-
+   
 }
 

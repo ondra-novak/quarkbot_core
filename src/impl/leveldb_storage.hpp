@@ -16,12 +16,15 @@
 namespace quarkbot {
 
 
-    class LevelDBStorageManager: public IStorageManager {
+    class LevelDBStorageManager final: public IStorageManager {
     public:
         using PDB = std::shared_ptr<leveldb::DB>;
 
-        static constexpr int max_storage_count = 127;
-        static constexpr std::uint8_t directory_id = (max_storage_count<<1);
+        // 0x00..0xFD: storage keyspaces, 0xFE: schema (LevelDBStorage::schema_keyspace), 0xFF: directory
+
+        static constexpr int max_storage_count = 253;
+        static constexpr  std::uint8_t schema_keyspace  = 0xFE;
+        static constexpr std::uint8_t directory_id = 0xFF;
 
         LevelDBStorageManager(PDB db):_db(std::move(db)) {}
 
@@ -59,47 +62,49 @@ namespace quarkbot {
 
 
 
-    class LevelDBStorage : public IStorage{
+    class LevelDBStorage final : public IStorage, public std::enable_shared_from_this<LevelDBStorage>{
     public:
         using PDB = LevelDBStorageManager::PDB;
 
+        constexpr static std::uint8_t schema_keyspace  = LevelDBStorageManager::schema_keyspace;
+
         LevelDBStorage(PDB db, uint8_t instance_id);
 
-        virtual Value get(Key key) const override;
-        virtual Value get(Key key, Revision rev) const override;
-        virtual std::vector<std::string> list(const Key &filter) const override;
-        virtual PStorageTransaction write(bool sync) override;
-        virtual Value get_schema_raw(SchemaHash schema_hash) const override;
+        virtual Value get(std::string_view variable_name) const override;
+        virtual Value get(std::string_view variable_name, const RecordKey &key) const override;
+        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const override;
+        virtual std::vector<std::string> list(std::string_view prefix ) const override;
+        virtual Value get_schema_binary(SchemaHash h) const override;
+        virtual PStorageTransaction write() override;
+
+        uint8_t get_keyspace_id() const;
+        PDB get_db() const;
     protected:
         PDB _proxy;
         uint8_t _keyspace_id;
     };
 
 
-class LevelDBTransaction: public IStorageTransaction {
+class LevelDBTransaction final: public IStorageTransaction {
 public:
     using PDB = LevelDBStorageManager::PDB;
 
-    LevelDBTransaction(PDB proxy, uint8_t keyspace_id, bool sync);
+    explicit LevelDBTransaction(std::shared_ptr<LevelDBStorage> storage);
     
-    virtual Revision put(Key key, std::string_view value_blob) override;
-    virtual Revision erase(Key key) override;
-    virtual void erase(std::string_view key, Revision rev) override;
-    virtual void prune_history(std::string_view key, Revision to) override;
-    virtual void commit() override;
-    virtual void put_schema(SchemaHash hash, std::string_view schema) override;
+    virtual PStorage get_storage() const  override;
+    virtual void commit(bool sync) override;
+    virtual RecordKey put(std::string_view variable_name, std::string_view content) override;
+    virtual void put(std::string_view variable_name, const RecordKey &key, std::string_view content,
+        UpdateLastRevision update_last_revision) override;
+    virtual void erase(std::string_view variable_name) override;
+    virtual void erase(std::string_view variable_name, const RecordKey &key) override;
+    virtual void put_schema_binary(SchemaHash hash, std::string_view binary) override;
 
 protected:
     leveldb::WriteBatch _batch;    
-    PDB _proxy;
-    uint8_t _keyspace_id;
-    bool _sync;
+    std::shared_ptr<LevelDBStorage> _storage;
 
-    Revision put_rev(std::string_view key);
 
-    Revision get_revision(std::string_view keyname);
 };
 
 }
-
-

@@ -100,6 +100,7 @@ enum class ExecutionReason : int8_t{
     rollover_open
 };
 
+
 ///declaration of generic record key
 /**
 In key-value database, there are record with following key format:

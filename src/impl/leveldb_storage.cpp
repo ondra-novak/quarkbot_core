@@ -1,6 +1,11 @@
 #include "leveldb_storage.hpp"
+#include "ifc/storage.hpp"
+#include "ifc/types.hpp"
+#include "utils/bigendian.hpp"
 #include <algorithm>
+#include <bit>
 #include <bitset>
+#include <chrono>
 #include <cstdint>
 #include <leveldb/db.h>
 #include <leveldb/iterator.h>
@@ -14,6 +19,34 @@
 
 
 namespace quarkbot {
+
+
+struct FixBufForRecordKey {
+    std::array<char, sizeof(RecordKey)> buf;
+    operator RecordKey() const {
+        return std::bit_cast<RecordKey>(buf);
+    }
+    operator std::string_view() const {
+        return std::string_view(buf.data(), buf.size());
+    }   
+};
+
+inline FixBufForRecordKey record_key_to_string(const RecordKey &key) {
+    FixBufForRecordKey buf;
+    auto iter = buf.buf.begin();
+    big_endian_binarize(key.ordered, iter);
+    big_endian_binarize(key.random, iter);
+    return buf;
+}
+
+inline RecordKey string_to_record_key(std::string_view str) {
+    RecordKey key;
+    auto iter = str.begin();
+    big_endian_unbinarize(key.ordered, iter);
+    big_endian_unbinarize(key.random, iter);
+    return key;
+}
+
 
 struct SnapshotDeleter {
     leveldb::DB *db;
@@ -53,69 +86,49 @@ LevelDBStorageManager LevelDBStorageManager::open_db(const std::filesystem::path
     return PDB(ptr);
 }
 
-static std::string build_key(uint8_t id, std::string_view key) {
+static std::string build_key(uint8_t id, std::string_view var, RecordKey key ) {
     std::string s;
     s.push_back(static_cast<char>(id));
-    s.append(key);
+    s.append(var);
+    s.push_back(0);
+    s.append(record_key_to_string(key));
     return s;
 }
 
-static void append_rev(std::string &key, std::size_t rev) {
-    for (int i = 0; i < 8; ++i) {
-        key.push_back(static_cast<char>((rev >> ((7-i) * 8)) & 0xFF));
-    }
+static std::string build_key(uint8_t id, std::string_view var) {
+    std::string s;
+    s.push_back(static_cast<char>(id));
+    s.append(var);
+    return s;
 }
 
-static void key_append_rev(std::string &key, std::size_t rev) {
-    append_rev(key, rev);
-}
-
-static std::string build_key(uint8_t id, std::string_view key, std::size_t rev) {
-    auto k = build_key(id, key);
-    key_append_rev(k, rev);
-    return k;
-}
-
-static std::string build_revision(std::size_t rev) {
-    std::string r;
-    append_rev(r , rev);
-    return r;
-}
-
-
-static std::size_t extract_revision(std::string_view s) {
-    s = s.substr(s.length()-8);
-    std::size_t rev = 0;
-    for (std::size_t i = 0; i < 8; ++i) {
-        rev = (rev << 8) | static_cast<std::uint8_t>(s[i]);
-    }
-    return rev;
+static RecordKey extract_key(std::string_view s) {
+    //record key is always sizeof(RecordKey) bytes from end;
+    return string_to_record_key(s.substr(s.size()-sizeof(RecordKey)));
 }
 
 
 std::uint8_t LevelDBStorageManager::find_storage(std::string_view name) {
     std::string v;
-    bool found = check_status(_db->Get({},build_key(static_cast<std::uint8_t>(directory_id<<1), name), &v));
+    bool found = check_status(_db->Get({}, build_key(directory_id, name), &v));
     if (!found) return directory_id;
     else return static_cast<std::uint8_t>(v[0]);
 }
 std::uint8_t LevelDBStorageManager::create_storage(std::string_view name) {
-    std::bitset<directory_id+1> used;
+    std::bitset<max_storage_count + 1> used;
     auto iter = std::unique_ptr<leveldb::Iterator>(_db->NewIterator({}));
-    auto k = build_key(static_cast<std::uint8_t>(directory_id<<1), "");
+    auto k = build_key(directory_id, "");
     iter->Seek(k);
     while (iter->Valid()) {
         if (!iter->key().starts_with(k)) break;
         std::uint8_t val = static_cast<std::uint8_t>(iter->value().data()[0]);
-        used.set(val);
+        if (val < used.size()) used.set(val);
         iter->Next();
     }
-    for (std::size_t i = 0; i < used.size();++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(max_storage_count); ++i) {
         if (!used.test(i)) {
-            if (i >= directory_id) break;
             auto id = static_cast<std::uint8_t>(i);
-            auto nk = build_key(directory_id, name);
-            _db->Put({}, nk, build_key(id,""));
+            _db->Put({}, build_key(directory_id, name), build_key(id, ""));
             return id;
         }
     }
@@ -147,163 +160,154 @@ void LevelDBStorageManager::delete_storage(std::string_view name) {
         }
     };
 
-    delete_prefix(static_cast<std::uint8_t>(id<<1));
-    delete_prefix(static_cast<std::uint8_t>((id<<1)+1));
+    delete_prefix(id);
     b.Delete(build_key(directory_id, name));
     _db->Write({}, &b);   
 }
-std::vector<std::string> LevelDBStorageManager::list() {
-    LevelDBStorage tmpstor(_db,directory_id);
-    return tmpstor.list({{},false});
+
+LevelDBStorage::Value LevelDBStorage::get(std::string_view variable_name) const {
+    std::string v;
+    bool found = check_status(_proxy->Get({}, build_key(_keyspace_id, variable_name), &v));
+    if (!found || v.size() != sizeof(RecordKey)) return {{}, {}, false, {}};
+    std::array<char, sizeof(RecordKey)> buff;
+    std::copy(v.begin(), v.end(), buff.begin());
+    return get(variable_name, std::bit_cast<RecordKey>(buff));
 }
-
-
-LevelDBStorage::Value LevelDBStorage::get(Key key) const {
-    auto &db = *_proxy;
-    std::string valbuff;
-    if (key.sequence) {
-        auto snap = get_snapshot(db);
-        leveldb::ReadOptions opts;
-        opts.snapshot = snap.get();
-        auto k = build_key(_keyspace_id+1, key.name);
-        auto r = check_status(db.Get(opts,k, &valbuff));
-        if (!r) return {0,false,{}};        
-        auto rev = extract_revision(valbuff);
-        k.append(valbuff);
-        r = check_status(db.Get(opts, k, &valbuff));
-        return {rev, r, std::move(valbuff)};
-    } else {
-        auto k = build_key(_keyspace_id, key.name);
-        auto r = check_status(db.Get({},k, &valbuff));
-        return {0, r, std::move(valbuff)};
+LevelDBStorage::Value LevelDBStorage::get(std::string_view variable_name, const RecordKey &key) const {
+    std::string v;
+    Value out {{},{}, false, key};
+    bool found = check_status(_proxy->Get({}, build_key(_keyspace_id, variable_name, key), &v));
+    if (found) {
+        out.data = std::move(v);
+        out.exists = true;
     }
-
-}
-LevelDBStorage::Value LevelDBStorage::get(Key key, Revision rev) const {
-    auto &db = *_proxy;
-    if (!key.sequence) return get(key);
-    else {
-        std::string valbuff;
-        std::string k = build_key(_keyspace_id+1, key.name, rev);
-        auto r = check_status(db.Get({},k, &valbuff));
-        return {rev, r, std::move(valbuff)};
-    }
-}
-
-std::vector<std::string> LevelDBStorage::list(const Key &filter) const {
-    std::vector<std::string> out;
-    auto &db = *_proxy;
-    leveldb::ReadOptions opts;
-    auto snap = get_snapshot(db);
-    opts.snapshot = snap.get();
-    auto iter = std::unique_ptr<leveldb::Iterator>(db.NewIterator(opts));
-    if (filter.sequence) {
-        auto k = build_key(_keyspace_id+1,filter.name);
-        std::string tmp1, tmp2;
-        iter->Seek(k);
-        while (iter->Valid()) {
-            auto fk = iter->key();
-            if (!fk.starts_with(k)) break;
-            auto fv = iter->value();
-            if (fv.size() == 8) {
-                tmp1 = fk.ToString();
-                tmp1.append(fv.data(), fv.size());
-                if (check_status(db.Get(opts, tmp1, &tmp2))) {
-                    fk.remove_prefix(1);
-                    out.push_back(fk.ToString());
-                }
-            }
-        }
-    } else {
-        auto k = build_key(_keyspace_id,filter.name);
-        iter->Seek(k);
-        while (iter->Valid()) {
-            auto fk = iter->key();
-            if (!fk.starts_with(k)) break;
-            fk.remove_prefix(1);
-            out.emplace_back(fk.ToString());
-            iter->Next();            
-        }
-    }    
     return out;
 }
 
-LevelDBTransaction::LevelDBTransaction(PDB proxy, uint8_t keyspace_id, bool sync)
-        :_proxy(std::move(proxy))
-        ,_keyspace_id((keyspace_id))
-        ,_sync(sync) {}
-
-
-        
-LevelDBTransaction::Revision LevelDBTransaction::put_rev(std::string_view key) {
-        std::string k = build_key(_keyspace_id+1, key);            
-        std::string v;
-        auto t = check_status(_proxy->Get({}, k, &v));
-        auto r = t?extract_revision(v):0;
-        ++r;
-        v = build_revision(r);
-        _proxy->Put({},k,v);
-        return r;
-    }
-
-LevelDBTransaction::Revision LevelDBTransaction::put(Key key, std::string_view value_blob) {
-        std::string v;
-        if (!key.sequence) {
-            _batch.Put(build_key(_keyspace_id, key.name), {value_blob.data(), value_blob.size()});
-            return 0;
-        }  else {
-            auto r = put_rev(key.name);
-            _batch.Put(build_key(_keyspace_id+1, key.name, r), {value_blob.data(), value_blob.size()});
-            return r;
-        }
-
-    }
-
-LevelDBTransaction::Revision LevelDBTransaction::erase(Key key) {
-        std::string v;
-        if (!key.sequence) {
-            _batch.Delete(build_key(_keyspace_id+1, key.name));
-            return 0;
-        }  else {
-            auto r = put_rev(key.name);
-            return r;
-        }
-    }
-
-void LevelDBTransaction::erase(std::string_view key, Revision rev) {
-    auto k = build_key(_keyspace_id+1, key, rev);
-    _batch.Delete(k);
+static inline std::string_view slice2string_view(const leveldb::Slice &s) {
+    return std::string_view(s.data(), s.size());
 }
 
-
-void LevelDBTransaction::prune_history(std::string_view key, Revision to) {
-        std::string v;
-        auto k = build_key(_keyspace_id+1, key);
-        auto bk = build_key(_keyspace_id+1, key, 0);        
-        auto t = check_status(_proxy->Get({},k, &v));
-        if (!t) return;
-        Revision maxrev =extract_revision(v);
-        to = std::min(to,maxrev);
-        auto iter = std::unique_ptr<leveldb::Iterator>(_proxy->NewIterator({}));
-        iter->Seek(bk);
-        while (iter->Valid()) {
-            auto key = iter->key();
-            if (key.starts_with(k)) break;
-            auto rev = extract_revision({key.data(),key.size()});
-            if (rev >= to) break;
-            _batch.Delete(key);            
-        }
+LevelDBStorage::Enumerator LevelDBStorage::get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const {
+    auto iter = std::shared_ptr<leveldb::Iterator>(_proxy->NewIterator({}));
+    auto beg = build_key(_keyspace_id, variable_name, since);
+    auto end = build_key(_keyspace_id, variable_name, until);
+    if (beg < end) {
+        iter->Seek(beg);
+        return [iter, end, sz = variable_name.size()+2](ValueView &w)mutable -> bool {
+            if (!iter->Valid() || slice2string_view(iter->key()) >= end) return false;
+            w.key = extract_key(slice2string_view(iter->key()).substr(sz));
+            w.data = slice2string_view(iter->value());
+            iter->Next();
+            return true;
+        };
+    } else if (beg > end) {
+        iter->Seek(beg);
+        // Seek lands at first >= beg; step back if it overshot so we start inclusive at beg
+        if (!iter->Valid() || slice2string_view(iter->key()) > beg) iter->Prev();
+        return [iter, end, sz = variable_name.size()+2](ValueView &w)mutable -> bool {
+            if (!iter->Valid()) return false;
+            auto key = slice2string_view(iter->key());
+            if (key <= end) return false;
+            w.key = extract_key(key.substr(sz));
+            w.data = slice2string_view(iter->value());
+            iter->Prev();
+            return true;
+        };
+    } else {
+        return [](ValueView &){return false;};
     }
 
-void LevelDBTransaction::commit() {
-        leveldb::WriteOptions opts;
-        opts.sync = _sync;
-        check_status(_proxy->Write(opts, &_batch));
 }
-    
+std::vector<std::string> LevelDBStorage::list(std::string_view str_prefix) const {
+    //we search for all keys in format <kid 1b><name><0><recordkey 16b>
+    //if found, add <name> to list and seek to <kid 1b><name><1> - which skips all recordkeys
+    std::vector<std::string> out;
+    auto iter = std::unique_ptr<leveldb::Iterator>(_proxy->NewIterator({}));
+    auto prefix = build_key(_keyspace_id, str_prefix);
+    iter->Seek(prefix);
+    std::string varname;
+    while (iter->Valid()) {
+        if (!iter->key().starts_with(prefix)) break;        
+        auto dbkey = slice2string_view(iter->key());        
+        if (dbkey.size() > sizeof(RecordKey) + 1 && dbkey[dbkey.size() - sizeof(RecordKey) - 1] == '\0') {
+            varname.clear();
+            varname.append(dbkey.substr(0, dbkey.size() - sizeof(RecordKey)-1) );
+            out.push_back(varname.substr(1));   //remove keyspace_id
+            varname.push_back('\x01');  //next key;
+            iter->Seek(varname);
+        } else {
+            iter->Next();
+        }
+    }
+    return out;
+}
+LevelDBStorage::Value LevelDBStorage::get_schema_binary(SchemaHash h) const {
+    auto hbin = std::bit_cast<std::array<char, sizeof(h)> >(h);
+    std::string key = build_key(schema_keyspace, {hbin.begin(), hbin.end()});
+    Value out;
+    out.exists = check_status(_proxy->Get({}, key, &out.data));
+    return out;
+};
 
-PStorageTransaction LevelDBStorage::write(bool sync) {
-    return std::make_unique<LevelDBTransaction>(_proxy, _keyspace_id, sync);
+PStorageTransaction LevelDBStorage::write() {
+    return std::make_unique<LevelDBTransaction>(shared_from_this());
+}
+uint8_t LevelDBStorage::get_keyspace_id() const {return _keyspace_id;}
+LevelDBStorage::PDB LevelDBStorage::get_db() const {return _proxy;}
+
+
+PStorage LevelDBTransaction::get_storage() const {
+    return _storage;
+}
+void LevelDBTransaction::commit(bool sync) {
+    auto db = _storage->get_db();
+    leveldb::WriteOptions opts;
+    opts.sync = sync;
+    check_status(db->Write(opts,&_batch));
+    _batch = {};    
+}
+
+static std::atomic<std::uint64_t> unique_key_generator = {};
+
+RecordKey LevelDBTransaction::put(std::string_view variable_name, std::string_view content) {
+    RecordKey key{
+        static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count()),
+        unique_key_generator++
+    };
+    put(variable_name, key, content, UpdateLastRevision::enable);
+    return key;
+}
+void LevelDBTransaction::put(std::string_view variable_name, const RecordKey &key, std::string_view content, UpdateLastRevision update_last_revision) {
+    auto kid = _storage->get_keyspace_id();
+    _batch.Put(build_key(kid,variable_name, key), {content.data(), content.length()});
+    if (update_last_revision == UpdateLastRevision::enable) {
+        auto rw = std::bit_cast<std::array<char, sizeof(RecordKey)> >(key);
+        _batch.Put(build_key(kid,variable_name), {rw.data(), rw.size()});
+    }
+}
+void LevelDBTransaction::erase(std::string_view variable_name) {
+    auto iter =std::unique_ptr<leveldb::Iterator>( _storage->get_db()->NewIterator({}));
+    iter->Seek({variable_name.data(), variable_name.size()});
+    char kid = static_cast<char>(_storage->get_keyspace_id());
+    auto sz = variable_name.size();
+    while (iter->Valid()) {
+        auto k = slice2string_view(iter->key());
+        if (k.empty() || k[0] != kid || k.substr(1,sz) != variable_name) break;
+        k = k.substr(1);       
+        if (k.size() == sz || k[sz] == '\0')  {
+            _batch.Delete(iter->key());
+        }
+        iter->Next();        
+    }
+}
+void LevelDBTransaction::erase(std::string_view variable_name, const RecordKey &key) {
+    _batch.Delete(build_key(_storage->get_keyspace_id(), variable_name, key));
+
+}
+void LevelDBTransaction::put_schema_binary(SchemaHash hash, std::string_view binary) {
+    auto hbin = std::bit_cast<std::array<char, sizeof(SchemaHash)> >(hash);
+    _batch.Put(build_key(LevelDBStorage::schema_keyspace, {hbin.data(), hbin.size()}), {binary.data(), binary.size()});
 }
 
 
