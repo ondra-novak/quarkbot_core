@@ -50,7 +50,7 @@ struct OrderFixture {
 // Drain the initial "open" status update that accept_order() always queues.
 // Safe because the update is already in the queue before this is called.
 static void drain_status(Order &order) {
-    coro::sync_await(order.next_event());
+    coro::sync_await(order.next());
     while (order.any_fill()) order.read_fill();
 }
 
@@ -58,10 +58,10 @@ static void drain_status(Order &order) {
 // Only call this after an on_event() that is expected to close the order.
 static void drain_until_done(Order &order) {
     while (order.any_fill()) order.read_fill();
-    bool cont = coro::sync_await(order.next_event());
+    bool cont = coro::sync_await(order.next());
     while (cont) {
         while (order.any_fill()) order.read_fill();
-        cont = coro::sync_await(order.next_event());
+        cont = coro::sync_await(order.next());
     }
 }
 
@@ -91,7 +91,7 @@ static void test_limit_buy_fills_on_quote() {
     CHECK(fill->amount == 1_dec);
     CHECK(fill->side == Side::buy);
 
-    coro::sync_await(order.next_event());
+    coro::sync_await(order.next());
     CHECK(order.get_status() == OrderStatus::filled);
 }
 
@@ -121,7 +121,7 @@ static void test_limit_sell_fills_on_quote() {
     CHECK(fill->amount == 1_dec);
     CHECK(fill->side == Side::sell);
 
-    coro::sync_await(order.next_event());
+    coro::sync_await(order.next());
     CHECK(order.get_status() == OrderStatus::filled);
 }
 
@@ -146,7 +146,7 @@ static void test_limit_buy_fills_on_trade() {
     CHECK(fill->amount == 1_dec);   // must be 1, not 2
     CHECK(fill->side == Side::buy);
 
-    coro::sync_await(order.next_event());
+    coro::sync_await(order.next());
     CHECK(order.get_status() == OrderStatus::filled);
 }
 
@@ -170,7 +170,7 @@ static void test_market_buy_fills_immediately() {
     CHECK(fill->amount == 1_dec);
     CHECK(fill->side == Side::buy);
 
-    coro::sync_await(order.next_event());
+    coro::sync_await(order.next());
     CHECK(order.get_status() == OrderStatus::filled);
 }
 
@@ -228,11 +228,11 @@ static void test_replace_order() {
     CHECK(fill->amount == 1_dec);
     CHECK(fill->side == Side::buy);
 
-    coro::sync_await(replacement.next_event());
+    coro::sync_await(replacement.next());
     CHECK(replacement.get_status() == OrderStatus::filled);
 }
 
-static void test_order_next_event_coroutine() {
+static void test_order_next_coroutine() {
     OrderFixture fx;
 
     Order order = fx.instrument->place_order(
@@ -246,9 +246,9 @@ static void test_order_next_event_coroutine() {
     bool coro_got_event = false;
     bool coro_ran = false;
 
-    // Define and launch a StrategyFragment coroutine that co_awaits next_event()
+    // Define and launch a StrategyFragment coroutine that co_awaits next()
     auto launch_coro = [&]() -> StrategyFragment {
-        bool result = co_await order.next_event();
+        bool result = co_await order.next();
         coro_got_event = result;
         coro_ran = true;
     };
@@ -292,6 +292,6 @@ int main() {
     test_market_buy_fills_immediately();
     test_cancel_order();
     test_replace_order();
-    test_order_next_event_coroutine();
+    test_order_next_coroutine();
     return 0;
 }

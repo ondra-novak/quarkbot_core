@@ -45,6 +45,8 @@ namespace quarkbot {
         PExecutionWorker exec_worker;
         ///current strategy mode
         StrategyMode mode;
+        ///Reporter - strategy should report it state by this object
+        PReporter reporter;
 
         ///co_await on this to wait on stop signal
         /**

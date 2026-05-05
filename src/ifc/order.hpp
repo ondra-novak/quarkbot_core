@@ -172,22 +172,20 @@ inline constexpr bool is_done_status(OrderStatus status) {
            status == OrderStatus::replaced ||
            status == OrderStatus::lost ;
 }
-
-struct OrderStatusUpdate {
-    OrderStatus status;
-    OrderRejectionReason rej_status = OrderRejectionReason::none;
-    std::string string_param = {};        
-};
-
-///Initial order update - when order is pulled from exchange 
-struct OrderInitialUpdate {
-    std::string id = {};    
-};
-
 class Order {
 public:
 
-    using Update = std::variant<Fill, OrderStatusUpdate>;
+    struct RejectionWithText {
+        OrderRejectionReason reason;
+        std::string text;
+    };
+
+    struct OpenStatus {
+        std::string id;
+        RecordKey key;
+    };
+
+    using Update = std::variant<Fill, OrderStatus, OrderRejectionReason, RejectionWithText,  OpenStatus>;
 
     struct State{
         ///original parameters -  adjusted
@@ -200,6 +198,8 @@ public:
         std::weak_ptr<State> replaced_order = {};
         ///internal order ID
         std::string id = {};
+        ///adapter's generated unique record key - this can be used to store into database
+        RecordKey key = {};
         ///filled amount (calculated locally)
         Decimal filled = {};
         ///order status
@@ -229,15 +229,23 @@ public:
          {}
          
         void flush_state() {
-            while (!updates.empty() && std::holds_alternative<OrderStatusUpdate>(updates.front())) {
-                auto st = std::get<OrderStatusUpdate>(updates.front());
-                status = st.status;
-                if (status == OrderStatus::open) {
-                    id = std::move(st.string_param);
-                } else if (is_done_status(status)) {
-                    reject_reason = st.rej_status;
-                    rejection_message = std::move(st.string_param);
-                }
+            while (!updates.empty() && !std::holds_alternative<Fill>(updates.front())) {
+                std::visit([&]<typename T>(const T &v){
+                    if constexpr(std::is_same_v<T, OrderStatus>) {
+                        status = v;
+                    } else if constexpr(std::is_same_v<T, OrderRejectionReason>) {
+                        status = OrderStatus::rejected;
+                        reject_reason = v;
+                    } else if constexpr(std::is_same_v<T, RejectionWithText>) {
+                        status = OrderStatus::rejected;
+                        reject_reason = v.reason;
+                        rejection_message = v.text;
+                    } else if constexpr(std::is_same_v<T, OpenStatus>) {
+                        id = v.id;
+                        key = v.key;
+                        status = OrderStatus::open;
+                    }
+                }, updates.front());
                 updates.pop();
             }
         }
@@ -311,7 +319,7 @@ public:
            You must co_await from execution thread, otherwise exception is thrown. However it is 
            possible to co_await in different execution thread than order has been created.
     */
-    awaitable<bool> next_event() {
+    awaitable<bool> next() {
         return State::next_event(_state);
     }
 
@@ -386,8 +394,14 @@ public:
     Decimal get_turnover(Decimal price, Decimal filled = {}) const;
     bool done() const {return is_done_status(get_status());}
 
+    
     bool operator==(const Order &) const = default;
     
+    ///create hash (for unordered map)
+    std::uint64_t hash() const {
+        std::hash<std::shared_ptr<State> > hasher;
+        return hasher(_state);
+    }
 
 protected:
 

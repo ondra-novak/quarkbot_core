@@ -44,9 +44,7 @@ public:
     virtual SerializedOrder serialize_order(Order ord) override;
     virtual Order restore_order(SerializedOrder ord) override;
 
-
-    void on_order_fill(const Order &ord, const Fill &fill);
-    void on_order_status(const Order &ord, const OrderStatusUpdate &status);        
+    void on_order_update(Order ord, Order::Update &&status);
 
 protected:
 

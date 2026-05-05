@@ -131,21 +131,22 @@ struct FundingEvent : public TradableInstrumentStreamTypeItem {
 ///Streaming type - listen on order status updates
 /**
 This events are intended for storing data into storage
-Stream is active when order state is changed or fill is detected
 
-@note recommended use - store fill and state atomically.
+@note to read status and fills directly from the order, you still need to call Order::next()
  */
 class OrderEvent: public TradableInstrumentStreamTypeItem {
 public:
-    ///contains order id (key type, must be unique) (depend on exchange)
-    std::string order_id;
-    ///contains serialized state of the order . If missing, order is done and need to be no longer stored 
-    std::optional<std::string> serialized_state;
-    ///contains fill, if detected - you should put order state and fill into single database transaction
-    std::optional<Fill> fill;
+    ///contains associated order    
+    std::optional<Order> order = {};
+    ///the update which is going to be updated on the order. It is done automatically, don't not call update_order 
+    Order::Update update = {};
+
+    OrderEvent &view() {return *this;}
 
     static constexpr auto type = Type("order_event");
 };
+
+static_assert(StreamType<OrderEvent, TradableInstrumentStreamTypeItem>);
 
 ///implementation of cancel_order for order
 inline void Order::cancel() {

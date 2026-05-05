@@ -4,11 +4,12 @@
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
 #include "ifc/types.hpp"
-#include "ifc/reporter.hpp"
 #include "utils/decimal.hpp"
 #include "utils/random_string.hpp"
 #include "simtradableinstrument.hpp"
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <memory>
 
 namespace quarkbot {
@@ -24,7 +25,7 @@ namespace quarkbot {
 
         auto instrument = extract_instrument(ord);
         if (!instrument) {
-            set_order_status(ord, OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::not_tradable});
+            set_order_status(ord,  OrderRejectionReason::not_tradable);
             return;
         }
 
@@ -46,7 +47,7 @@ namespace quarkbot {
 
         auto instrument = extract_instrument(ord);
         if (!instrument) {
-            set_order_status(ord, OrderStatusUpdate{OrderStatus::rejected, OrderRejectionReason::not_tradable});
+            set_order_status(ord,  OrderRejectionReason::not_tradable);
             return;
         }
 
@@ -62,7 +63,7 @@ namespace quarkbot {
         });
 
         if (found == _active_orders.end()) {
-            set_order_status(aord.ord, {OrderStatus::rejected, OrderRejectionReason::order_not_found});
+            set_order_status(aord.ord,  OrderRejectionReason::order_not_found);
             return ;
         }
         if (!validate_order_replace(aord, *found)) return;
@@ -92,21 +93,21 @@ namespace quarkbot {
         const OrderParametersGen<Decimal> &params = ord.get_parameters();
 
         if (params.quantity <= 0) {
-            set_order_status(ord, { OrderStatus::rejected, OrderRejectionReason::invalid_params, "Invalid quantity" });
+            set_order_status(ord, Order::RejectionWithText{ OrderRejectionReason::invalid_params, "Invalid quantity" });
             return false;
         }
 
         if (params.type != OrderType::stop && params.type != OrderType::market && params.limit_price <= Decimal(0)) {
-            set_order_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params ,"Invalid or missing limit price"});
+            set_order_status(ord, Order::RejectionWithText{  OrderRejectionReason::invalid_params ,"Invalid or missing limit price"});
             return false;
         }
 
         if ((params.type == OrderType::stop || params.type == OrderType::stoplimit || params.type == OrderType::oco) && params.stop_price <= Decimal(0)) {
-            set_order_status(ord, { OrderStatus::rejected,  OrderRejectionReason::invalid_params , "Invalid or missing stop price"});
+            set_order_status(ord, Order::RejectionWithText{ OrderRejectionReason::invalid_params , "Invalid or missing stop price"});
             return false;
         }
         if (params.time_in_force != TimeInForce::gtc && params.time_in_force != TimeInForce::ioc) {
-            set_order_status(ord, {OrderStatus::rejected, OrderRejectionReason::invalid_params, "Unsupported time in force"});
+            set_order_status(ord, Order::RejectionWithText{ OrderRejectionReason::invalid_params, "Unsupported time in force"});
             return false;
         }
 
@@ -116,7 +117,7 @@ namespace quarkbot {
         const OrderParametersGen<Decimal> &params = order.ord.get_parameters();
         const OrderParametersGen<Decimal> &old_params = replacing_order.ord.get_parameters();
         if (params.side != old_params.side || params.type != old_params.type) {
-            set_order_status(order.ord, {OrderStatus::rejected , OrderRejectionReason::invalid_replace});
+            set_order_status(order.ord, OrderRejectionReason::invalid_replace);
             return false;
         }
         return true;
@@ -162,7 +163,7 @@ namespace quarkbot {
 
                 case OrderType::limit_post_only:
                     if (taker && sgn(dp) * sid > 0) {
-                        set_order_status(order.ord, {OrderStatus::rejected, OrderRejectionReason::post_only_taker});
+                        set_order_status(order.ord,  OrderRejectionReason::post_only_taker);
                         return true;
                     }
                     [[fallthrough]];
@@ -284,8 +285,7 @@ namespace quarkbot {
         };
         order.filled += quantity;
         auto &simt = *static_cast<SimTradableInstrument *>(order.ord.get_instrument().get());
-        simt.on_order_fill(order.ord, f);
-        if (_reporter) _reporter->on_fill(f, order.ord);
+        simt.on_order_update(order.ord, f);
     }
 
 bool SimExecutor::cancel_all(PTradableInstrument instrument) {
@@ -303,20 +303,20 @@ bool SimExecutor::cancel_all(PTradableInstrument instrument) {
     return false;
 }
 
-void SimExecutor::set_reporter(PReporter reporter) {
-    _reporter = std::move(reporter);
-}
-void SimExecutor::set_order_status(const Order &ord, const OrderStatusUpdate &st) {
-    auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get());
-    if (_reporter) _reporter->on_order_status(ord, st);
-    simt.on_order_status(ord, st);
+void SimExecutor::set_order_status(const Order &ord, Order::Update &&st) {
+    auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get());    
+    simt.on_order_update(ord, std::move(st));
 }
 
 void  SimExecutor::accept_order(const Order &ord) {
     auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get());
-    if (_reporter) _reporter->on_order_placed(ord);
-    simt.on_order_status(ord, {OrderStatus::open, {}, generate_random_string()});        
-
+    std::string id = generate_random_string();
+    std::hash<std::string> hasher;
+    RecordKey rk({
+        static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count()),
+        hasher(id)
+    });
+    simt.on_order_update(ord, Order::OpenStatus{id, rk});
 }
 
 }
