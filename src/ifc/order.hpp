@@ -1,5 +1,6 @@
 #pragma once
 
+#include "basic_coro/awaitable_transform.hpp"
 #include "basic_coro/coro_frame.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "ifc/execution_worker.hpp"
@@ -12,9 +13,9 @@
 #include <mutex>
 #include <optional>
 #include <system_error>
+#include <type_traits>
 #include <variant>
 #include "utils/decimal.hpp"
-#include "utils/double_buffer.hpp"
 #include "utils/round.hpp"
 
 
@@ -210,9 +211,11 @@ public:
 
         std::mutex mx;
 
-        DoubleBufferQueue<Update> updates;
+        std::queue<Update> updates;
 
         ResultAndExecWorker<bool> awaiting = {};
+
+        coro::awaitable_transform<awaitable<bool>, std::shared_ptr<State> > _awt_conv;
         
 
         State(OrderParametersGen<Decimal> params, 
@@ -223,10 +226,8 @@ public:
          ,instrument(std::move(instrument))
          ,name(std::move(name))
          ,replaced_order(std::move(replaced_order))
-         ,updates(mx)
          {}
-
-
+         
         void flush_state() {
             while (!updates.empty() && std::holds_alternative<OrderStatusUpdate>(updates.front())) {
                 auto st = std::get<OrderStatusUpdate>(updates.front());
@@ -241,23 +242,50 @@ public:
             }
         }
         void update(Update &&u) {
+            std::scoped_lock _(mx);
             updates.push(std::move(u));
             if (awaiting) {
+                flush_state();
                 awaiting(true);
             }
         }
 
-        std::optional<bool> pull() {
-            {
-                std::scoped_lock _(mx);
-                if (updates.empty()) {
-                    if (is_done_status(status)) return false;
-                    return {};
-                }
-            }
-            flush_state();
+        template<std::invocable<> InCaseEmpty>
+        bool pull(InCaseEmpty &&callback) {
+            std::scoped_lock _(mx);
+            if (updates.empty()) {
+                if (is_done_status(status)) return false;
+                std::invoke(std::forward<InCaseEmpty>(callback));
+            } else {
+                flush_state();            
+            }            
             return true;
         }
+
+        static awaitable<bool> next_event_internal(std::shared_ptr<State> me) {         
+            bool is_empty = false;
+            auto r = me->pull([&]{is_empty = true;});
+            if (!is_empty) return r;
+            return [state = std::move(me)](auto promise) {
+                bool is_empty = false;
+                auto r = state->pull([&]{
+                    is_empty = true;
+                    state->awaiting = std::move(promise);
+                });
+                if (is_empty) return coro::prepared_coro{};
+                else return promise(r);
+            };
+        }
+
+        static awaitable<bool> next_event(std::shared_ptr<State> me) {         
+            return me->_awt_conv(me->next_event_internal(me),[me](bool v){
+                if (v) {
+                    std::scoped_lock _(me->mx);
+                    me->flush_state();
+                }
+                return v;
+            });
+        }    
     };
         
     Order(std::shared_ptr<State> st):_state(std::move(st)) {}
@@ -284,19 +312,14 @@ public:
            possible to co_await in different execution thread than order has been created.
     */
     awaitable<bool> next_event() {
-        auto &st = *_state;
-        auto r = st.pull();
-        if (r.has_value()) return *r;
-        return [state = _state](auto promise) {
-            auto r = state->pull();
-            if (r.has_value()) return promise(r.value());
-            state->awaiting = std::move(promise);
-            return coro::prepared_coro{};
-        };
+        return State::next_event(_state);
     }
 
+
     ///returns true if there is any unprocessed fill
+    /** If you need also process fill, it is better to use read_fill() directly and test result optional */
     bool any_fill() const {
+        std::scoped_lock _(_state->mx);
         return !_state->updates.empty() && std::holds_alternative<Fill>(_state->updates.front());
     }
 
@@ -306,9 +329,12 @@ public:
     */
     std::optional<Fill> read_fill() {
         std::optional<Fill> out;
-        if (any_fill()) {
+        std::scoped_lock _(_state->mx);
+        //assume - all states has been flushed already
+        if (!_state->updates.empty()) {
             out.emplace(std::move(std::get<Fill>(_state->updates.front())));
             _state->updates.pop();
+            //flush any states between
             _state->flush_state();
         }
         return out;
