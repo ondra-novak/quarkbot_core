@@ -4,6 +4,7 @@
 #include <chrono>
 #include <compare>
 #include <cstdint>
+#include <limits>
 #include <tuple>
 namespace quarkbot {
 
@@ -114,6 +115,14 @@ struct RecordKey {
 
     constexpr bool operator==(const RecordKey &) const = default;
     constexpr std::strong_ordering operator<=>(const RecordKey &) const = default;
+
+    static constexpr RecordKey min() {
+        return {0,0};
+    } 
+    static constexpr RecordKey max() {
+        auto mx = std::numeric_limits<std::uint64_t>::max();
+        return {mx,mx};
+    }
 
 };
 

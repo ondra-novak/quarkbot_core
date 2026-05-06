@@ -30,6 +30,7 @@ public:
     virtual Order place_order(const OrderRequest &params, Order order_to_replace, std::string_view name = {}) = 0;
     virtual Order place_order(const OrderRequest &params, std::string_view name = {}) = 0;
 
+
     ///Serializes order state
     /**
         @param ord order

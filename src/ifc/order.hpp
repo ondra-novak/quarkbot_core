@@ -1,177 +1,25 @@
 #pragma once
 
 #include "basic_coro/awaitable_transform.hpp"
-#include "basic_coro/coro_frame.hpp"
 #include "basic_coro/prepared_coro.hpp"
-#include "ifc/execution_worker.hpp"
-#include "ifc/stream_defs.hpp"
+#include "execution_worker.hpp"
+#include "order_defs.hpp"
+#include "order_storage.hpp"
 #include "types.hpp"
 #include "defs.hpp"
-#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <system_error>
 #include <type_traits>
 #include <variant>
 #include "utils/decimal.hpp"
-#include "utils/round.hpp"
+
 
 
 namespace quarkbot {
 
-
-enum class OrderType : char{
-    ///alert - not order exactly, limit_price is mandatory, amount must be zero, is marked filled when price is reached from given side 
-    /** alerts can be emulated if not supported on exchange */
-    alert,
-    ///market order - amount is mandarory
-    market,
-    ///limit order - amount and limit_price are mandatory
-    limit,
-    ///limit post only - order is reject when it would fill immediately - amount and limit_price are mandatory
-    limit_post_only,
-    ///stop order - amount and stop_price are mandatory
-    stop,
-    ///stop limit order - amount, stop_price and limit_price are mandatory
-    stoplimit,
-    ///pair of orders - one order is limit, second is stop. When one is filled, the other is canceled
-    oco
-};
-
-enum class TimeInForce : char {
-    ///Good until canceled
-    gtc,
-    ///Day only, canceled at close
-    day,
-    ///immediate or cancel
-    ioc,
-    ///at close
-    atc,
-    ///at open
-    ato,    
-    ///at crossing
-    crossing    
-};
-
-inline constexpr bool is_limit_order(OrderType type) {
-    return type == OrderType::limit
-        || type == OrderType::limit_post_only
-        || type == OrderType::oco
-        || type == OrderType::alert;
-}
-
-inline constexpr bool is_stop_order(OrderType type) {
-    return type == OrderType::stop
-        || type == OrderType::stoplimit
-        || type == OrderType::oco;
-}
-
-template<typename NumberType>
-struct OrderParametersGen {
-    ///order side
-    Side side;
-    ///order type
-    OrderType type;
-    ///amount (positive number)
-    NumberType quantity; //mandatory
-    ///limit price (for limit orders)
-    NumberType limit_price = {};
-    ///stop price (for stop orders)
-    NumberType stop_price = {};
-    ///max leverage (0 = disabled)
-    double leverage = 0;
-    
-    ///reduce or close position
-    bool reduce_only = false;
-    ///create or increase to hedge side - can open reverse position if supported on exchange
-    bool hedge = false;
-    ///Enforce that stop or alert is triggered on local side, not on exchange, even if exchange supports it.    
-    bool local_trigger = false;
-    ///time in force
-    TimeInForce time_in_force = TimeInForce::gtc;
-    ///sets execution reason for given order 
-    /**
-      Allows to override execution reason for strategy orders. 
-     */
-    ExecutionReason reason_override = ExecutionReason::strategy_order;
-};
-
-using OrderParameters = OrderParametersGen<Decimal>;
-using OrderRequest = OrderParametersGen<TargetValue>;
-
-
-
-enum class OrderStatus : uint8_t {
-    ///order sent, not confirmed yet
-    sent,
-    ///order is active, open, waiting in orderbook, waiting to trigger, there can be partial fills (see fills)
-    open,    
-    ///order is done, filled complete
-    filled,
-    ///order is done, has been canceled
-    canceled,
-    ///order is done, has been rejected
-    rejected,    
-    ///order is done, has been replaced by other order
-    replaced,
-    ///order has been recently restored from storage and exchange adapter is synchronizing its state
-    restored,
-    ///order is done, informations about the order are lost - this can happen as resolution of restored state. (order is no longer found in history)
-    lost
-};
-
-enum class OrderRejectionReason : uint8_t{
-    //no reason given
-    none,
-    //instrument not tradable
-    not_tradable,
-    //order is too large
-    too_large,
-    //order is too small
-    too_small,    
-    //no funds
-    insufficient_funds,
-    //invalid parameters
-    invalid_params,
-    //order cannot be replaced (incompatible settings)
-    invalid_replace,
-    //order cannot be replaced, because old order was not found (is probably done)
-    order_not_found,
-    //price is not allowed range
-    price_range,
-    //post only order would take liquidity
-    post_only_taker,
-    //minimum order volume
-    min_volume,
-    //exchange is overloaded
-    overloaded,
-    //exchange rate limit implemented
-    rate_limited,
-    //risk limit reached
-    too_risky,
-    //denied by exchange 
-    permission_denied,
-    //order configuration is not supported by this exchange
-    unsupported,
-    //order was not posted to exchange - connection stalled
-    timeout,
-    //order expired before delivered
-    expired,
-    //internal error  (probably adapter error, connection, etc)
-    internal_error,
-    //other reason (textural),
-    other
-};
-
-inline constexpr bool is_done_status(OrderStatus status) {
-    return status == OrderStatus::filled ||
-           status == OrderStatus::canceled ||
-           status == OrderStatus::rejected ||
-           status == OrderStatus::replaced ||
-           status == OrderStatus::lost ;
-}
 class Order {
 public:
 
@@ -196,6 +44,8 @@ public:
         std::string name = {};
         ///reference to replaced order
         std::weak_ptr<State> replaced_order = {};
+        ///associated order storage
+        std::shared_ptr<OrderStorage> storage;
         ///internal order ID
         std::string id = {};
         ///adapter's generated unique record key - this can be used to store into database
@@ -208,13 +58,16 @@ public:
         OrderRejectionReason reject_reason = {};
         ///if order rejected, there is message if any
         std::string rejection_message = {};
+        ///all fills extracted from the queue;
+        std::vector<Fill> fills;
 
+        ///shared lock for queue
         std::mutex mx;
-
-        std::queue<Update> updates;
-
+        ///queue of updates
+        std::vector<Update> updates;
+        ///awaiting coroutine
         ResultAndExecWorker<bool> awaiting = {};
-
+        ///post co_await operation
         coro::awaitable_transform<awaitable<bool>, std::shared_ptr<State> > _awt_conv;
         
 
@@ -228,69 +81,94 @@ public:
          ,replaced_order(std::move(replaced_order))
          {}
          
-        void flush_state() {
-            while (!updates.empty() && !std::holds_alternative<Fill>(updates.front())) {
-                std::visit([&]<typename T>(const T &v){
+         
+        void flush_updates() {
+            //under lock
+            std::scoped_lock _(mx);
+            //to know where new fills starts
+            auto new_fills_ofs = fills.size();
+            //order was opened
+            bool open_order = false;
+            //order was closed
+            bool close_order = false;
+            //process updates
+            for (auto &u: updates) {
+                std::visit([&]<typename T>(T &v){
                     if constexpr(std::is_same_v<T, OrderStatus>) {
                         status = v;
+                        if (is_done_status(v)) {
+                            close_order = true;
+                        }
                     } else if constexpr(std::is_same_v<T, OrderRejectionReason>) {
                         status = OrderStatus::rejected;
                         reject_reason = v;
+                        close_order = true;
                     } else if constexpr(std::is_same_v<T, RejectionWithText>) {
                         status = OrderStatus::rejected;
                         reject_reason = v.reason;
                         rejection_message = v.text;
+                        close_order = true;
                     } else if constexpr(std::is_same_v<T, OpenStatus>) {
                         id = v.id;
                         key = v.key;
                         status = OrderStatus::open;
+                        open_order = true;
+                    } else if constexpr(std::is_same_v<T, Fill>) {
+                        fills.push_back(std::move(v));
                     }
-                }, updates.front());
-                updates.pop();
+                }, u);                
             }
+            //clear all updates - processed
+            updates.clear();
+            //if there is storage
+            if (storage) {
+                //find how many fills added
+                auto sz = fills.size();
+                //we can store order only if it was open or closed, not both or neither
+                bool open_or_close = open_order != close_order;
+                //so test, whether initiate store
+                if (open_or_close ||new_fills_ofs < sz) {
+                    //create transaction
+                    auto tx = storage->write();
+                    //we storing open or close
+                    if (open_or_close) {
+                        //store what needed
+                        if (open_order) storage->open_order(tx, key, id, parameters);
+                        else if (close_order) storage->close_order(tx, key);
+                    }
+                    //store all fills
+                    for (std::size_t p = new_fills_ofs; p < sz; ++p){
+                        storage->store_fill(tx, fills[p]);
+                    }
+                }
+            }
+            //now order is ready for frontend
         }
         void update(Update &&u) {
             std::scoped_lock _(mx);
-            updates.push(std::move(u));
+            updates.push_back(std::move(u));
             if (awaiting) {
-                flush_state();
                 awaiting(true);
             }
         }
 
-        template<std::invocable<> InCaseEmpty>
-        bool pull(InCaseEmpty &&callback) {
-            std::scoped_lock _(mx);
-            if (updates.empty()) {
-                if (is_done_status(status)) return false;
-                std::invoke(std::forward<InCaseEmpty>(callback));
-            } else {
-                flush_state();            
-            }            
-            return true;
-        }
-
-        static awaitable<bool> next_event_internal(std::shared_ptr<State> me) {         
-            bool is_empty = false;
-            auto r = me->pull([&]{is_empty = true;});
-            if (!is_empty) return r;
-            return [state = std::move(me)](auto promise) {
-                bool is_empty = false;
-                auto r = state->pull([&]{
-                    is_empty = true;
-                    state->awaiting = std::move(promise);
-                });
-                if (is_empty) return coro::prepared_coro{};
-                else return promise(r);
-            };
-        }
 
         static awaitable<bool> next_event(std::shared_ptr<State> me) {         
-            return me->_awt_conv(me->next_event_internal(me),[me](bool v){
-                if (v) {
+            auto inner = [](std::shared_ptr<State> me)->awaitable<bool>{
+                std::scoped_lock _(me->mx);
+                if (!me->updates.empty()) return true;                
+                if (is_done_status(me->status)) return false;                                    
+                return [me = std::move(me)](auto promise) -> coro::prepared_coro {
+                    coro::prepared_coro out;
                     std::scoped_lock _(me->mx);
-                    me->flush_state();
-                }
+                    if (!me->updates.empty()) out = promise(true);
+                    else if (is_done_status(me->status)) out = promise(false);
+                    else me->awaiting = std::move(promise);
+                    return out;
+                };
+            };
+            return me->_awt_conv(inner(me),[me](bool v){
+                if (v) me->flush_updates();                                    
                 return v;
             });
         }    
@@ -318,37 +196,24 @@ public:
     @note only one co_await can be active at the same time, otherwise behavior is undefined. 
            You must co_await from execution thread, otherwise exception is thrown. However it is 
            possible to co_await in different execution thread than order has been created.
+
+    @note new order state is populated only during this operation. Even if you know, that new state of order is avaialble, you 
+    still need to call this function to correctly update internals of the order
+
+        
     */
     awaitable<bool> next() {
         return State::next_event(_state);
     }
 
-
-    ///returns true if there is any unprocessed fill
-    /** If you need also process fill, it is better to use read_fill() directly and test result optional */
-    bool any_fill() const {
-        std::scoped_lock _(_state->mx);
-        return !_state->updates.empty() && std::holds_alternative<Fill>(_state->updates.front());
-    }
-
-    ///reads next fill, 
+    ///Get all fills
     /**
-    @return next unprocessed fill, or nullopt if none
-    */
-    std::optional<Fill> read_fill() {
-        std::optional<Fill> out;
-        std::scoped_lock _(_state->mx);
-        //assume - all states has been flushed already
-        if (!_state->updates.empty()) {
-            out.emplace(std::move(std::get<Fill>(_state->updates.front())));
-            _state->updates.pop();
-            //flush any states between
-            _state->flush_state();
-        }
-        return out;
-    }
+        @return fills. Note you have write access to this array. You can process fills and clear the array to capture new fills
+     */
+    std::vector<Fill> &get_fills() {return _state->fills;}
+    ///Get all fills
+    const std::vector<Fill> &get_fills() const {return _state->fills;}
 
-    
 
     ///get order parameters
     const OrderParametersGen<Decimal> &get_parameters() const {return _state->parameters;}
@@ -378,9 +243,7 @@ public:
     ///get reason for rejection
     OrderRejectionReason get_reject_reason() const {return _state->reject_reason;}
     ///get rejection message
-    const std::string &get_rejection_message() const {return _state->rejection_message;}
-
-    
+    const std::string &get_rejection_message() const {return _state->rejection_message;}    
 
     ///update order status
     /**
