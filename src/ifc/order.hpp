@@ -87,6 +87,10 @@ public:
             std::scoped_lock _(mx);
             //to know where new fills starts
             auto new_fills_ofs = fills.size();
+
+            std::vector<RecordKey> fill_dedup_helper;
+            fill_dedup_helper.reserve(updates.size());
+
             //order was opened
             bool open_order = false;
             //order was closed
@@ -114,7 +118,14 @@ public:
                         status = OrderStatus::open;
                         open_order = true;
                     } else if constexpr(std::is_same_v<T, Fill>) {
-                        fills.push_back(std::move(v));
+                        //local deduplication
+                        auto found = std::find_if(fill_dedup_helper.begin(), fill_dedup_helper.end(), [&](const RecordKey &rc){
+                            return rc ==  v.key;
+                        });
+                        if (found == fill_dedup_helper.end()) {
+                            fill_dedup_helper.push_back(v.key);
+                            fills.push_back(std::move(v));
+                        }
                     }
                 }, u);                
             }
@@ -137,9 +148,14 @@ public:
                         else if (close_order) storage->close_order(tx, key);
                     }
                     //store all fills
-                    for (std::size_t p = new_fills_ofs; p < sz; ++p){
-                        storage->store_fill(tx, fills[p]);
-                    }
+                    auto new_end = std::remove_if(fills.begin()+ static_cast<std::ptrdiff_t>(new_fills_ofs), fills.end(),
+                        [&](const Fill &f) {
+                            //global deduplication
+                            if (storage->check_fill_exists(f)) return true;
+                            storage->store_fill(tx, f);
+                            return false;
+                        });
+                    fills.erase(new_end, fills.end());
                 }
             }
             //now order is ready for frontend

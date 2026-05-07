@@ -21,6 +21,11 @@ namespace quarkbot {
         }
 
         
+        ///helps with fill deduplication
+        bool check_fill_exists(const Fill &f) const {
+            return _storage->get(_fill_var, f.key).exists;
+        }
+
         ///store a fill
         void store_fill(const PStorageTransaction &tx, const Fill &fill) {
             tx->store(_fill_var, fill.key, fill, UpdateLastRevision::disable);
