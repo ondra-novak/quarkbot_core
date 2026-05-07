@@ -129,25 +129,6 @@ struct FundingEvent : public TradableInstrumentStreamTypeItem {
     FundingEvent &view() {return *this;}
 };
 
-///Streaming type - listen on order status updates
-/**
-This events are intended for storing data into storage
-
-@note to read status and fills directly from the order, you still need to call Order::next()
- */
-class OrderEvent: public TradableInstrumentStreamTypeItem {
-public:
-    ///contains associated order    
-    std::optional<Order> order = {};
-    ///the update which is going to be updated on the order. It is done automatically, don't not call update_order 
-    Order::Update update = {};
-
-    OrderEvent &view() {return *this;}
-
-    static constexpr auto type = Type("order_event");
-};
-
-static_assert(StreamType<OrderEvent, TradableInstrumentStreamTypeItem>);
 
 ///implementation of cancel_order for order
 inline void Order::cancel() {

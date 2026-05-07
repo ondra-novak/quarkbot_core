@@ -45,14 +45,7 @@ void SimTradableInstrument::report_price(Decimal price) {
 
 
 std::unique_ptr<IEventStreamBase> SimTradableInstrument::subscribe_stream_internal(std::string_view type, const StreamParams *) {
-    if (type == OrderEvent::type) {
-        auto s = _order_update_stream.lock();
-        if (s == nullptr) {
-            s = std::make_shared<QueueEventPublisher<OrderEvent> >();
-            _order_update_stream = s;
-        }
-        return s->create_subscriber();
-    } else if (type == ExternalFill::type) {
+     if (type == ExternalFill::type) {
         auto s = _liquidation_stream.lock();
         if (s == nullptr) {
             s = std::make_shared<QueueEventPublisher<ExternalFill> >();
@@ -180,11 +173,6 @@ void SimTradableInstrument::cancel_order(Order order){
 }
 
 void SimTradableInstrument::on_order_update(Order ord, Order::Update &&status) {
-
-    auto l = _order_update_stream.lock();
-    if (l) {
-        l->publish({{},ord, status});
-    }
    
     if (std::holds_alternative<Fill>(status)) {
         const Fill &f = std::get<Fill>(status);

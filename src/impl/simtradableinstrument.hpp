@@ -65,7 +65,6 @@ protected:
     Decimal _last_price = {};
     Decimal _upnl = {};
 
-    std::weak_ptr<QueueEventPublisher<OrderEvent> > _order_update_stream;
     std::weak_ptr<QueueEventPublisher<ExternalFill> > _liquidation_stream;
 
     bool update_margin() {
