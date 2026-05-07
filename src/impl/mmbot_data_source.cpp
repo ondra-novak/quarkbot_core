@@ -1,5 +1,4 @@
 #include "mmbot_data_source.hpp"
-#include "ifc/market_events.hpp"
 #include <stdexcept>
 #include <string>
 

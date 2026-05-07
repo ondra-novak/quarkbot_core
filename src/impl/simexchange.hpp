@@ -3,7 +3,6 @@
 
 #include "ifc/defs.hpp"
 #include "ifc/exchange.hpp"
-#include "ifc/market_events.hpp"
 #include "ifc/market_instrument.hpp"
 #include "ifc/stream_defs.hpp"
 #include "ifc/streaming.hpp"

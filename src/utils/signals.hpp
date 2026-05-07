@@ -324,7 +324,7 @@ namespace signals {
     template<typename Dispatcher, typename Lock, typename ... Args>
     class SharedSignalSlot<void(Args...), Dispatcher, Lock> {
     public:        
-        using SignalSlot = SignalSlot<void(Args...), Dispatcher, Lock>;
+        using SignalSlot = signals::SignalSlot<void(Args...), Dispatcher, Lock>;
         using Ref = std::shared_ptr<SignalSlot>;
         using Consumer = typename SignalSlot::Consumer;
         using Connection = typename SignalSlot::Connection;

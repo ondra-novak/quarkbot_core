@@ -3,7 +3,6 @@
 #include "impl/simaccount.hpp"
 #include "siminstrument.hpp"
 #include "ifc/defs.hpp"
-#include "ifc/market_events.hpp"
 #include "ifc/stream_defs.hpp"
 #include "impl/streaming/publisher_manager.hpp"
 #include "simtradableinstrument.hpp"

@@ -199,7 +199,7 @@ std::vector<Order> SimTradableInstrument::attach_storage(PStorage storage, std::
             s.first.parameters,
             shared_from_this(),
             s.first.name,
-            std::weak_ptr<Order>(),
+            std::weak_ptr<Order::State>(),
             _order_storage
         );
         st->id = s.first.id;

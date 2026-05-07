@@ -1,6 +1,5 @@
 #pragma once
 
-#include "market_events.hpp"
 #include "ifc/market_instrument.hpp"
 #include "ifc/types.hpp"
 #include "utils/decimal.hpp"

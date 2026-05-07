@@ -3,7 +3,6 @@
 #include "basic_coro/sync_await.hpp"
 #include "ifc/context.hpp"
 #include "ifc/execution_worker.hpp"
-#include "ifc/market_events.hpp"
 #include "ifc/tradable_instrument.hpp"
 #include "impl/backtest_executor.hpp"
 #include "impl/simexchange.hpp"
