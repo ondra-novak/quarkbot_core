@@ -13,6 +13,7 @@
 #include <leveldb/status.h>
 #include <leveldb/write_batch.h>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <sys/types.h>
@@ -281,13 +282,16 @@ RecordKey LevelDBTransaction::put(std::string_view variable_name, std::string_vi
 void LevelDBTransaction::put(std::string_view variable_name, const RecordKey &key, std::string_view content, UpdateLastRevision update_last_revision) {
     auto kid = _storage->get_keyspace_id();
     _batch.Put(build_key(kid,variable_name, key), {content.data(), content.length()});
+    auto &watcher = _storage->get_watcher();
     if (update_last_revision == UpdateLastRevision::enable) {
         auto rw = std::bit_cast<std::array<char, sizeof(RecordKey)> >(key);
         _batch.Put(build_key(kid,variable_name), {rw.data(), rw.size()});
+        watcher(*this, variable_name, key, content);
     }
 }
 void LevelDBTransaction::erase(std::string_view variable_name) {
     auto iter =std::unique_ptr<leveldb::Iterator>( _storage->get_db()->NewIterator({}));
+    auto &watcher = _storage->get_watcher();    
     iter->Seek({variable_name.data(), variable_name.size()});
     char kid = static_cast<char>(_storage->get_keyspace_id());
     auto sz = variable_name.size();
@@ -300,9 +304,12 @@ void LevelDBTransaction::erase(std::string_view variable_name) {
         }
         iter->Next();        
     }
+    watcher(*this,variable_name, RecordKey::min(), std::nullopt);
 }
 void LevelDBTransaction::erase(std::string_view variable_name, const RecordKey &key) {
     _batch.Delete(build_key(_storage->get_keyspace_id(), variable_name, key));
+    auto &watcher = _storage->get_watcher();    
+    watcher(*this, variable_name, key, std::nullopt);
 
 }
 void LevelDBTransaction::put_schema_binary(SchemaHash hash, std::string_view binary) {
@@ -310,6 +317,9 @@ void LevelDBTransaction::put_schema_binary(SchemaHash hash, std::string_view bin
     _batch.Put(build_key(LevelDBStorage::schema_keyspace, {hbin.data(), hbin.size()}), {binary.data(), binary.size()});
 }
 
+void LevelDBStorage::add_precommit_hook_connection(WatcherSlot::Connection consumer) {
+    connect(_watcher,consumer);
+}
 
 }
 

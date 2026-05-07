@@ -76,12 +76,15 @@ namespace quarkbot {
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
         virtual Value get_schema_binary(SchemaHash h) const override;
         virtual PStorageTransaction write() override;
+        virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) override;
 
         uint8_t get_keyspace_id() const;
         PDB get_db() const;
+        WatcherSlot &get_watcher() {return _watcher;}
     protected:
         PDB _proxy;
         uint8_t _keyspace_id;
+        WatcherSlot _watcher;
     };
 
 

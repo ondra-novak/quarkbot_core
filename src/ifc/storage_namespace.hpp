@@ -34,6 +34,9 @@ namespace quarkbot {
         virtual Value get_schema_binary(SchemaHash h) const override {
             return _root->get_schema_binary(h);
         }
+        virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) override {
+            _root->add_precommit_hook_connection(std::move(consumer));
+        }
         virtual PStorageTransaction write() override;
             
         virtual std::string_view get_namespace() const override {return {_key.data(), _prefix_size};}

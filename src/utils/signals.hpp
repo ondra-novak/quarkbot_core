@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 
+namespace signals {
 
     template<typename Prototype> class SignalConsumer;
     template<typename Fn, typename Prototype> class FunctorSignalConsumer;
@@ -252,10 +253,11 @@
         ///Send signal
         /**
          * @param params arguments associated with the signal
+         * @return true consument invoked, false no consuments
          */
         template<typename ... Params>        
         requires (std::is_invocable_v<Dispatcher, Connection, Params...> )
-        void operator()(Params && ... params) {
+        bool operator()(Params && ... params) {
             //retrieve TLS scratchpad to store active consumers
             SignalScratchpad &sp = SignalScratchpad::get_instance();
             //retrieve current position in the scratchpad (could be non-zero)
@@ -266,6 +268,9 @@
             });
             //mark end of scratchpad
             std::size_t sp_end = sp._lst.size();
+            //no consument here - return status false
+            if (sp_end == sp_pos) return false;
+
             //process our content of the scratchpad and broadcast 
             for (std::size_t i =sp_pos; i != sp_end; ++i) {
                 Connection con = std::static_pointer_cast<Consumer>(sp._lst[i]);
@@ -275,6 +280,7 @@
             //don't check it, just release our written data
             sp._lst.resize(sp_pos);
             //all clear
+            return true ;
         }
 
     private:
@@ -391,3 +397,5 @@
 
 
 
+
+}

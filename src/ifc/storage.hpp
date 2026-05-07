@@ -4,6 +4,7 @@
 #include <basic_coro/awaitable.hpp>
 #include "defs.hpp"
 #include "ifc/types.hpp"
+#include "utils/signals.hpp"
 
 #include <bit>
 #include <concepts>
@@ -123,6 +124,7 @@ namespace quarkbot {
     public:
         
         using Buffer = std::string;
+        using WatcherSlot = signals::SignalSlot<void(IStorageTransaction &tx, const std::string_view &variable, const RecordKey &key, std::optional<std::string_view> content)>;
 
         struct Extractor {
 
@@ -306,6 +308,14 @@ namespace quarkbot {
         @note the function can return nullptr, which means, that this is root storage
         */
         virtual PStorage get_root_storage() const {return  {};}
+
+        virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) = 0;
+
+        template<std::invocable<const IStorageTransaction &, const std::string_view &, const RecordKey &, std::optional<std::string_view>  > Fn>
+        WatcherSlot::Connection add_precommit_hook( Fn &&consumer) {
+            auto conn = WatcherSlot::create_connection(std::move(consumer));
+            add_precommit_hook_connection(conn);
+        }
 
         virtual ~IStorage() = default;
 

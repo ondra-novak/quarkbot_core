@@ -12,6 +12,7 @@ set(BASIC_TESTS
     merged_source_test.cpp
     order_test.cpp
     serializer.cpp
+    signals.cpp
 )
 
 

@@ -9,6 +9,7 @@
 #include <chrono>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <variant>
@@ -56,15 +57,21 @@ public:
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
         virtual Value get_schema_binary(SchemaHash h) const override;
         virtual PStorageTransaction write() override;
+        virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) override {
+            connect(_watcher, consumer);
+        }
 
+        WatcherSlot &get_watcher() {return _watcher;}
 
     static PStorage create() {
         return std::make_shared<MemStorage>();
     }
+    
 
 private:    
     std::map<std::string, std::string, std::less<> > _storage;
     std::map<SchemaHash, std::string> _schemas;
+    WatcherSlot _watcher;
 
     void apply(const MemStorageTransaction::OpErase &x);
     void apply(const MemStorageTransaction::OpEraseRev &x);
@@ -101,15 +108,16 @@ inline RecordKey MemStorageTransaction::put(std::string_view variable_name, std:
 inline void MemStorageTransaction::put(std::string_view variable_name, const RecordKey &key, std::string_view content, UpdateLastRevision update) {
     _ops.push_back(OpPut{std::string(variable_name), key, std::string(content), 
             update == UpdateLastRevision::enable});
-    
+    _storage->get_watcher()(*this, variable_name, key, content);
 
 }
 inline void MemStorageTransaction::erase(std::string_view variable_name) {
     _ops.push_back(OpErase{std::string(variable_name)});
-
+    _storage->get_watcher()(*this, variable_name, RecordKey::min(), std::nullopt);
 }
 inline void MemStorageTransaction::erase(std::string_view variable_name, const RecordKey &key) {
     _ops.push_back(OpEraseRev{std::string(variable_name), key});
+    _storage->get_watcher()(*this, variable_name, key, std::nullopt);
 }
 inline void MemStorageTransaction::put_schema_binary(SchemaHash hash, std::string_view binary) {
     _ops.push_back(OpPutSchema{hash, std::string(binary)});
