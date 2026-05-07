@@ -31,22 +31,16 @@ public:
     virtual Order place_order(const OrderRequest &params, std::string_view name = {}) = 0;
 
 
-    ///Serializes order state
+    ///Attach storage and restore active orders
     /**
-        @param ord order
-        @return serialized form of the order, The content can be any binary data which enables function restore_order_state
-        @note result can be store into database
+        @param storage storage object
+        @param key_name name of key used to store fills. The function derives key name for stored object 
+            (adds suffix ":o")
+        @return list of restored orders
     */
-    virtual SerializedOrder serialize_order(Order ord) = 0;
-    ///Restores order state
-    /**
-        @param ord serialized form of the order
-        @return restored order. 
-        @note restored order can have state OrderState::restured. Order's actual state is updated asynchronously once
-        the order is found on the exchange in order history. If this operation fails, state is changed to lost.
-    */
-    virtual Order restore_order(SerializedOrder ord) = 0;
+    virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) = 0;
 
+ 
     ///Cancel order 
     /**
     This handles implementation of function cancel() on order

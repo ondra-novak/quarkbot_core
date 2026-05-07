@@ -1,17 +1,32 @@
 #pragma once
 
 #include "defs.hpp"
+#include "ifc/types.hpp"
 #include "order_defs.hpp"
 #include "storage.hpp"
 namespace quarkbot {
 
     ///helper object which is used by ITradableInstrument implementation to manage storing and restoring orders from / to database.     
+
+
     class OrderStorage {
     public:
-        OrderStorage(PStorage storage, std::string fill_var, std::string order_var)
+
+        struct OrderStoredState {
+            std::string id;
+            std::string name;
+            OrderParameters parameters;
+            
+            auto fields(this auto &self) {
+                return std::tie(self.id, self.name,self.parameters);
+            } 
+        };
+
+        OrderStorage(PStorage storage, std::string fill_var)
             : _storage(std::move(storage)) 
-            , _fill_var(std::move(fill_var))
-            ,_order_var(std::move(order_var))
+            , _fill_var(fill_var)
+            ,_order_var(fill_var+":o")
+            ,_order_fill_var(fill_var+":f")
         {
         }
 
@@ -30,23 +45,32 @@ namespace quarkbot {
         void store_fill(const PStorageTransaction &tx, const Fill &fill) {
             tx->store(_fill_var, fill.key, fill, UpdateLastRevision::disable);
         }
+        void store_filled(const PStorageTransaction &tx, const RecordKey &key, Decimal filled) {
+            tx->store(_order_fill_var, key, filled);
+        }
+
         ///close order - called when order is done
         void close_order(const PStorageTransaction &tx, const RecordKey &key) {
             tx->erase(_order_var, key);
+            tx->erase(_order_fill_var, key);
         }
         ///open order - called when id is asssigned
-        void open_order(const PStorageTransaction &tx, const RecordKey &key, const std::string &id, const OrderParameters &params) {
-            tx->store(_order_var, key, std::pair(id, params));
+        void open_order(const PStorageTransaction &tx, const RecordKey &key, OrderStoredState st) {
+            tx->store(_order_var, key, st);
         }
         ///load saved active orders
         /**
         Returns necessery informations about orders which can be understand by adapter
          */
-        std::vector<std::pair<std::string, OrderParameters> > load_opened_orders() const {
-            std::vector<std::pair<std::string, OrderParameters> > out;
+        std::vector<std::pair<OrderStoredState, Decimal> > load_opened_orders() const {
+            std::vector<std::pair<OrderStoredState, Decimal>> out;
             for (auto val: _storage->select_range(_order_var, RecordKey::min(), RecordKey::max())) {
-                out.push_back({});
-                if (!val.extract(out.back()))  out.pop_back();
+                OrderStoredState st;
+                val.extract(st);
+                Decimal d = {};
+                auto val2 = _storage->get(_order_fill_var, val.key);
+                val2.extract(d);
+                out.push_back({st, d});
             }
             return out;
         }
@@ -58,6 +82,7 @@ namespace quarkbot {
         PStorageTransaction _transaction;
         std::string _fill_var;
         std::string _order_var;
+        std::string _order_fill_var;
         
     };
 

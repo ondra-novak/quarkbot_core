@@ -1,5 +1,6 @@
 #include "simtradableinstrument.hpp"
 #include "ifc/order.hpp"
+#include "ifc/order_storage.hpp"
 #include "ifc/streaming.hpp"
 #include "ifc/tradable_instrument.hpp"
 #include "ifc/types.hpp"
@@ -93,7 +94,8 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
         convert_request_to_params(req, _position.side),
         shared_from_this(),
         std::string(name),
-        old_state
+        old_state,
+        _order_storage
     );
 
     Order new_order(st);    
@@ -148,16 +150,6 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
             
 }
 
- 
-SerializedOrder SimTradableInstrument::serialize_order(Order ) {
-    return "//todo";
-}
-Order SimTradableInstrument::restore_order(SerializedOrder ) {
-
-    Order out(std::make_shared<OrderEx::State>(OrderParameters{}, shared_from_this(),std::string("//todo"),  std::weak_ptr<OrderEx::State>()));
-    out.update_order(OrderStatus::lost);
-    return out;
-}
 
 
 Order SimTradableInstrument::place_order(const OrderRequest &params, Order order_to_replace, std::string_view name){
@@ -194,6 +186,31 @@ void SimTradableInstrument::on_order_update(Order ord, Order::Update &&status) {
         } 
     }
     ord.update_order(std::move(status));
+}
+
+std::vector<Order> SimTradableInstrument::attach_storage(PStorage storage, std::string key_name) {
+    _order_storage = std::make_shared<OrderStorage>(storage, key_name);
+
+    std::vector<Order> out;
+
+    auto orders = _order_storage->load_opened_orders();
+    for (auto &s: orders) {
+        auto st = std::make_shared<Order::State>(
+            s.first.parameters,
+            shared_from_this(),
+            s.first.name,
+            std::weak_ptr<Order>(),
+            _order_storage
+        );
+        st->id = s.first.id;
+        st->filled = s.second;
+        Order ord(std::move(st));
+        out.push_back(ord);
+    }
+
+    //TODO: register orders to sim exchange
+    return out;
+
 }
 
 

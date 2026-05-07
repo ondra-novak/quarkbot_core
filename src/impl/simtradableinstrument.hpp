@@ -2,6 +2,7 @@
 
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
+#include "ifc/order_storage.hpp"
 #include "ifc/tradable_instrument.hpp"
 #include "ifc/types.hpp"
 #include "impl/streaming/queue_event_stream.hpp"
@@ -41,8 +42,7 @@ public:
     virtual void cancel_order(Order order) override;
     virtual bool cancel_all_orders() override;
     virtual awaitable<Position> get_position() const override {return _position;}
-    virtual SerializedOrder serialize_order(Order ord) override;
-    virtual Order restore_order(SerializedOrder ord) override;
+    virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) override;
 
     void on_order_update(Order ord, Order::Update &&status);
 
@@ -57,6 +57,7 @@ protected:
     std::shared_ptr<SimInstrument> _instrument;
     std::shared_ptr<SimAccount> _account;   
     std::vector<RegOrder> _active_orders;
+    std::shared_ptr<OrderStorage> _order_storage;
     
 
     Position _position = {}; //current position

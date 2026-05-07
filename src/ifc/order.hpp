@@ -74,11 +74,13 @@ public:
         State(OrderParametersGen<Decimal> params, 
               PTradableInstrument instrument,
               std::string name,
-              std::weak_ptr<State> replaced_order
+              std::weak_ptr<State> replaced_order,
+              std::shared_ptr<OrderStorage> storage
         ):parameters(std::move(params))
          ,instrument(std::move(instrument))
          ,name(std::move(name))
          ,replaced_order(std::move(replaced_order))
+         ,storage(std::move(storage))
          {}
          
          
@@ -144,18 +146,29 @@ public:
                     //we storing open or close
                     if (open_or_close) {
                         //store what needed
-                        if (open_order) storage->open_order(tx, key, id, parameters);
+                        if (open_order) storage->open_order(tx, key, {id, name, parameters});
                         else if (close_order) storage->close_order(tx, key);
                     }
                     //store all fills
+                    bool filled_changed = false;
                     auto new_end = std::remove_if(fills.begin()+ static_cast<std::ptrdiff_t>(new_fills_ofs), fills.end(),
                         [&](const Fill &f) {
                             //global deduplication
                             if (storage->check_fill_exists(f)) return true;
                             storage->store_fill(tx, f);
+                            filled = filled + f.amount;
+                            filled_changed = true;
                             return false;
                         });
                     fills.erase(new_end, fills.end());
+                    if (filled_changed && !close_order) {
+                        storage->store_filled(tx,key,filled);
+                    }
+                    tx->commit();
+                } else {
+                    for (auto &x: fills) {
+                        filled = filled + x.amount;
+                    }
                 }
             }
             //now order is ready for frontend
@@ -191,17 +204,6 @@ public:
     };
         
     Order(std::shared_ptr<State> st):_state(std::move(st)) {}
-
-    Order(OrderParametersGen<Decimal> params, 
-        PTradableInstrument instrument,
-        std::string name,
-        Order replaced_order
-    ):_state(std::make_shared<State>(std::move(params),std::move(instrument), std::move(name), replaced_order._state)) {}
-
-    Order(OrderParametersGen<Decimal> params, 
-        PTradableInstrument instrument,
-        std::string name
-    ):_state(std::make_shared<State>(std::move(params),std::move(instrument), std::move(name),  std::weak_ptr<State>{})) {}
 
 
     ///Wait for next event (awaitable)
@@ -302,7 +304,6 @@ protected:
     std::shared_ptr<State> _state = {};
 };
 
-using SerializedOrder = std::string;
 
 
 }
