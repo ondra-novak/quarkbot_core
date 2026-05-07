@@ -59,7 +59,7 @@ public:
         ///if order rejected, there is message if any
         std::string rejection_message = {};
         ///all fills extracted from the queue;
-        std::vector<Fill> fills;
+        std::deque<Fill> fills;
 
         ///shared lock for queue
         std::mutex mx;
@@ -206,14 +206,29 @@ public:
         return State::next_event(_state);
     }
 
-    ///Get all fills
-    /**
-        @return fills. Note you have write access to this array. You can process fills and clear the array to capture new fills
-     */
-    std::vector<Fill> &get_fills() {return _state->fills;}
-    ///Get all fills
-    const std::vector<Fill> &get_fills() const {return _state->fills;}
 
+
+    ///returns true if there is any unprocessed fill
+    /** If you need also process fill, it is better to use read_fill() directly and test result optional */
+    bool any_fill() const {
+        return !_state->fills.empty();
+    }
+
+    ///reads next fill, 
+    /**
+    @return next unprocessed fill, or nullopt if none
+    */
+    std::optional<Fill> read_fill() {
+        std::optional<Fill> out;
+        if (!_state->fills.empty()) {
+            out = _state->fills.front();
+            _state->fills.pop_front();
+        }
+        return out;
+    }
+
+    auto &get_all_fills() {return _state->fills;}
+    auto &get_all_fills() const {return _state->fills;}
 
     ///get order parameters
     const OrderParametersGen<Decimal> &get_parameters() const {return _state->parameters;}
