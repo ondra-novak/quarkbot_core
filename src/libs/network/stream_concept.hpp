@@ -1,0 +1,45 @@
+#pragma once
+
+#include <memory>
+#include <string>
+#include <string_view>
+namespace network {
+
+template<typename T>
+concept StreamType = requires(T obj, std::string_view data)  {
+    /* 
+    read is blocking and returns empty string when EOF or timeout
+    there is no way to determine which is EOF and which is timeout, 
+      but websocket stream always send one ping on first empty response,
+      and closes connection on second. EOF should be also detected by returning false during write
+      Note: timeout specification also defines ping interval
+    */
+    {obj.read()} -> std::convertible_to<std::string_view>;
+    /*
+    write to stream
+    returns false if connection is closed or broken
+    write should not be blocking - an output buffer is expected
+    and also write is expected MT safe for whole data
+    */
+    {obj.write(data)} -> std::convertible_to<bool>;
+
+};
+
+template<typename StreamType>
+class StreamWrapper {
+public:
+    StreamWrapper(std::unique_ptr<StreamType> stream): _stream(std::move(stream)) {}
+    
+    StreamType &get() {return *_stream;}
+    StreamType *operator->() {return _stream.get();}
+    std::string_view read() {return _stream->read();}
+    bool write(std::string_view data) {return _stream->write(data); }
+
+protected:
+    std::unique_ptr<StreamType> _stream;
+
+};
+
+
+
+}
