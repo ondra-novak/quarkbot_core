@@ -1,5 +1,6 @@
 #pragma once
 
+#include "libs/network/sslobjects.hpp"
 #include <chrono>
 #include <concepts>
 #include <cstdint>
@@ -31,7 +32,7 @@ public:
     bool wait_read(int timeoutms);
     bool wait_write(int timeoutms);
     operator int() const {return _socket;}
-    static Socket connect(std::string host, std::uint16_t port, std::chrono::milliseconds connect_timeout = std::chrono::milliseconds(30000));
+    static Socket connect(const std::string &host, std::uint16_t port, std::chrono::milliseconds connect_timeout = std::chrono::milliseconds(30000));
 protected:
     int _socket; 
 

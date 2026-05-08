@@ -26,6 +26,12 @@ namespace network {
 
     class SSLException : std::runtime_error {
     public:
+        SSLException():std::runtime_error(get_ssl_error()) {}
         using std::runtime_error::runtime_error;
+        static std::string get_ssl_error();
     };
+
+    PSSL_CTX ssl_init_server(const std::string &server_ctr, const std::string &server_key);
+    PSSL_CTX ssl_init_client();
+
 }

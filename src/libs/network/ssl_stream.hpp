@@ -16,10 +16,10 @@ namespace network {
 class SSLSocketStream {
 public:
     
-    SSLSocketStream(PSSL_CTX ctx, Socket socket);
+    SSLSocketStream(const PSSL_CTX &ctx, Socket socket);
 
     bool accept();
-    bool connect();
+    bool connect(const std::string &host);
 
     std::string_view read();
     bool write(std::string_view data);
@@ -31,8 +31,8 @@ public:
 protected:
     std::array<char, 17000> _input_buffer;  //16384 is maximum websocket frame size, but we need some extra space for headers and fragmentation
     std::string_view _unprocessed;
-    std::chrono::milliseconds _read_timeout = std::chrono::milliseconds(30000); //default read timeout is 30 seconds, it should be enough for most use cases, and also allows to detect dead connections
-    std::chrono::milliseconds _write_timeout = std::chrono::milliseconds(30000); //default write timeout is 30 seconds, it should be enough for most use cases, and also allows to detect dead connections
+    std::chrono::milliseconds _read_timeout = std::chrono::milliseconds(10000);
+    std::chrono::milliseconds _write_timeout = std::chrono::milliseconds(1000);
     PSSL _ssl;
     Socket _socket;
     std::mutex _wrmx;
@@ -49,6 +49,7 @@ protected:
     State handle_ssl_error(std::unique_lock<std::mutex> &lk, int st);
 };
 
-
+StreamWrapper<SSLSocketStream> connect(const PSSL_CTX &ctx, const std::string &host, std::uint16_t port, 
+            std::chrono::milliseconds connect_timeout = std::chrono::milliseconds(10000));
 
 }

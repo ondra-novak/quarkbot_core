@@ -23,7 +23,7 @@ namespace network {
         return r > 0;
     }
 
-    Socket Socket::connect(std::string host, std::uint16_t port, std::chrono::milliseconds connect_timeout) {
+    Socket Socket::connect(const std::string &host, std::uint16_t port, std::chrono::milliseconds connect_timeout) {
         struct addrinfo hints = {};
         hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;

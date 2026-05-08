@@ -3,6 +3,7 @@
 #include "libs/network/sslobjects.hpp"
 
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <openssl/ssl.h>
 #include <sys/socket.h>
@@ -12,7 +13,7 @@
 
 namespace network {
 
-SSLSocketStream::SSLSocketStream(PSSL_CTX ctx, Socket socket) :_socket(std::move(socket)){
+SSLSocketStream::SSLSocketStream(const PSSL_CTX &ctx, Socket socket) :_socket(std::move(socket)){
     int flags = fcntl(_socket, F_GETFL, 0);
     fcntl(_socket, F_SETFL, flags | O_NONBLOCK);
     _ssl = PSSL(SSL_new(ctx.get()));
@@ -31,16 +32,26 @@ bool SSLSocketStream::accept(){
     }    
     return true;
 }
-bool SSLSocketStream::connect(){
+bool SSLSocketStream::connect(const std::string &host){
     std::unique_lock lk(_sslmx);
+    SSL_set_tlsext_host_name(_ssl.get(), host.c_str());
+    SSL_set1_host(_ssl.get(),host.c_str());
+    SSL_set_verify(_ssl.get(), SSL_VERIFY_PEER, NULL);
     auto st = SSL_connect(_ssl.get());
+    
     while (st != 1) {
         if (handle_ssl_error(lk, st) != State::ready) {
             _eof = true;
             return false;
         }
         st = SSL_connect(_ssl.get());
-    }    
+    }
+
+    if (SSL_get_verify_result(_ssl.get()) != X509_V_OK) {
+        _eof = true;
+        return false;
+    }
+
     return true;
 }
 
@@ -135,6 +146,13 @@ void  SSLSocketStream::close(){
     ::shutdown(_socket, SHUT_RDWR);
     _eof = true;
     _closed = true;        
+}
+
+StreamWrapper<SSLSocketStream> connect(const PSSL_CTX &ctx, const std::string &host, std::uint16_t port, std::chrono::milliseconds connect_timeout) {
+    Socket s = Socket::connect(host, port,connect_timeout);
+    auto stream = std::make_unique<SSLSocketStream>(ctx, std::move(s));
+    stream->connect(host);
+    return std::move(stream);
 }
 
 
