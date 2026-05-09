@@ -1,5 +1,6 @@
 #include "sslobjects.hpp"
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <stdexcept>
 #include "ws_stream.hpp"
 
@@ -32,6 +33,19 @@ namespace network {
                     throw SSLException();
         }
         return ctx;
+    }
+
+    PSSL_CTX::PSSL_CTX(const PSSL_CTX &other)
+                :std::unique_ptr<SSL_CTX, SSLContextDeleter>(other.get()) {
+        //increase reference count
+        SSL_CTX_up_ref(get());
+    }
+    PSSL_CTX &PSSL_CTX::operator=(const PSSL_CTX &other) {
+        std::unique_ptr<SSL_CTX, SSLContextDeleter>::operator=(std::unique_ptr<SSL_CTX, SSLContextDeleter>(other.get()));
+        //increase reference count
+        SSL_CTX_up_ref(get());
+        return *this;
+
     }
 
 }

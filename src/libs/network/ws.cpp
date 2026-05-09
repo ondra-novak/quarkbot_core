@@ -35,7 +35,7 @@ static std::tuple<std::string_view, unsigned int, std::string_view, std::string_
         port = 443;
     } else {
         host = hostport.substr(0,sep);
-        auto r = std::from_chars(hostport.begin(), hostport.end(), port, 10);
+        auto r = std::from_chars(hostport.begin()+sep+1, hostport.end(), port, 10);
         if (r.ec != std::errc{}) throw std::runtime_error("WebSocket invalid port in URL");        
     }
     return {host, port, path, hostport};

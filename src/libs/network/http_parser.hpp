@@ -1,9 +1,11 @@
 #pragma once
 
 #include "libs/network/string_utils.hpp"
+#include "libs/network/ws_parser.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <iterator>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -45,7 +47,7 @@ namespace network {
         constexpr auto method() const {return _first_line_parts[0];}
         constexpr auto path() const {return _first_line_parts[1];}
         constexpr unsigned int code() const {
-            return static_cast<unsigned int>(parse_number(_first_line_parts[1]));
+            return static_cast<unsigned int>(parse_number(_first_line_parts[1]).value_or(0));
         }
         constexpr auto message() const {
             return _first_line_parts[2];
@@ -78,10 +80,10 @@ namespace network {
         constexpr auto end() const {
             return _headers.end();
         }
-        constexpr static std::size_t parse_number(std::string_view text) {
+        constexpr static std::optional<std::size_t> parse_number(std::string_view text) {
             std::size_t st = 0;
             for (const char c: text) {
-                if (c < '0' || c > '9') break;
+                if (c < '0' || c > '9') return {};
                 st = st * 10 + static_cast<unsigned int>(c - '0');
             }
             return st;
@@ -129,6 +131,7 @@ namespace network {
             hdrs.push_back(' ');
             append_text(version);
             append_nl();
+            _first_line_len = hdrs.size();
         }
 
         constexpr void start_response(unsigned int code, std::string_view message, std::string_view version = "HTTP/1.1") {
@@ -139,6 +142,7 @@ namespace network {
             hdrs.push_back(' ');
             append_text(message);
             append_nl();
+            _first_line_len = hdrs.size();
         }
 
         constexpr void add_header(std::string_view key, std::string_view value) {
@@ -159,15 +163,26 @@ namespace network {
             append_nl();
         }
 
+        constexpr auto copy_headers(const HttpBuilder &from) {
+            hdrs.insert(hdrs.end(), from.hdrs.begin() + static_cast<std::ptrdiff_t>(_first_line_len), from.hdrs.end());
+        }
+
+
         constexpr std::string_view get_result() const {
             return {hdrs.data(), hdrs.size()};
         }
 
         constexpr operator std::string_view() const {return get_result();}
 
+        void clear() {
+            hdrs.clear();
+            _first_line_len = 0;
+        }
+
 
     protected:
         std::vector<char> hdrs;
+        std::size_t _first_line_len = 0;
         
 
         constexpr void append_number(std::size_t x, int lz) {

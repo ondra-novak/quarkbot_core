@@ -1,8 +1,10 @@
 #pragma once
 
+#include <concepts>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 namespace network {
 
 template<typename T>
@@ -24,6 +26,10 @@ concept StreamType = requires(T obj, std::string_view data)  {
     */
     {obj.write(data)} -> std::convertible_to<bool>;
 
+    /*
+    put back data 
+    */
+    {obj.put_back(data)} ->std::same_as<void>;
 };
 
 template<typename StreamType>
@@ -35,6 +41,7 @@ public:
     StreamType *operator->() {return _stream.get();}
     std::string_view read() {return _stream->read();}
     bool write(std::string_view data) {return _stream->write(data); }
+    void put_back(std::string_view data) {return _stream->put_back(data);}
 
 protected:
     std::unique_ptr<StreamType> _stream;

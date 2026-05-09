@@ -20,8 +20,19 @@ namespace network {
         }
     };
 
+    class PSSL_CTX: public std::unique_ptr<SSL_CTX, SSLContextDeleter> {
+    public:
+        using std::unique_ptr<SSL_CTX, SSLContextDeleter>::unique_ptr;
+        PSSL_CTX(const PSSL_CTX &other);
+        PSSL_CTX(PSSL_CTX &&other):std::unique_ptr<SSL_CTX, SSLContextDeleter>(std::move(other)) {}
+        PSSL_CTX &operator=(const PSSL_CTX &other);        
+        PSSL_CTX &operator=(PSSL_CTX &&other) {
+            std::unique_ptr<SSL_CTX, SSLContextDeleter>::operator=(std::move(other));
+            return *this;
+        }
+    };
+
     using PSSL = std::unique_ptr<SSL, SSLSocketDeleter>;
-    using PSSL_CTX = std::unique_ptr<SSL_CTX, SSLContextDeleter>;
 
 
     class SSLException : std::runtime_error {
