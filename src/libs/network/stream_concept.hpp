@@ -13,13 +13,14 @@ concept StreamType = requires(T obj, std::string_view data)  {
       but websocket stream always send one ping on first empty response,
       and closes connection on second. EOF should be also detected by returning false during write
       Note: timeout specification also defines ping interval
+      MT safety only allows to call write and read in two threads, but no MT safety for single function
     */
     {obj.read()} -> std::convertible_to<std::string_view>;
     /*
     write to stream
     returns false if connection is closed or broken
-    write should not be blocking - an output buffer is expected
-    and also write is expected MT safe for whole data
+    write should not be blocking - an output buffer is expected        
+      MT safety only allows to call write and read in two threads, but no MT safety for single function
     */
     {obj.write(data)} -> std::convertible_to<bool>;
 

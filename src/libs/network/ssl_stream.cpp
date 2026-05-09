@@ -34,7 +34,8 @@ bool SSLSocketStream::accept(){
 }
 bool SSLSocketStream::connect(const std::string &host){
     std::unique_lock lk(_sslmx);
-    SSL_set_tlsext_host_name(_ssl.get(), host.c_str());
+    void *vh = const_cast<void *>(static_cast<const void *>(host.c_str()));
+    SSL_ctrl(_ssl.get(),SSL_CTRL_SET_TLSEXT_HOSTNAME,TLSEXT_NAMETYPE_host_name,vh);
     SSL_set1_host(_ssl.get(),host.c_str());
     SSL_set_verify(_ssl.get(), SSL_VERIFY_PEER, NULL);
     auto st = SSL_connect(_ssl.get());
@@ -108,8 +109,7 @@ std::string_view SSLSocketStream::read() {
     }
 }
 
-bool SSLSocketStream::write(std::string_view data) {
-    std::scoped_lock _(_wrmx);
+bool SSLSocketStream::write(std::string_view data) {    
     if (_closed) return false;
     std::unique_lock lk(_sslmx);
     while (true) {
@@ -152,7 +152,7 @@ StreamWrapper<SSLSocketStream> connect(const PSSL_CTX &ctx, const std::string &h
     Socket s = Socket::connect(host, port,connect_timeout);
     auto stream = std::make_unique<SSLSocketStream>(ctx, std::move(s));
     stream->connect(host);
-    return std::move(stream);
+    return stream;
 }
 
 

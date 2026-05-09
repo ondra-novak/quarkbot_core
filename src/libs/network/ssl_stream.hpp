@@ -35,7 +35,6 @@ protected:
     std::chrono::milliseconds _write_timeout = std::chrono::milliseconds(1000);
     PSSL _ssl;
     Socket _socket;
-    std::mutex _wrmx;
     std::mutex _sslmx;
     bool _eof;
     bool _closed;

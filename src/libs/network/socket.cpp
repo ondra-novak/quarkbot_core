@@ -79,4 +79,8 @@ namespace network {
         throw std::system_error(ECONNREFUSED, std::system_category(), "No address succeeded");        
     }
 
+    void Socket::close()  {
+        ::close(_socket);
+    }
+
 }

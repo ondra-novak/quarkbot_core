@@ -34,7 +34,9 @@ namespace network {
                         parse_header();
                         return true;
                     }
-                }                
+                } else {
+                    _hdrend_index = 0;
+                }                            
             }
             return false;
         }
@@ -42,8 +44,8 @@ namespace network {
 
         constexpr auto method() const {return _first_line_parts[0];}
         constexpr auto path() const {return _first_line_parts[1];}
-        constexpr auto code() const {
-            return parse_number(_first_line_parts[1]);                
+        constexpr unsigned int code() const {
+            return static_cast<unsigned int>(parse_number(_first_line_parts[1]));
         }
         constexpr auto message() const {
             return _first_line_parts[2];
@@ -83,8 +85,8 @@ namespace network {
                 st = st * 10 + static_cast<unsigned int>(c - '0');
             }
             return st;
-
         }
+        constexpr auto unprocessed() const {return _unprocessed;}
 
     protected:
         static constexpr std::string_view hdrend = "\r\n\r\n";
@@ -112,7 +114,7 @@ namespace network {
         }
 
         constexpr static bool compare_keys(const std::pair<std::string_view,std::string_view> &a, const std::pair<std::string_view,std::string_view> &b) {
-            return compare_icase(a.first, b.first);
+            return compare_icase(a.first, b.first) < 0;
         }
     };
 
@@ -171,7 +173,7 @@ namespace network {
         constexpr void append_number(std::size_t x, int lz) {
             if (x || lz > 0) {
                 append_number(x/10, lz-1);
-                hdrs.push_back((x%10)+'0');
+                hdrs.push_back(static_cast<char>((x%10)+'0'));
             }
         }        
         

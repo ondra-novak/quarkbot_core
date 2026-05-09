@@ -8,6 +8,7 @@
 #include <random>
 namespace network {
 
+template<typename T> concept WSRandomSource = std::invocable<T, std::array<std::uint8_t, 4> &>;
 
 enum class FrameType {
     text = 0x1,
@@ -47,12 +48,12 @@ public:
             If this is set to true, it will output fragments as they are parsed. 
             If you want to see continuation frames, you must set this to true.
      */
-    Parser(Output output, bool need_fragments = false) 
+    constexpr Parser(Output output, bool need_fragments = false) 
         : _output(std::move(output))
         , _need_fragments(need_fragments) {}
 
     ///Parse a single byte, returns a frame if a complete frame is parsed, otherwise std::nullopt
-    std::optional<FrameType> operator()(char input);
+    constexpr std::optional<FrameType> operator()(char input);
 
     ///Checks whether message is complete. This is useful, when need_fragmens is true to detect, whether continuation frame is expected
     /**
@@ -61,7 +62,7 @@ public:
         @retval false continuation frames are expected
         @note function returns valid result only when frame has been finished recently. Otherwise result is undefined
     */
-    friend bool is_complete(const Parser &parser) {return parser._fin;}
+    friend constexpr  bool is_complete(const Parser &parser) {return parser._fin;}
 
 protected:
     enum class State {
@@ -75,36 +76,34 @@ protected:
     Output _output;
     bool _need_fragments = false;
     State _state = State::first_byte;
-    FrameType _frame_type;
-    bool _fin;
-    bool _masked;
-    std::uint64_t _payload_length;
+    FrameType _frame_type = FrameType::error;
+    bool _fin = true;
+    bool _masked = false;
+    std::uint64_t _payload_length = 0;
     std::array<std::uint8_t, 4> _mask = {};
     std::uint8_t _extended_length_size = 0;
     std::uint8_t _mask_index = 0;
 
-    std::optional<FrameType> parse_first_byte(char input);
-    std::optional<FrameType> parse_length(char input);
-    std::optional<FrameType> parse_extended_length(char input);
-    std::optional<FrameType> parse_mask(char input);
-    std::optional<FrameType> parse_payload(char input);
-    std::optional<FrameType> finalize(std::optional<FrameType> frame_type);
-    bool report_size();
+    constexpr std::optional<FrameType> parse_first_byte(char input);
+    constexpr std::optional<FrameType> parse_length(char input);
+    constexpr std::optional<FrameType> parse_extended_length(char input);
+    constexpr std::optional<FrameType> parse_mask(char input);
+    constexpr std::optional<FrameType> parse_payload(char input);
+    constexpr std::optional<FrameType> finalize(std::optional<FrameType> frame_type);
+    constexpr bool report_size();
 
 };
 
 
-template<std::invocable<char> Output>
+template<std::invocable<char> Output, WSRandomSource RandomSource>
 class Builder {
 public:
 
-    Builder(Output output, bool masked):_output(std::move(output)), _need_mask(masked) {
-        if (_need_mask) {
-            std::random_device rdev;
-            _random = std::default_random_engine(rdev());            
-        }
 
-    }
+    constexpr Builder(Output output, RandomSource randomSource,  bool masked)
+        :_output(std::move(output))
+        ,_random(std::move(randomSource))
+        ,_need_mask(masked) {}
 
     ///generate frame
     /**
@@ -112,7 +111,7 @@ public:
     @param data frame data
     @param last_frame optional, set to false, if this is not last frame in the message. Default value expects that every message has exact 1 frame
      */
-    void operator()(FrameType type, std::string_view data, bool last_frame = true);
+    constexpr void operator()(FrameType type, std::string_view data, bool last_frame = true);
 
     ///generate frame from source
     /**
@@ -123,16 +122,17 @@ public:
     */
     template<typename Fn>
     requires(std::is_invocable_r_v<char, Fn>)
-    void operator()(FrameType type, std::size_t size, Fn &&source, bool last_frame = true);
+    constexpr void operator()(FrameType type, std::size_t size, Fn &&source, bool last_frame = true);
 
 protected:
     Output _output;
+    RandomSource _random;
     bool _need_mask;
-    std::default_random_engine _random;
+    
 };
 
 template<std::invocable<char> Output>
-std::optional<FrameType> Parser<Output>::operator()(char input) {
+constexpr std::optional<FrameType> Parser<Output>::operator()(char input) {
     switch (_state) {
         case State::first_byte:  return finalize(parse_first_byte(input));
         case State::length:return finalize(parse_length(input));
@@ -144,7 +144,7 @@ std::optional<FrameType> Parser<Output>::operator()(char input) {
 }
 
 template<std::invocable<char> Output>
-std::optional<FrameType> Parser<Output>::parse_first_byte(char input) {
+constexpr std::optional<FrameType> Parser<Output>::parse_first_byte(char input) {
     FrameType ft = static_cast<FrameType>(input & 0x0F);
     if (ft == FrameType::continuation) {
         if (_fin) return FrameType::error; //continuation frame must be preceded by a non-continuation frame
@@ -163,16 +163,18 @@ std::optional<FrameType> Parser<Output>::parse_first_byte(char input) {
     return std::nullopt;
 }
 template<std::invocable<char> Output>
-std::optional<FrameType> Parser<Output>::parse_length(char input) {
+constexpr std::optional<FrameType> Parser<Output>::parse_length(char input) {
     _masked = (input & 0x80) != 0;
     std::uint8_t l = input & 0x7F;
     switch (l) {
         case 126:
             _extended_length_size = 2;
             _state = State::extended_length;
+            break;
         case 127:
             _extended_length_size = 8;
             _state = State::extended_length;
+            break;
         case 0:
             if (!_masked) return _frame_type; //empty payload, frame is complete
             _payload_length = 0;
@@ -187,7 +189,7 @@ std::optional<FrameType> Parser<Output>::parse_length(char input) {
     return std::nullopt;
 }
 template<std::invocable<char> Output>
-std::optional<FrameType> Parser<Output>::parse_extended_length(char input) {
+constexpr std::optional<FrameType> Parser<Output>::parse_extended_length(char input) {
     std::uint64_t l = static_cast<std::uint8_t>(input);
     _payload_length = (_payload_length << 8) | l;
     if (--_extended_length_size == 0) {
@@ -203,7 +205,7 @@ std::optional<FrameType> Parser<Output>::parse_extended_length(char input) {
 }
 
 template<std::invocable<char> Output>
-std::optional<FrameType> Parser<Output>::parse_mask(char input) {
+constexpr std::optional<FrameType> Parser<Output>::parse_mask(char input) {
     _mask[_mask_index++] = static_cast<std::uint8_t>(input);
     if (_mask_index == 4) {
         if (_payload_length == 0) return _frame_type; //empty payload, frame is complete
@@ -213,8 +215,8 @@ std::optional<FrameType> Parser<Output>::parse_mask(char input) {
 }
 
 template<std::invocable<char> Output>
-std::optional<FrameType> Parser<Output>::parse_payload(char input) {
-    char unmasked = input ^ _mask[_mask_index % 4];
+constexpr std::optional<FrameType> Parser<Output>::parse_payload(char input) {
+    char unmasked = static_cast<char>(input ^ _mask[_mask_index % 4]);
     _output(unmasked);
     _payload_length--;
     _mask_index++;
@@ -223,17 +225,17 @@ std::optional<FrameType> Parser<Output>::parse_payload(char input) {
 }
 
 template<std::invocable<char> Output>
-std::optional<FrameType> Parser<Output>::finalize(std::optional<FrameType> frame_type) {
+constexpr std::optional<FrameType> Parser<Output>::finalize(std::optional<FrameType> frame_type) {
     if (frame_type.has_value()) {
         _state = State::first_byte;
-        if (!_fin && !_need_fragments) return std::nullopt; //if frame is not finished and we don't need fragments, don't return frame type yet
+        if (frame_type.value() != FrameType::error && !_fin && !_need_fragments) return std::nullopt; //if frame is not finished and we don't need fragments, don't return frame type yet
         return frame_type;
     }
     return std::nullopt;
 }
 
 template<std::invocable<char> Output>
-bool Parser<Output>::report_size() {
+constexpr bool Parser<Output>::report_size() {
     if constexpr(std::is_invocable_r_v<bool, Output, PayloadSize>) {
         return _output(PayloadSize{_payload_length, _fin});
     }else if constexpr(std::is_invocable_v<Output, PayloadSize>) {
@@ -243,16 +245,16 @@ bool Parser<Output>::report_size() {
         return true; //output doesn't support reporting size, just return true to continue parsing
     }
 }
-template<std::invocable<char> Output>
-void Builder<Output>::operator()(FrameType type, std::string_view data, bool fin) {
+template<std::invocable<char> Output, WSRandomSource RandomSource>
+constexpr void Builder<Output, RandomSource>::operator()(FrameType type, std::string_view data, bool fin) {
     std::size_t pos = 0;
     this->operator()(type, data.size(), [&]{return data[pos++];}, fin);
 }
 
-template<std::invocable<char> Output>
+template<std::invocable<char> Output, WSRandomSource RandomSource>
 template<typename Fn>
 requires(std::is_invocable_r_v<char, Fn>)
-void Builder<Output>::operator()(FrameType type, std::size_t frame_size, Fn &&source, bool fin) {
+constexpr void Builder<Output, RandomSource>::operator()(FrameType type, std::size_t frame_size, Fn &&source, bool fin) {
     std::array<std::uint8_t, 4> mask = {};
     std::uint8_t mask_index = 0;
 
@@ -272,11 +274,8 @@ void Builder<Output>::operator()(FrameType type, std::size_t frame_size, Fn &&so
         }
     }
     if (_need_mask) {
-        std::uniform_int_distribution<std::uint8_t> dist(0,255);
-        for (auto &a: mask) {
-            a = dist(_random);
-            _output(static_cast<char>(a));
-        }
+        _random(mask);
+        for (auto &x: mask) _output(static_cast<char>(x));        
     }
     for (std::size_t i = 0; i < dtsz; ++i) {
         char c = std::forward<Fn>(source)();

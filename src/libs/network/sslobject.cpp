@@ -1,6 +1,7 @@
 #include "sslobjects.hpp"
 #include <openssl/err.h>
 #include <stdexcept>
+#include "ws_stream.hpp"
 
 namespace network {
 

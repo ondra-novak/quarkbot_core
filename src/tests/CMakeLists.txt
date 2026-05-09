@@ -13,13 +13,14 @@ set(BASIC_TESTS
     order_test.cpp
     serializer.cpp
     signals.cpp
+    websocket_binance.cpp
 )
 
 
 
 foreach (testFile ${BASIC_TESTS})
     string(REGEX MATCH "([^\/]+$)" filename ${testFile})
-    string(REGEX MATCH "[^.]*" executable_name tests_${filename})
+    string(REGEX MATCH "[^.]*" executable_name test_${filename})
     add_executable(${executable_name} ${testFile})
     target_link_libraries(${executable_name} PRIVATE BasicCoro::basic_coro quarkbot_impl)
     target_compile_definitions(${executable_name} PRIVATE
@@ -28,3 +29,4 @@ foreach (testFile ${BASIC_TESTS})
     add_test(NAME "tests/${filename}" COMMAND ${executable_name})
 endforeach()
 
+target_link_libraries(test_websocket_binance PRIVATE quarkbot_network)
