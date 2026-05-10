@@ -420,6 +420,7 @@ public:
             else return text[i++];
         });        
     }
+
 protected:
 
     using ReadChr = std::optional<char>;

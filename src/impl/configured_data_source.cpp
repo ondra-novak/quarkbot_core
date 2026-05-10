@@ -1,6 +1,7 @@
 #include "configured_data_source.hpp"
 #include "ifc/exchange.hpp"
 #include "ifc/market_instrument.hpp"
+#include "impl/simexchange.hpp"
 #include <zlib.h>
 #include <fstream>
 #include <stdexcept>
@@ -8,7 +9,7 @@
 
 namespace quarkbot {
 
-IMarketInstrument::Info InstrumentSpec::resolve(IExchange &exchange) const {
+IMarketInstrument::Info InstrumentSpec::resolve(SimExchange &exchange) const {
     IMarketInstrument::Info info;
     info.type = type;
     info.multiplier = multiplier;

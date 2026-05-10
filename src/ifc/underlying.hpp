@@ -14,11 +14,11 @@ struct UnderlyingCurrency {
 
     bool operator==(const UnderlyingCurrency &) const = default;
 
-    struct Hash {std::size_t operator()(const UnderlyingCurrency &x) const {
+    std::size_t get_hash() const {
         std::hash<std::string> hasher;
         std::hash<const IExchange *> hasher_ptr;
-        return hasher(x.id) + hasher(x.unified_id) + hasher_ptr(x.exchange);
-    }};
+        return hasher(id) + hasher(unified_id) + hasher_ptr(exchange);
+    }
 };
 
 }

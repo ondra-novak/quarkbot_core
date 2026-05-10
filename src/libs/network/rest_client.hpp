@@ -17,10 +17,11 @@ namespace network {
 template<typename StreamFactory>
 class RestClient {
 public:
-    using Stream = std::decay_t<std::invoke_result<StreamFactory> >;
+    using Stream = std::decay_t<std::invoke_result_t<StreamFactory> >;
     
-    constexpr RestClient(std::string host, StreamFactory factory)
+    constexpr RestClient(std::string host, std::string path_prefix, StreamFactory factory)
         :_host(std::move(host))
+        ,_path_prefix(std::move(path_prefix))
         ,_factory(std::move(factory)) {}
     
 
@@ -34,6 +35,7 @@ public:
         ///empty body
         empty
     };
+    
 
     struct Response {
         unsigned int code;
@@ -52,6 +54,18 @@ public:
                 default: return {};
             }
         }
+        auto read_body_as_charstream() {
+            return [this, s = std::string_view()]() mutable ->std::optional<char> {
+                if (s.empty()) {
+                    s = read_body();
+                    if (s.empty()) return std::nullopt;
+                }
+                char c = s.front();
+                s.remove_prefix(1);
+                return c;
+            };
+        }
+        
     };
 
     struct BodyDef {
@@ -75,7 +89,11 @@ public:
         
                 
         bool send_body = false;
-        _local_headers.start_request(method, path);
+        
+        std::string whole_path(_path_prefix);
+        whole_path.append(path);
+
+        _local_headers.start_request(method,whole_path);
         _local_headers.add_header("Host", _host);
         _local_headers.copy_headers(_global_headers);
         if (compare_icase(method, "GET") && compare_icase(method, "HEAD")) {
@@ -88,7 +106,16 @@ public:
         }
         _local_headers.finish();
 
-        if (_cur_stream.has_value()) {
+        if (_cur_stream.has_value() && (!_te || *_te != TE::unlimited)) {
+            
+            while (_te) {
+                switch(*_te) {
+                    case TE::chunked: read_chunked();break;
+                    case TE::limited: read_limited();break;
+                    default: _te.reset();break;
+                }
+            }
+
             _cur_stream.value().write(_local_headers.get_result());
             if (send_body) _cur_stream.value().write(body.content);
             auto data = _cur_stream.value().read();
@@ -106,22 +133,28 @@ public:
             _cur_stream->put_back(data);
             return get_response();
         }
-        
+        return bad_response();
     }
 
     constexpr Response send(std::string_view method, std::string_view path,
-        std::initializer_list<std::pair<std::string_view, std::string_view> > headers, std::string_view body = "") {
-            return send(method, path, {headers.begin(), headers.end(), body});        
+        std::initializer_list<std::pair<std::string_view, std::string_view> > headers, BodyDef body = BodyDef{{},{}}) {
+            return send(method, path, {headers.begin(), headers.end()}, body);        
+    }
+
+    constexpr Response GET(std::string_view path) {
+            return send("GET", path, {});        
     }
 
 
 protected:
     std::string _host;
+    std::string _path_prefix;
     StreamFactory _factory;
     HttpBuilder _global_headers;    
     HttpBuilder _local_headers;
     HttpParser _parser;
     std::optional<Stream> _cur_stream;
+    std::optional<TE> _te = {};
     
     
     std::size_t _limit;    
@@ -151,7 +184,7 @@ protected:
         if (cl) {
             auto sz = _parser.parse_number(cl.value());
             if (sz) {
-                return prepare_limited(sz);
+                return prepare_limited(*sz);
             } else {
                 return bad_response();
             }
@@ -161,27 +194,32 @@ protected:
 
     constexpr std::string_view read_chunked() {        
         while (true) {
-            std::string_view s = _cur_stream->read();        
+            if (_limit == 0 && !_reading_chunk)  {
+                if (_chunk_end) {
+                    _te.reset();
+                    return {};
+                }
+                _reading_chunk = true;
+            }            std::string_view s = _cur_stream->read();        
             if (s.empty()) {
                 _cur_stream.reset();
                 return {};
             }
-            if (_limit == 0 && !_reading_chunk)  {
-                if (_chunk_end) return {};
-                _reading_chunk = true;
-            }
+
             if (_reading_chunk) {
                 std::size_t pos = 0;
                 for (auto x: s) {
                     char u = fast_to_upper(x);
                     ++pos;
-                    if (u >= '0' && u <='9') _limit = _limit * 16 + (u - '0');
-                    else if (u >= 'A' && u <='F') _limit = _limit * 16 + (u - 'A'+10);
+                    if (u >= '0' && u <='9') _limit = _limit * 16 + static_cast<std::size_t>(u - '0');
+                    else if (u >= 'A' && u <='F') _limit = _limit * 16 + static_cast<std::size_t>(u - 'A'+10);
                     else if (u == '\r') continue;
                     else if (u == '\n') {
                         _chunk_end = _limit == 0;
                         _limit+=2;
+                        _reading_chunk = false;
                         _cur_stream->put_back(s.substr(pos));
+                        break;
                     }
                 }        
             } else if (_limit>2) {
@@ -202,12 +240,14 @@ protected:
         auto ret = s.substr(0,_limit);
         _limit -= ret.size();
         _cur_stream->put_back(s.substr(ret.size()));
+        if (_limit == 0) _te.reset();
         return ret;
     }
     constexpr std::string_view read_unlimited() {
         std::string_view s = _cur_stream->read();
         if (s.empty()) {
             _cur_stream.reset();
+            _te.reset();
         }
         return s;
     }
@@ -215,14 +255,17 @@ protected:
     constexpr Response prepare_chunked() {
         _limit = 0;
         _chunk_end = false;
+        _te = TE::chunked;
 
         return {_parser.code(), _parser.message(), TE::chunked, this};
     }
     constexpr Response prepare_limited(std::size_t sz) {
         _limit = sz;
+        _te = TE::limited;
         return {_parser.code(), _parser.message(), TE::limited, this};
     }
     constexpr Response prepare_unlimited() {
+        _te = TE::unlimited;
         return {_parser.code(), _parser.message(), TE::limited, this};
     }
 

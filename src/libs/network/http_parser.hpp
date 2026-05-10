@@ -164,7 +164,7 @@ namespace network {
         }
 
         constexpr auto copy_headers(const HttpBuilder &from) {
-            hdrs.insert(hdrs.end(), from.hdrs.begin() + static_cast<std::ptrdiff_t>(_first_line_len), from.hdrs.end());
+            hdrs.insert(hdrs.end(), from.hdrs.begin() + static_cast<std::ptrdiff_t>(from._first_line_len), from.hdrs.end());
         }
 
 

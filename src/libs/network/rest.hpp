@@ -23,11 +23,20 @@ namespace network {
     class SecureRestClient: public RestClient<RestClientSecureStreamFactory> {
     public:
 
-        SecureRestClient(const PSSL_CTX &ctx, std::string hostport)
-            :RestClient<RestClientSecureStreamFactory>(hostport, prepare_factory(ctx,hostport)) {}
+        struct HostPortPrefix {
+            std::string host_hdr;
+            std::string host;
+            unsigned int port;
+            std::string path_prefix;
+        };
+
+        SecureRestClient(const PSSL_CTX &ctx, std::string url):SecureRestClient(ctx, parse_url(std::move(url))) {}
+        SecureRestClient(const PSSL_CTX &ctx, HostPortPrefix hpp)
+            :RestClient<RestClientSecureStreamFactory>(std::move(hpp.host_hdr), std::move(hpp.path_prefix), prepare_factory(ctx,hpp.host,hpp.port)) {}
 
     protected:
-        static RestClientSecureStreamFactory prepare_factory(const PSSL_CTX &ctx, std::string_view hostport);
+        static RestClientSecureStreamFactory prepare_factory(const PSSL_CTX &ctx, std::string_view host, unsigned int port  );
+        static HostPortPrefix parse_url(std::string url);
         
     };
 

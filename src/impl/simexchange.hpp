@@ -6,6 +6,7 @@
 #include "ifc/market_instrument.hpp"
 #include "ifc/stream_defs.hpp"
 #include "ifc/streaming.hpp"
+#include "ifc/types.hpp"
 #include "ifc/underlying.hpp"
 #include "simaccount.hpp"
 #include "simexecutor.hpp"
@@ -27,17 +28,18 @@ public:
     using TradeCounterPublisher = LockFreePublisher<TradeCounter, 1>;
 
     ///this function creates empty account, credentials are ignored
-    virtual PAccount create_account(const std::string &name, const std::string &credentials) const override;
-    virtual std::vector<PMarketInstrument> get_market_instruments() const override;
-    virtual std::vector<UnderlyingCurrency> get_all_currencies() const override;
+    virtual PAccount create_account(const std::string &name, const std::string &credentials)  override;
+    virtual std::vector<PMarketInstrument> get_market_instruments() override;
+    virtual std::vector<UnderlyingCurrency> get_all_currencies()  override;
     virtual std::string_view get_name() const override;
 
     std::unique_ptr<IEventStreamBase> subscribe_stream(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account, StreamTypeItem::Type type, const StreamParams *params);
     PTradableInstrument create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account);
 
     PMarketInstrument create_instrument(IMarketInstrument::Info def);
+    virtual PMarketInstrument create_instrument(std::string_view id, InstrumentType type) override;
     UnderlyingCurrency create_currency(std::string_view name, bool is_unified = true);
-    UnderlyingCurrency create_currency(std::string_view name) const override;
+    UnderlyingCurrency create_currency(std::string_view name) const;
     
     void set_slippage(double slippage) { _executor.set_slippage(slippage); }
 
@@ -54,7 +56,13 @@ public:
 
 protected:
 
-    std::unordered_map<std::string, std::weak_ptr<SimInstrument> > _instrument_names;
+    struct InstrumentRef {
+        std::weak_ptr<SimInstrument> _ref;
+        IMarketInstrument::Info info;
+        std::shared_ptr<SimInstrument> get(const std::shared_ptr<SimExchange> &owner);
+    };
+
+    std::unordered_map<std::string, InstrumentRef> _instrument_names;
  
     PublisherManager _streams;
     SimExecutor _executor;

@@ -23,7 +23,9 @@ inline constexpr Side reverse(Side s) {
 enum class InstrumentType: int8_t {
     ///spot instrument, you exchange one asset to another
     spot,
-    ///contract - underlying currency is used to hold margin and position loss
+    ///trading on spot, but can be leveraged, underlying currency is used to hold margin and position loss
+    margin,
+    ///contract - underlying currency is used to hold margin and position loss (futures)
     contract,
     ///inverse contract - like contract, but pnl is calculated using inverse price formula
     inverse_contract

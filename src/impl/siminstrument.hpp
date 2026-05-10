@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ifc/market_instrument.hpp"
+#include "ifc/types.hpp"
 #include "simexchange.hpp"
 #include <memory>
 
@@ -11,8 +12,7 @@ namespace quarkbot {
 class SimInstrument final: public IMarketInstrument, public std::enable_shared_from_this<SimInstrument> {
 public:
 
-
-    SimInstrument(Info config, std::shared_ptr<SimExchange> exchange)
+    SimInstrument(const Info &config, std::shared_ptr<SimExchange> exchange)
         :_exchange(std::move(exchange)),_cfg(config) {}
 
     virtual PExchange get_exchange() const override {return _exchange;}
@@ -30,7 +30,7 @@ public:
     auto get_sim_exchange() const {return _exchange;}
 protected:
     std::shared_ptr<SimExchange> _exchange;
-    Info _cfg;
+    const Info &_cfg; //held on exchange
 
 };
 

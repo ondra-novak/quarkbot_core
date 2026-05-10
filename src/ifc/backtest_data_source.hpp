@@ -2,6 +2,7 @@
 
 #include "ifc/market_instrument.hpp"
 #include "ifc/types.hpp"
+#include "impl/simexchange.hpp"
 #include "utils/decimal.hpp"
 #include <chrono>
 #include <optional>
@@ -29,7 +30,7 @@ struct InstrumentSpec {
     Decimal multiplier = Decimal(1);
     Decimal tick_scale = Decimal(1);
 
-    IMarketInstrument::Info resolve(IExchange &exchange) const;
+    IMarketInstrument::Info resolve(SimExchange &exchange) const;
 };
 
 class IBacktestDataSource {

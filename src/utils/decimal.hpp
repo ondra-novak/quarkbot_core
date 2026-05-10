@@ -8,6 +8,7 @@
 #include <compare>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <stdatomic.h>
 #include <stdexcept>
 #include <string_view>
@@ -144,6 +145,8 @@ public:
     static constexpr auto mantissa_effective_bits = _decimal_details::count_bits(_decimal_details::lowestNumberWithNDigitsTable[mantissa_digits+1]-1);
     static constexpr auto mantissa_max = _decimal_details::lowestNumberWithNDigitsTable[mantissa_digits+1]-1;
     static constexpr auto mantissa_min = _decimal_details::lowestNumberWithNDigitsTable[mantissa_digits];
+    static constexpr Exponent exponent_max = std::numeric_limits<Exponent>::max();
+    static constexpr Exponent exponent_min = std::numeric_limits<Exponent>::min();
 
 
     constexpr Exponent exponent() const {
@@ -366,6 +369,7 @@ public:
         if (!d) return mantissa() - other.mantissa();
         return d;
     }
+    
 
     constexpr std::strong_ordering operator<=>(const Decimal &other) const {
         auto c = compare(other);
@@ -448,7 +452,12 @@ public:
             while (ptr > buff && *(ptr-1) == '0') {
                 --ptr;
             }
+            if (ptr > buff && *(ptr-1) == '.') {
+                --ptr;
+            }
         };
+
+        if (_packed == 0) return "0";
 
         auto exp = exponent();
         if (exp > mantissa_digits || exp < -2) {
@@ -463,6 +472,13 @@ public:
             remove_trailing();
             return {buff, ptr};
         }
+    }
+
+    static constexpr Decimal max() {
+        return Decimal(mantissa_max, exponent_max);
+    }
+    static constexpr Decimal min() {
+        return Decimal(mantissa_min, exponent_min);
     }
   
     protected:

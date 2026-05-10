@@ -26,6 +26,13 @@ namespace quarkbot {
             }
         }
 
+        void publish(const ViewType &data) {
+            write([&](ViewType &x) noexcept {
+                x = data;
+                return true;
+            });
+        }
+
         template<typename X>
         requires(std::is_nothrow_assignable_v<X, ViewType>)
         bool read(X &target, Seq &seq) {

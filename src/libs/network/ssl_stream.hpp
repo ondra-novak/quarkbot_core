@@ -29,15 +29,15 @@ public:
     void close();
 
 protected:
-    std::array<char, 17000> _input_buffer;  //16384 is maximum websocket frame size, but we need some extra space for headers and fragmentation
-    std::string_view _unprocessed;
+    std::array<char, 17000> _input_buffer = {};  //16384 is maximum websocket frame size, but we need some extra space for headers and fragmentation
+    std::string_view _unprocessed = {};
     std::chrono::milliseconds _read_timeout = std::chrono::milliseconds(10000);
     std::chrono::milliseconds _write_timeout = std::chrono::milliseconds(1000);
     PSSL _ssl;
     Socket _socket;
     std::mutex _sslmx;
-    bool _eof;
-    bool _closed;
+    bool _eof = false;
+    bool _closed = false;
 
     enum class State {
         ready,

@@ -1,0 +1,3 @@
+add_library(quarkbot_ifc INTERFACE)
+target_include_directories(quarkbot_ifc INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(quarkbot_ifc INTERFACE BasicCoro::basic_coro)

@@ -1,4 +1,5 @@
 #include "simexchange.hpp"
+#include "ifc/types.hpp"
 #include "ifc/underlying.hpp"
 #include "impl/simaccount.hpp"
 #include "siminstrument.hpp"
@@ -6,11 +7,13 @@
 #include "ifc/stream_defs.hpp"
 #include "impl/streaming/publisher_manager.hpp"
 #include "simtradableinstrument.hpp"
+#include "utils/hashable.hpp"
 #include <algorithm>
 #include <chrono>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
+#include <stdexcept>
 #include <system_error>
 #include <unordered_set>
 
@@ -61,8 +64,11 @@ std::unique_ptr<IEventStreamBase> SimExchange::subscribe_stream(
 std::shared_ptr<SimInstrument> SimExchange::resolve_instrument(const std::string &name) {
     auto iter = _instrument_names.find(name);
     if (iter == _instrument_names.end()) return {};
-    auto lk = iter->second.lock();
-    if (!lk) return {};
+    auto lk = iter->second._ref.lock();
+    if (!lk) {
+        lk = std::make_shared<SimInstrument>(iter->second.info, shared_from_this());
+        iter->second._ref = lk;        
+    }
     return lk;
 
 }
@@ -201,28 +207,36 @@ UnderlyingCurrency SimExchange::create_currency(std::string_view name, bool is_u
 UnderlyingCurrency SimExchange::create_currency(std::string_view name) const {
     return UnderlyingCurrency{std::string(name), std::string(name), this};
 }
-PAccount SimExchange::create_account(const std::string &name, const std::string &) const {
+PAccount SimExchange::create_account(const std::string &name, const std::string &)  {
     return std::make_shared<SimAccount>(name, std::span<std::pair<UnderlyingCurrency, Decimal> >{});
 }
-std::vector<PMarketInstrument> SimExchange::get_market_instruments() const {
+std::vector<PMarketInstrument> SimExchange::get_market_instruments()  {
     std::vector<PMarketInstrument> out;
     for (auto &[k,v]:_instrument_names) {
-        auto lk = v.lock();
+        auto lk = v.get(shared_from_this());
         if (lk) out.push_back(std::move(lk));
     }
     return out;
 }
-std::vector<UnderlyingCurrency> SimExchange::get_all_currencies() const {
-    std::unordered_set<UnderlyingCurrency, UnderlyingCurrency::Hash> map;
+
+PMarketInstrument SimExchange::create_instrument(std::string_view id, InstrumentType type) {
+    std::string idstr(id);
+    auto instr = resolve_instrument(idstr);
+    if (!instr) throw std::runtime_error("Unknown instrument: SimExchange / " + idstr);
+    if (instr->get_info().type != type) throw std::runtime_error("Instrument found, but different type: SimExchange / " + idstr );   
+    return instr;
+    
+}
+
+std::vector<UnderlyingCurrency> SimExchange::get_all_currencies()  {
+    std::unordered_set<UnderlyingCurrency, Hasher<UnderlyingCurrency> > map;
+    auto me = shared_from_this();
     for (auto &[k,v]:_instrument_names) {
-        auto lk = v.lock();
-        if (lk) {
-            const auto &info = lk->get_info();
-            map.insert(info.pnl_currency);
-            map.insert(info.quote_currency);
-            if (info.asset_has_wallet()) {
-                map.insert(*info.asset_wallet);
-            }
+        const auto &info = v.info;
+        map.insert(info.pnl_currency);
+        map.insert(info.quote_currency);
+        if (info.asset_has_wallet()) {
+            map.insert(*info.asset_wallet);
         }
     }
     return {map.begin(), map.end()};
@@ -232,5 +246,10 @@ std::string_view SimExchange::get_name() const {
 }
 
 
+std::shared_ptr<SimInstrument> SimExchange::InstrumentRef::get(const std::shared_ptr<SimExchange> &owner) {
+    auto lk = _ref.lock();
+    if (!lk) lk = std::make_shared<SimInstrument>(info, owner);
+    return lk;
+}
 
 }
