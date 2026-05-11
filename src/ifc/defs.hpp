@@ -32,7 +32,6 @@ using PExchange = std::shared_ptr<IExchange>;
 using PMarketInstrument = std::shared_ptr<IMarketInstrument>;
 using PTradableInstrument = std::shared_ptr<ITradableInstrument>;
 using PStorage = std::shared_ptr<IStorage>;
-using PScheduler = std::shared_ptr<IScheduler>;
 using PExecutionWorker = std::shared_ptr<IExecutionWorker>;
 using coroutine = coro::coroutine<void>;
 using PBacktestDataSource = std::shared_ptr<IBacktestDataSource>;

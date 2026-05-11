@@ -2,13 +2,12 @@
 
 #include "basic_coro/scheduler.hpp"
 #include "ifc/execution_worker.hpp"
-#include "ifc/scheduler.hpp"
 #include <chrono>
 #include <memory>
 
 namespace quarkbot {
 
-class BacktestExecutor final: public IExecutionWorker, public IScheduler, public std::enable_shared_from_this<BacktestExecutor> {
+class BacktestExecutor final: public IExecutionWorker, public std::enable_shared_from_this<BacktestExecutor> {
 public:
     virtual void resume(std::coroutine_handle<> h) noexcept override;
     virtual PExecutionWorker spawn() noexcept override;

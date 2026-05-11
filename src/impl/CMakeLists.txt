@@ -13,6 +13,8 @@ add_library(quarkbot_impl
     tardis_data_source.cpp
     merged_data_source.cpp
     leveldb_storage.cpp
+    thread_executor.hpp
+    thread_executor.cpp
 )
 
 target_link_libraries(quarkbot_impl

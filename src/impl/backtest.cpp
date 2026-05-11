@@ -22,7 +22,6 @@ namespace quarkbot {
         ,_account(_exchange->create_account(std::move(account_name),wallet))
         {
             _context.exec_worker = _executor;
-            _context.scheduler = _executor;
             _context.mode = StrategyMode::backtest;            
             _context.stop_signal = [this] -> awaitable<coro::void_type> {
                 if (_stopped) return {};

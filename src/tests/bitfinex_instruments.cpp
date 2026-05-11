@@ -43,8 +43,11 @@ void test_market_instrument() {
     auto nfo = i1->get_info();
     CHECK_EQUAL(nfo.name, "BTCUSD");
     std::cout << nfo.min_lot_size.to_string() << std::endl;
+}
 
-
+void test_stream_trades() {
+    
+    
 }
 
 int main() {

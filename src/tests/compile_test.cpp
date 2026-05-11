@@ -16,7 +16,6 @@ template class quarkbot::SchedulerRealTime<void (*)() >;
 #include "../ifc/context.hpp"
 #include "../ifc/order.hpp"
 #include "../ifc/memory.hpp"
-#include "../ifc/scheduler.hpp"
 #include "../ifc/tradable_instrument.hpp"
 #include "../impl/streaming/lock_free_publisher.hpp"
 #include "../impl/streaming/publisher_manager.hpp"
