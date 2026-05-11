@@ -1,13 +1,13 @@
 #pragma once
-#include "ifc/market_instrument.hpp"
+#include "exchanges/bitfinex/stream_manager.hpp"
 #include "ifc/exchange.hpp"
 #include "ifc/underlying.hpp"
 #include "ifc/types.hpp"
-#include "utils/hashable.hpp"
+#include <memory>
 namespace quarkbot {
     namespace bitfinex {
 
-        class Exchange : public IExchange { 
+        class Exchange : public IExchange, public std::enable_shared_from_this<Exchange> { 
         public:
             virtual PAccount create_account(const std::string &name, const std::string &credentials)  override;
             virtual std::vector<PMarketInstrument> get_market_instruments()  override;
@@ -15,10 +15,13 @@ namespace quarkbot {
             virtual std::vector<UnderlyingCurrency> get_all_currencies()  override;
             virtual std::string_view get_name() const override;
      
+
+
+
         protected:
             
-
-
+            StreamManager _stream_manager;
+   
 
 
         };

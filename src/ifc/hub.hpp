@@ -1,3 +1,4 @@
+#pragma once
 #include "basic_coro/awaitable.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "ifc/defs.hpp"
@@ -100,9 +101,7 @@ public:
                 rsm = r.resume(true);
                 _producers.pop();
                 return out;
-            }));
-
-            
+            }));            
         }
     }
 
@@ -116,10 +115,7 @@ public:
     void close() {
         std::scoped_lock _(_mx);
         _closed = true;
-        while (!_producers.empty()) {
-            _producers.front().resume(false);
-            _producers.pop();
-        }
+        while (!_producers.empty()) _producers.pop();
         while (!_consumers.empty()) _consumers.pop();
     }
 
@@ -171,12 +167,17 @@ private:
         Consumer(awaitable<T>::result result)
             :_result(std::move(result))
             ,_worker(IExecutionWorker::current()) {}
+        Consumer(Consumer &&) = default;
+
         template<typename X>
         coro::prepared_coro send(X &&val) {
             auto out = _result(std::forward<X>(val));
             if (_worker) _worker->resume(std::move(out));
             return out;
         } 
+        ~Consumer() {        
+            send(std::nullopt);
+        }
     };
 
     std::mutex _mx;

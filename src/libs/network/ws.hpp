@@ -16,6 +16,7 @@ PWebSocketSecure wss_connect(const PSSL_CTX &sslctx,
         std::string_view wss_url, 
         std::span<std::pair<std::string_view, std::string_view> > extra_headers, 
         StreamConfiguration cfg);
+        
 template<std::invocable<Message> Handler>
 auto set_handler(PWebSocketSecure ws, Handler handler) {
     return std::thread([ws, handler = std::move(handler)]() mutable {

@@ -90,22 +90,22 @@ public:
         };
 
         while (load_next()) {
-            accum = c;
+            accum = static_cast<unsigned char>(c);
             if (!load_next()) {
                 remain = 3;
                 break;
             }
-            accum  = (accum << 6) | c;
+            accum  = (accum << 6) | static_cast<unsigned char>(c);
             if (!load_next()) {
                 remain = 2;
                 break;
             }
-            accum  = (accum << 6) | c;
+            accum  = (accum << 6) | static_cast<unsigned char>(c);
             if (!load_next()) {
                 remain = 1;
                 break;
             }
-            accum  = (accum << 6) | c;
+            accum  = (accum << 6) | static_cast<unsigned char>(c);
             *out = static_cast<char>(accum >> 16);
             ++out;
             *out = static_cast<char>((accum >> 8) & 0xFF);

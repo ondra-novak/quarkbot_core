@@ -3,7 +3,9 @@
 #include "basic_coro/awaitable_transform.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "execution_worker.hpp"
+#include "ifc/context.hpp"
 #include "order_defs.hpp"
+#include "hub.hpp"
 #include "order_storage.hpp"
 #include "types.hpp"
 #include "defs.hpp"
@@ -294,10 +296,24 @@ public:
     bool operator==(const Order &) const = default;
     
     ///create hash (for unordered map)
-    std::uint64_t hash() const {
+    std::uint64_t get_hash() const {
         std::hash<std::shared_ptr<State> > hasher;
         return hasher(_state);
     }
+
+    ///Feed events to opened hup
+    /**
+        Forwards all events to hub. The hub must accept Order instance. Once all events are
+        forwarded, you should avoid to call next() on the Order. You can also install only
+        one feeder to an order.
+
+        Orders pushed to hub are already prepared for data and fills retrieval, do not call next() again
+    */    
+    StrategyFragment feed_to(std::shared_ptr<Hub<Order> > hub) {
+        Order ord = *this;
+        while (co_await(ord.next()) && co_await hub->push(ord));
+    }
+
 
 protected:
 
