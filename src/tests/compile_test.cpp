@@ -23,7 +23,9 @@ template class quarkbot::SchedulerRealTime<void (*)() >;
 #include "../impl/streaming/orderbook_state.hpp"
 #include "../utils/signals.hpp"
 #include "../ifc/message_bus.hpp"
+#include "../ifc/hub.hpp"
 
+template class quarkbot::Hub<int>;
 
 int main(int argc, char **argv) {
     return 0;
