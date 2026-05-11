@@ -2,7 +2,6 @@
 
 #include "defs.hpp"
 #include "exchanges/bitfinex/public_stream.hpp"
-#include "execution_worker.hpp"
 #include "impl/streaming/lock_free_publisher.hpp"
 #include "libs/network/sslobjects.hpp"
 #include "market_instrument.hpp"
@@ -16,12 +15,10 @@ namespace bitfinex{
     class StreamManager : public std::enable_shared_from_this<StreamManager>{
     public:
 
-        StreamManager(network::PSSL_CTX sslctx):_sslctx(std::move(sslctx)) {}
+        StreamManager(network::PSSL_CTX sslctx, PExecutionWorker worker):_sslctx(std::move(sslctx)),_worker(worker) {}
         ~StreamManager();
 
-        std::unique_ptr<IEventStreamBase> subscribe(std::string symbol, StreamTypeItem::Type type, const StreamParams &params);
-        //throws exception with any error, however error operation is scheduled to retry
-        void run_queue();
+        std::unique_ptr<IEventStreamBase> subscribe(std::string symbol, StreamTypeItem::Type type, const StreamParams *params);
 
         using TradeStream = LockFreePublisher<Trade, 1>;
         using QuoteStream = LockFreePublisher<Quote, 1>;
@@ -32,6 +29,7 @@ namespace bitfinex{
         std::mutex _mx;
         std::vector<std::unique_ptr<PublicStream> > _streams;
         network::PSSL_CTX _sslctx;
+        PExecutionWorker _worker;
 
         using TraderStreamMap = std::unordered_map<std::string, std::weak_ptr<TradeStream> >;
         using QuoteStreamMap = std::unordered_map<std::string, std::weak_ptr<QuoteStream> >;
@@ -42,7 +40,6 @@ namespace bitfinex{
         QuoteStreamMap _quote_stream_map;
         TradeCounterStreamMap _trade_counter_stream_map;
         CloseBarStreamMap _close_bar_stream_map;
-        std::queue<std::function<PublicStream::State(PublicStream &x)> > _subscribe_queue;                        
 
         template<std::invocable<PublicStream &> Fn>
         void subscribe_to_stream(Fn &&fn);
@@ -62,6 +59,8 @@ namespace bitfinex{
         
         template<typename ... Map>
         auto find_streams(const std::string &symbol, Map &... maps);
+
+        void subscribe_to_scream_bgr(std::function<PublicStream::State(PublicStream &)> fn);
     };
 
 }

@@ -1,4 +1,5 @@
 #include "instrument.hpp"
+#include "exchange.hpp"
 #include "market_instrument.hpp"
 #include "types.hpp"
 #include <memory>
@@ -19,12 +20,12 @@ namespace bitfinex {
         return p;
     }
 
-    std::unique_ptr<IEventStreamBase> BFXInstrument::subscribe_stream_internal(std::string_view type, const StreamParams *) {
+    std::unique_ptr<IEventStreamBase> BFXInstrument::subscribe_stream_internal(std::string_view type, const StreamParams *params) {
         if (type == InstrumentInfo::type) {
             std::shared_ptr<InstrumentInfoPublisher> p = get_or_create_info_publiser();
             return  p->create_subscriber(p);            
         }
-        return {};  //TODO connect to streams
+        return std::static_pointer_cast<Exchange>(_owner)->subscribe_market_stream(_cur_info.name, type, params);
     }
 
     void BFXInstrument::info_updated(const InstrumentInfo &info) {

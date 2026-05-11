@@ -1,4 +1,5 @@
-add_library(quarkbot_bitfinex exchange.cpp
+add_library(quarkbot_bitfinex 
+exchange.cpp
     instrument_map.hpp
     instrument_map.cpp
     instrument.cpp

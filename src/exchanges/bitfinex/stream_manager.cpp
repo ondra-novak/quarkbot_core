@@ -1,11 +1,11 @@
 #include "stream_manager.hpp"
+#include "context.hpp"
 #include "exchanges/bitfinex/public_stream.hpp"
 #include "market_instrument.hpp"
 #include <chrono>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
-#include <thread>
 #include <tuple>
 
 namespace quarkbot {
@@ -16,32 +16,20 @@ void StreamManager::subscribe_trades_if_needed(const std::string &symbol) {
     auto tsm = _trade_stream_map.find(symbol);
     auto tcsm = _trade_counter_stream_map.find(symbol);
     if (tsm ==  _trade_stream_map.end() && tcsm == _trade_counter_stream_map.end()) {
-        _subscribe_queue.push([&](PublicStream &s){return s.subscribe_trades(tsymbol, TradeParser{this, symbol});});
+        subscribe_to_scream_bgr([&](PublicStream &s){return s.subscribe_trades(tsymbol, TradeParser{this, symbol});});
     }
 }
 void StreamManager::subscribe_ticker_if_needed(const std::string &symbol) {
     auto tsymbol = "t"+symbol;
     auto qsm = _quote_stream_map.find(symbol);
     if (qsm ==  _quote_stream_map.end()) {
-        _subscribe_queue.push([&](PublicStream &s){return s.subscribe_ticker(tsymbol, TickerParser{this, symbol});});
+        subscribe_to_scream_bgr([&](PublicStream &s){return s.subscribe_ticker(tsymbol, TickerParser{this, symbol});});
     }        
 }
 
-void StreamManager::run_queue() {
-    std::scoped_lock _(_mx);
-    while (!_subscribe_queue.empty()) {
-        auto fn = std::move(_subscribe_queue.front());
-        _subscribe_queue.pop();
-        try {
-            subscribe_to_stream(fn);        
-        } catch (...) {
-            _subscribe_queue.push(std::move(fn));            
-            throw;
-        }
-    }         
-}
 
-std::unique_ptr<IEventStreamBase> StreamManager::subscribe(std::string symbol, StreamTypeItem::Type type, const StreamParams &) {
+
+std::unique_ptr<IEventStreamBase> StreamManager::subscribe(std::string symbol, StreamTypeItem::Type type, const StreamParams *) {
     std::scoped_lock _(_mx);
     if (type == Trade::type) {
         subscribe_trades_if_needed(symbol);
@@ -122,7 +110,7 @@ auto StreamManager::find_streams(const std::string &symbol, Map &... maps) {
 bool  StreamManager::TradeParser::operator()(const Json message) {
     if (message.is_null()) {
         std::scoped_lock _(owner->_mx);
-        owner->_subscribe_queue.push([&](PublicStream &x){return x.subscribe_trades(symbol, *this);});
+        owner->subscribe_to_scream_bgr([&](PublicStream &x){return x.subscribe_trades(symbol, *this);});
         return false;
     } else {
         auto mts = std::chrono::system_clock::time_point(std::chrono::milliseconds(message[1].as<std::int64_t>()));
@@ -153,7 +141,7 @@ bool  StreamManager::TradeParser::operator()(const Json message) {
 bool  StreamManager::TickerParser::operator()(const Json message) {
     if (message.is_null()) {
         std::scoped_lock _(owner->_mx);
-        owner->_subscribe_queue.push([&](PublicStream &x){return x.subscribe_ticker(symbol, *this);});
+        owner->subscribe_to_scream_bgr([&](PublicStream &x){return x.subscribe_ticker(symbol, *this);});
         return false;
     } else {
         auto bid =  Decimal::from_string(message[0].as_text());
@@ -165,6 +153,15 @@ bool  StreamManager::TickerParser::operator()(const Json message) {
         qs->publish(Quote{{},bid,bid_size,ask,ask_size, std::chrono::system_clock::now()});
         return true;
     }
+}
+
+void  StreamManager::subscribe_to_scream_bgr(std::function<PublicStream::State(PublicStream &)> fn) {
+    auto me = shared_from_this();
+    auto coro = [](auto me, auto fn) -> StrategyFragment{        
+        me->subscribe_to_stream(std::move(fn));                
+        co_return;
+    };
+    _worker->run(coro(me, std::move(fn)));
 }
 
 }
