@@ -83,14 +83,23 @@ struct Quote : MarketInstrumentStreamTypeItem {
     std::chrono::system_clock::time_point time;
     static constexpr Type type = "quote";
     Quote &view() {return *this;}
+
+    bool operator==(const Quote &) const  = default;
 };
 
 struct Trade : MarketInstrumentStreamTypeItem {
+    ///trade price
     Decimal price;
+    ///trade volume
     Decimal size;
+    ///time of execution
     std::chrono::system_clock::time_point time;
+    ///taker's side - this is optional - exchange don't need to report side
+    Side side  = Side::undetermined;
     Trade &view() {return *this;}
     static constexpr Type type = "trade";
+
+    bool operator==(const Trade &) const  = default;
 };
 
 struct OrderBookLevel {
@@ -110,6 +119,12 @@ struct OrderBookIncrement : OrderBookLevel, MarketInstrumentStreamTypeItem {
 template<typename X>
 struct StreamSingleParam: StreamParams {
     X param;
+};
+
+template<typename X, typename Y>
+struct StreamDoubleParam: StreamParams {
+    X param1;
+    Y param2;
 };
 
 struct ClosedBar  {
@@ -163,6 +178,7 @@ struct OrderBookView {
 template<unsigned int depth>
 struct OrderBook: MarketInstrumentStreamTypeItem {
 public:
+    constexpr static auto params =StreamSingleParam<unsigned int> {{},depth};
     std::chrono::system_clock::time_point time;
     std::array<OrderBookLevel,depth> bids; 
     std::array<OrderBookLevel,depth> asks;     
@@ -178,10 +194,27 @@ struct TradeCounter : public MarketInstrumentStreamTypeItem {
     std::uint64_t trades = 0;
     /// total volume - it can reset when stream is reopened
     Decimal volume ={};
+    /// total buy volume - exchange must report side
+    Decimal buy_volume = {};
+    /// total sell volume  - exchange must report side
+    Decimal sell_volume = {};
     /// last price
     Decimal last_price = {};
 
     std::chrono::system_clock::time_point time;
+};
+
+struct PeriodicSnapshotView : public Quote{
+public:    
+    Decimal last_price;
+    PeriodicSnapshotView &view() {return *this;}
+    using ParamType =  StreamDoubleParam<unsigned int, int>;
+};
+
+template<unsigned interval, int offset = 0>
+requires(interval >= 1)
+struct PeriodicSnapshot : PeriodicSnapshotView{
+    constexpr static auto params =ParamType{{},interval, offset};
 };
 
 ///Stream is updated when some informations about instrument changed

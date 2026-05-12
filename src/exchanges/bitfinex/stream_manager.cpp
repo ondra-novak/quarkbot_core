@@ -2,6 +2,7 @@
 #include "context.hpp"
 #include "exchanges/bitfinex/public_stream.hpp"
 #include "market_instrument.hpp"
+#include "stream_defs.hpp"
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -13,50 +14,34 @@ namespace bitfinex {
 
 void StreamManager::subscribe_trades_if_needed(const std::string &symbol) {
     auto tsymbol = "t"+symbol;
-    auto tsm = _trade_stream_map.find(symbol);
-    auto tcsm = _trade_counter_stream_map.find(symbol);
-    if (tsm ==  _trade_stream_map.end() && tcsm == _trade_counter_stream_map.end()) {
-        subscribe_to_scream_bgr([&](PublicStream &s){return s.subscribe_trades(tsymbol, TradeParser{this, symbol});});
+    auto ins = _active_subscribtions.emplace(StreamRegKey{symbol, StreamType::trades});
+    if (ins.second) {
+        subscribe_to_scream_bgr([=,this](PublicStream &s){return s.subscribe_trades(tsymbol, TradeParser{this, symbol});});
     }
 }
 void StreamManager::subscribe_ticker_if_needed(const std::string &symbol) {
     auto tsymbol = "t"+symbol;
-    auto qsm = _quote_stream_map.find(symbol);
-    if (qsm ==  _quote_stream_map.end()) {
-        subscribe_to_scream_bgr([&](PublicStream &s){return s.subscribe_ticker(tsymbol, TickerParser{this, symbol});});
+    auto ins = _active_subscribtions.emplace(StreamRegKey{symbol, StreamType::ticker});
+    if (ins.second) {
+        subscribe_to_scream_bgr([=,this](PublicStream &s){return s.subscribe_ticker(tsymbol, TickerParser{this, symbol});});
     }        
 }
 
 
 
-std::unique_ptr<IEventStreamBase> StreamManager::subscribe(std::string symbol, StreamTypeItem::Type type, const StreamParams *) {
+std::unique_ptr<IEventStreamBase> StreamManager::subscribe(std::string symbol, StreamTypeItem::Type type, const StreamParams *params) {
     std::scoped_lock _(_mx);
     if (type == Trade::type) {
         subscribe_trades_if_needed(symbol);
-        auto &def = _trade_stream_map[symbol];        
-        auto p = def.lock();
-        if (!p) {
-            def = p = std::make_shared<TradeStream>();
-        }
-        return p->create_subscriber(p);
+        return _manager.connect_to(symbol,{},type, params, []{return std::make_shared<TradeStream>();});
     } 
     if (type == Quote::type) {
         subscribe_ticker_if_needed(symbol);
-        auto &def = _quote_stream_map[symbol];
-        auto p = def.lock();
-        if (!p) {
-            def = p = std::make_shared<QuoteStream>();
-        }
-        return p->create_subscriber(p);
+        return _manager.connect_to(symbol,{},type, params, []{return std::make_shared<QuoteStream>();});
     }
     if (type == TradeCounter::type) {
         subscribe_trades_if_needed(symbol);
-        auto &def = _trade_counter_stream_map[symbol];        
-        auto p = def.lock();
-        if (!p) {
-            def = p = std::make_shared<TradeCounterStream>();
-        }
-        return p->create_subscriber(p);
+        return _manager.connect_to(symbol,{},type, params, []{return std::make_shared<TradeCounterStream>();});    
     }
     return {};
 }
@@ -108,20 +93,35 @@ auto StreamManager::find_streams(const std::string &symbol, Map &... maps) {
  }
 
 bool  StreamManager::TradeParser::operator()(const Json message) {
-    if (message.is_null()) {
-        std::scoped_lock _(owner->_mx);
-        owner->subscribe_to_scream_bgr([&](PublicStream &x){return x.subscribe_trades(symbol, *this);});
-        return false;
-    } else {
-        auto mts = std::chrono::system_clock::time_point(std::chrono::milliseconds(message[1].as<std::int64_t>()));
-        auto amn = Decimal::from_string(message[2].as_text());
-        auto price = Decimal::from_string(message[3].as_text());
-        auto [ts,tcs] = owner->find_streams(symbol, owner->_trade_stream_map, owner->_trade_counter_stream_map);
-        if (!ts && !tcs) return false;
-        if (ts) {
-            ts->publish(Trade{{},amn,price, mts});
+
+    bool active = false;
+    
+    if (message.is_null()) {        
+        owner->_manager.enum_all_publishers(symbol, {}, Trade::type, [&](auto, auto){active = true;});
+        owner->_manager.enum_all_publishers(symbol, {}, TradeCounter::type, [&](auto, auto){active = true;});
+        if (active) {
+            std::scoped_lock _(owner->_mx);
+            owner->subscribe_to_scream_bgr([=,this](PublicStream &x){return x.subscribe_trades(symbol, *this);});
         }
-        if (tcs) {
+    } else {        
+        auto type = message[1];
+        if (!type.is_string() || type.as_text() != "te") return true;
+
+        auto data = message[2];
+        auto mts = std::chrono::system_clock::time_point(std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::milliseconds(
+            static_cast<std::uint64_t>(data[1].as<double>()))));
+        auto amn = Decimal::from_string(data[2].as_text());
+        Side side = amn < 0?Side::sell:Side::buy;
+        auto size = abs(amn);
+        auto price = Decimal::from_string(data[3].as_text());
+        owner->_manager.enum_all_publishers(symbol, {}, Trade::type, [&](auto , auto pub){
+            active = true;
+            auto ts = std::static_pointer_cast<TradeStream>(pub);
+            ts->publish(Trade{{},price,size, mts, side});
+        });
+        owner->_manager.enum_all_publishers(symbol, {}, TradeCounter::type, [&](auto , auto pub){
+            active = true;
+            auto tcs = std::static_pointer_cast<TradeCounterStream>(pub);
             TradeCounter cntr = {};
             auto s = tcs->get_top_seq();
             if (s > 0) [[likely]] {
@@ -129,30 +129,50 @@ bool  StreamManager::TradeParser::operator()(const Json message) {
                 tcs->read(cntr,s);
             }
             cntr.last_price = price;
-            cntr.volume += amn;
+            cntr.volume += size;
+            if (side == Side::sell) cntr.sell_volume+=size;
+            if (side == Side::buy) cntr.buy_volume+=size;
             cntr.trades++;
             cntr.time = mts;                
             tcs->publish(cntr);
-        }
-        return true;
+        });
     }
+    if (!active) {
+        std::scoped_lock _(owner->_mx);
+        owner->_active_subscribtions.erase(StreamRegKey{symbol, StreamType::trades});
+        return false;
+    }
+    return true;
 
 }
 bool  StreamManager::TickerParser::operator()(const Json message) {
-    if (message.is_null()) {
-        std::scoped_lock _(owner->_mx);
-        owner->subscribe_to_scream_bgr([&](PublicStream &x){return x.subscribe_ticker(symbol, *this);});
-        return false;
+    bool active = false;
+    if (message.is_null()) {        
+        owner->_manager.enum_all_publishers(symbol, {}, Quote::type, [&](auto, auto){active = true;});
+        if (active) {
+            std::scoped_lock _(owner->_mx);
+            owner->subscribe_to_scream_bgr([=,this](PublicStream &x){return x.subscribe_ticker(symbol, *this);});
+        }
     } else {
-        auto bid =  Decimal::from_string(message[0].as_text());
-        auto bid_size =  Decimal::from_string(message[1].as_text());
-        auto ask =  Decimal::from_string(message[2].as_text());
-        auto ask_size =  Decimal::from_string(message[3].as_text());
-        auto [qs] = owner->find_streams(symbol, owner->_quote_stream_map);
-        if (!qs) return false;
-        qs->publish(Quote{{},bid,bid_size,ask,ask_size, std::chrono::system_clock::now()});
+        Json data = message[1];
+        if (!data.is_array()) return true;
+        auto bid =  Decimal::from_string(data[0].as_text());
+        auto bid_size =  Decimal::from_string(data[1].as_text());
+        auto ask =  Decimal::from_string(data[2].as_text());
+        auto ask_size =  Decimal::from_string(data[3].as_text());
+        owner->_manager.enum_all_publishers(symbol, {}, Quote::type, [&](auto, auto pub){
+            active = true;
+            auto qs = std::static_pointer_cast<QuoteStream>(pub);
+            qs->publish(Quote{{},bid,bid_size,ask,ask_size, std::chrono::system_clock::now()});
+        });        
         return true;
     }
+    if (!active) {
+        std::scoped_lock _(owner->_mx);
+        owner->_active_subscribtions.erase(StreamRegKey{symbol, StreamType::ticker});
+        return false;
+    }
+    return true;
 }
 
 void  StreamManager::subscribe_to_scream_bgr(std::function<PublicStream::State(PublicStream &)> fn) {

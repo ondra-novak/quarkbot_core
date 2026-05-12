@@ -361,6 +361,11 @@ public:
         return other._packed<0?-1:other._packed>0?1:0;
     }
 
+    friend constexpr Decimal abs(const Decimal &other) {
+        if (other._packed<0) return -(other);
+        else return other;
+    }
+
     constexpr int64_t compare(const Decimal &other) const {
         auto s1 = sgn(*this);
         auto s2 = sgn(other);
@@ -405,6 +410,7 @@ public:
     constexpr _Out to_string_fixed(_Out out, int decimals) const {
         Decimal v;
 
+
         if (sgn(*this) < 0) {
             *out++='-';
             v = -*this;
@@ -444,7 +450,31 @@ public:
         return out;
     }
 
-    std::string to_string() const {
+    constexpr std::string to_string_fixed(int decimals) const {
+        std::string out;
+        to_string_fixed(std::back_inserter(out), decimals);
+        return out;
+    }
+
+
+    template<typename _Out>
+    constexpr _Out to_string_sci(_Out out, int decimals) const {
+        auto exp = exponent();
+        Decimal adj = scaleb10(*this, -exp+1);
+        out = adj.to_string_fixed(out, decimals);
+        *out++='E';
+        out = Decimal(exp-1).to_string_fixed(out, 0);
+        return out;
+    }
+
+    constexpr std::string to_string_sci(int decimals) const {
+        std::string out;
+        to_string_sci(std::back_inserter(out), decimals);
+        return out;
+    }
+
+    template<typename _Out>
+    constexpr _Out to_string(_Out out) const {
         char buff[mantissa_digits*2+5];
         char *ptr;
 
@@ -457,21 +487,25 @@ public:
             }
         };
 
-        if (_packed == 0) return "0";
-
         auto exp = exponent();
         if (exp > mantissa_digits || exp < -2) {
             Decimal adj = scaleb10(*this, -exp+1);
             ptr = adj.to_string_fixed(buff, mantissa_digits);
             remove_trailing();
             *ptr++='E';
-            ptr = Decimal(exp-1).to_string_fixed(ptr, 0);
-            return {buff,ptr};
+            ptr = Decimal(exp-1).to_string_fixed(ptr, 0);            
         } else {
             ptr = this->to_string_fixed(buff, mantissa_digits);
-            remove_trailing();
-            return {buff, ptr};
+            remove_trailing();            
         }
+        return std::copy(std::begin(buff), ptr, out);
+    }
+
+
+    std::string to_string() const {
+        std::string buff;
+        to_string(std::back_inserter(buff));
+        return buff;
     }
 
     static constexpr Decimal max() {
@@ -479,6 +513,13 @@ public:
     }
     static constexpr Decimal min() {
         return Decimal(mantissa_min, exponent_min);
+    }
+
+    template<typename IOStream>
+    friend IOStream &operator<<(IOStream &stream, Decimal dec) {
+        auto iter =   std::ostreambuf_iterator<char>(stream);
+        dec.to_string(iter);
+        return stream;
     }
   
     protected:

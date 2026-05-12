@@ -26,7 +26,7 @@ template class quarkbot::SchedulerRealTime<void (*)() >;
 
 template class quarkbot::Hub<int>;
 
-int main(int argc, char **argv) {
+int main() {
     return 0;
 }
 

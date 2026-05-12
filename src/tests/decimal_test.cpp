@@ -100,6 +100,7 @@ static_assert(test_string(12345678.9_dec, 3, "12345678.900"));
 static_assert(test_string(12345678.9_dec, 0, "12345679"));
 static_assert(test_string(1234567.89_dec, 1, "1234567.9"));
 static_assert(test_string(123456.789_dec, 2, "123456.79"));
+static_assert(test_string(0_dec, 2, "0.00"));
 
 
 int main() {    
@@ -109,6 +110,8 @@ int main() {
     std::cout << Decimal(-1287e53_dec).to_string() << std::endl;
     std::cout << Decimal(-12414658e-5_dec).to_string() << std::endl;
     std::cout << Decimal(-11258e-25_dec).to_string() << std::endl;
+    std::cout << 0_dec << std::endl;
+    std::cout << 0.412_dec << std::endl;
 }
 
 

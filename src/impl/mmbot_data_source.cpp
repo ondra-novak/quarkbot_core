@@ -27,7 +27,7 @@ std::optional<MMBOT_backtest_datasource::Event> MMBOT_backtest_datasource::next_
     if (_price) {
         auto t = _tp-std::chrono::seconds(30);
         out.emplace(Event {t, _instrument, Trade{
-            {}, *_price,{}, t
+            {}, *_price,{}, t, Side::undetermined
         }});
         _price.reset();
         return out;

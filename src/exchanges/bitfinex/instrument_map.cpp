@@ -194,6 +194,7 @@ void InstrumentMap::load_spot_geometry(const IExchange *ex) {
         if (margin.is_number()) {
             auto &margin_info = _instruments[{name, InstrumentType::margin}];
             nfo.leverage =Decimal(1.0/margin.as_double());
+            nfo.type = InstrumentType::margin;
             nfo.asset_wallet = {};
             margin_info.set_info(nfo);
         }
@@ -217,7 +218,7 @@ void InstrumentMap::load_futures_geometry(const IExchange *ex) {
 
         auto &futures_info = _instruments[{name,InstrumentType::contract}];
         IMarketInstrument::Info nfo{
-            {InstrumentType::spot},
+            {InstrumentType::contract},
             Decimal::from_string(min_lot.as_text()),
             Decimal::from_string(max_lot.as_text()),
             1,

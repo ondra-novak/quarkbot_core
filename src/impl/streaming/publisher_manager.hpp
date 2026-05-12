@@ -5,6 +5,7 @@
 #include "ifc/defs.hpp"
 #include "publisher_base.hpp"
 #include "ifc/stream_defs.hpp"
+#include "utils/hashable.hpp"
 #include <algorithm>
 #include <functional>
 #include <memory>
@@ -14,6 +15,7 @@
 namespace quarkbot {
 
 
+    template<typename InstrumentKey = PMarketInstrument>
     class PublisherManager {
     public:
 
@@ -21,17 +23,17 @@ namespace quarkbot {
         using WPPublisher = std::weak_ptr<PublisherBase>;
 
         struct Key {
-            PMarketInstrument instrument;   //instrument
+            InstrumentKey instrument;   //instrument
             PAccount account;               //account can be null
             StreamTypeItem::Type type;          //steam type - statically allocated
 
             bool operator==(const Key &) const = default;
             size_t hash() const {
-                std::hash<const IMarketInstrument *> h1;
+                Hasher<InstrumentKey> h1;
                 std::hash<const IAccount *> h2;
                 std::hash<std::string_view> h3;                
 
-                auto hash1 = h1(instrument.get());
+                auto hash1 = h1(instrument);
                 auto hash2 = h2(account.get());
                 auto hash3 = h3(type);
                 return hash1+hash2+hash3;
@@ -52,7 +54,7 @@ namespace quarkbot {
 
 
         template<std::invocable<const StreamParams *, PPublisher> Callback>
-        bool enum_all_publishers(const PMarketInstrument &instrument, const PAccount &account, StreamTypeItem::Type type, Callback &&cb) {
+        bool enum_all_publishers(const InstrumentKey &instrument, const PAccount &account, StreamTypeItem::Type type, Callback &&cb) {
             std::scoped_lock _(_mx);
             auto iter = _map.find(Key{instrument, account, type});
             if (_map.end() == iter) return false;
@@ -73,10 +75,20 @@ namespace quarkbot {
             return true;            
         }
 
-        std::unique_ptr<IEventStreamBase> connect_to(const PMarketInstrument &instrument,
+        bool any_publisher(const InstrumentKey &instrument, const PAccount &account, StreamTypeItem::Type type) const {
+            std::scoped_lock _(_mx);
+            auto iter = _map.find(Key{instrument, account, type});
+            return _map.end() != iter;
+        }
+
+        template<std::invocable<> Factory>
+        std::unique_ptr<IEventStreamBase> connect_to(const InstrumentKey &instrument,
                                                     const PAccount &account,
                                                     StreamTypeItem::Type type,
-                                                    const StreamParams *params) {
+                                                    const StreamParams *params,
+                                                    Factory factory
+                                                ) {
+            static_assert(std::is_invocable_r_v<PPublisher, Factory>);
             std::scoped_lock _(_mx);                                                    
             Key k{instrument, account, type};
             Value &v = _map[k];
@@ -90,6 +102,10 @@ namespace quarkbot {
             });
             v.erase(r, v.end());
 
+            if (!pub) {
+                pub = factory();
+                v.push_back({params,pub});
+            }
             if (pub) {
                 return pub->create_subscriber(pub);
             }
@@ -97,21 +113,9 @@ namespace quarkbot {
             return {};            
         }
 
-        auto register_publisher(const PMarketInstrument &instrument,
-                                const PAccount &account,
-                                StreamTypeItem::Type type,
-                                const StreamParams *params,
-                                PPublisher publisher
-                            ) {
-            std::scoped_lock _(_mx);                                                    
-            Key k{instrument, account, type};
-            Value &v = _map[k];
-            v.push_back({params, publisher});
-            return publisher;
-        }
 
     protected:
-        std::mutex _mx;
+        mutable std::mutex _mx;
         MapType _map;
 
 

@@ -3,6 +3,7 @@
 #include "libs/network/ws_parser.hpp"
 #include <exception>
 #include <future>
+#include <iostream>
 #include <mutex>
 #include <stop_token>
 #include <thread>
@@ -84,6 +85,9 @@ void PublicStream::worker(std::stop_token tkn) {
 
             try {
                 Json jmsg = Json::from_string(msg.data);
+                #ifdef QUARKBOT_DEBUG_PRINT_STREAM_DATA
+                std::cout << jmsg.to_string() << std::endl;
+                #endif
                 if (jmsg.is_object()) {
                     auto event = jmsg["event"];
                     if (event.is_string()) {
@@ -102,7 +106,6 @@ void PublicStream::worker(std::stop_token tkn) {
                     }
                 } else if (jmsg.is_array()) {
                     int channel = jmsg[0].as_int();
-                    Json data = jmsg[1];
                     Callback *cb = nullptr;
                     {
                         std::scoped_lock _(_mx);
@@ -112,7 +115,7 @@ void PublicStream::worker(std::stop_token tkn) {
                     bool keep = false;;
                     if (cb) {
                         try {
-                            keep = (*cb)(data);
+                            keep = (*cb)(std::move(jmsg));
                             if (tkn.stop_requested()) return;
                         } catch (...) {
                             keep = false;

@@ -1,14 +1,13 @@
 #pragma once
 
-#include "defs.hpp"
 #include "exchanges/bitfinex/instrument_map.hpp"
 #include "exchanges/bitfinex/stream_manager.hpp"
 #include "ifc/exchange.hpp"
 #include "ifc/underlying.hpp"
 #include "ifc/types.hpp"
 #include "libs/network/sslobjects.hpp"
-#include "stream_defs.hpp"
-#include "streaming.hpp"
+#include "ifc/stream_defs.hpp"
+#include "ifc/streaming.hpp"
 #include <memory>
 namespace quarkbot {
     namespace bitfinex {

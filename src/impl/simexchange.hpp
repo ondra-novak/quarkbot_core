@@ -64,7 +64,7 @@ protected:
 
     std::unordered_map<std::string, InstrumentRef> _instrument_names;
  
-    PublisherManager _streams;
+    PublisherManager<> _streams;
     SimExecutor _executor;
     std::vector<std::weak_ptr<SimTradableInstrument> > _tradable_instruments;
 

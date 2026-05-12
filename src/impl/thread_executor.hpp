@@ -17,7 +17,7 @@ namespace quarkbot {
         virtual void cancel(coro::cancel_signal *cancel_signal) override;
 
 
-        PExecutionWorker create() {
+        static PExecutionWorker create() {
             auto x = std::make_shared<ThreadExecutor>();
             x->start();
             return x;

@@ -7,6 +7,7 @@ namespace quarkbot {
 
 struct StreamTypeItem {
     using Type = std::string_view;
+    bool operator==(const StreamTypeItem &) const  {return true;}
 };
 
 ///base class for all MarketInstrument events 

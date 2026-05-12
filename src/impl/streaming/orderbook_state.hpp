@@ -9,6 +9,7 @@
 namespace quarkbot {
 
 
+template<typename InstrumentType>
 class OrderbookState {
 public:
 
@@ -18,14 +19,14 @@ public:
 
     static constexpr std::size_t max_levels = 64;
 
-    OrderbookState(PublisherManager &manager, PMarketInstrument instrument)
+    OrderbookState(PublisherManager<InstrumentType> &manager, InstrumentType instrument)
         :_manager(manager), _instrument(std::move(instrument)) {}
 
-    PublisherManager::PPublisher create_increment_publisher() {
+    PublisherManager<InstrumentType>::PPublisher create_increment_publisher() {
         return std::make_shared<IncrementPublisher>();
     }
 
-    PublisherManager::PPublisher create_snapshot_publisher() {
+    PublisherManager<InstrumentType>::PPublisher create_snapshot_publisher() {
         return std::make_shared<SnapshotPublisher>();
     }
 
@@ -34,7 +35,7 @@ public:
         bool any = false;
 
         _manager.enum_all_publishers(_instrument, {}, OrderBookIncrement::type, 
-            [&](const StreamParams *,  const PublisherManager::PPublisher &pub){
+            [&](const StreamParams *,  const PublisherManager<InstrumentType>::PPublisher &pub){
                 IncrementPublisher &p = static_cast<IncrementPublisher &>(*pub);
                 for (auto &x: states) {
                     p.write([&](OrderBookIncrement &t) noexcept{
@@ -65,7 +66,7 @@ public:
 
 
         _manager.enum_all_publishers(_instrument, {}, OrderBook<1>::type, 
-            [&](const StreamParams *, const PublisherManager::PPublisher &pub){
+            [&](const StreamParams *, const PublisherManager<InstrumentType>::PPublisher &pub){
                 SnapshotPublisher &p = static_cast<SnapshotPublisher &>(*pub);
                 OrderBookView view(_bids[_bank],_asks[_bank], &_tp[_bank]);
                 p.write([&](OrderBookView &v)noexcept{
@@ -80,8 +81,8 @@ public:
 
 protected:
 
-    PublisherManager &_manager;
-    PMarketInstrument _instrument;
+    PublisherManager<InstrumentType> &_manager;
+    InstrumentType _instrument;
 
 
     std::array<std::array<OrderBookLevel, max_levels>, 2> _bids = {};

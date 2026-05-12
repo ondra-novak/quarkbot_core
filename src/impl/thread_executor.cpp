@@ -1,4 +1,5 @@
 #include "thread_executor.hpp"
+#include "ifc/execution_worker.hpp"
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -67,6 +68,7 @@ namespace quarkbot {
     }
 
     void ThreadExecutor::worker(std::stop_token tkn) {
+        _current_worker = shared_from_this();
         std::stop_callback _(tkn, [&]{_cv.notify_one();});
         //lock internals
         std::unique_lock lk(_mx);
