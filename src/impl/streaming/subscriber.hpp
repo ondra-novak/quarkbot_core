@@ -32,6 +32,17 @@ public:
         });
     }
 
+     virtual bool current(ViewType &ref) override {
+        Seq cur = _seq;
+        if (!_publisher->read(ref, cur)) {
+            if (_seq==0) return false;
+            --cur;
+            return _publisher->read(ref,cur);
+        }
+        _seq = cur;
+        return true;        
+     }
+
     StreamSubscriber(std::shared_ptr<Publisher> publisher):_publisher(std::move(publisher)) {}
         
 protected:

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "exchanges/bitfinex/instrument_map.hpp"
+#include "exchanges/bitfinex/iprice_report.hpp"
+#include "exchanges/bitfinex/network_context.hpp"
 #include "exchanges/bitfinex/stream_manager.hpp"
 #include "ifc/exchange.hpp"
 #include "ifc/underlying.hpp"
@@ -12,9 +14,9 @@
 namespace quarkbot {
     namespace bitfinex {
 
-        class Exchange : public IExchange, public std::enable_shared_from_this<Exchange> { 
+        class Exchange : public IExchange, public IPriceReport, public std::enable_shared_from_this<Exchange> { 
         public:
-            Exchange(network::PSSL_CTX sslctx, PExecutionWorker worker);            
+            Exchange(NetworkContext ctx, PExecutionWorker worker);            
 
             virtual PAccount create_account(const std::string &name, const std::string &credentials)  override;
             virtual std::vector<PMarketInstrument> get_market_instruments()  override;
@@ -32,6 +34,8 @@ namespace quarkbot {
             InstrumentMap _instr_map;
             PExecutionWorker _worker;
 
+
+            virtual void report_price(const std::string &id, Decimal price) override;
         };
 
 

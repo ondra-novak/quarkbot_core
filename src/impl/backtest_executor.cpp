@@ -1,4 +1,5 @@
 #include "backtest_executor.hpp"
+#include "ifc/execution_worker.hpp"
 
 namespace quarkbot {
 
@@ -40,9 +41,14 @@ awaitable<bool> BacktestExecutor::sleep_until(std::chrono::system_clock::time_po
 awaitable<bool> BacktestExecutor::sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr) {
     return _scheduler.sleep_for(duration, cancel_signal_ptr);
 }
-void BacktestExecutor::cancel(coro::cancel_signal *cancel_signal) {
+bool BacktestExecutor::cancel(coro::cancel_signal *cancel_signal) {
     auto r = _scheduler.cancel(cancel_signal);
-    resume(r.symmetric_transfer());
+    if (r) {
+        IExecutionWorker::resume(std::move(r));
+        return true;
+    } else {
+        return false;
+    }
 }
 
 

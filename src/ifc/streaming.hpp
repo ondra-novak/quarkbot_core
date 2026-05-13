@@ -49,6 +49,16 @@ public:
         return read_internal(ref, missed);
     }    
 
+    ///read current value regardless on whether it was updated or not
+    /**
+        use to read last value
+        @retval true value ready
+        @retval false value can't be retrieved. 
+        @note not all streams supports this function. The return value can reflect this feature
+     */
+    virtual bool current(ViewType &ref) = 0;
+
+
     class Null;
 
 protected:
@@ -60,6 +70,7 @@ template<typename ViewType>
 class IEventStream<ViewType>::Null: public IEventStream<ViewType> {
     virtual bool is_open() const {return false;}
     virtual void close() {}
+    virtual bool current(ViewType &) {return false;}
     virtual coro::awaitable<bool> read_internal(ViewType &, std::size_t &) {return false;};
 };
 
@@ -92,6 +103,8 @@ public:
     coro::awaitable<bool> next(T &val) {return _stream->next(val.view());}
     ///read next event, if available, and copy it to ref, also report count of missed events     
     coro::awaitable<bool> next(T &val, std::size_t &missed) {return _stream->next(val.view(), missed);}
+
+    bool current(T &val) {return _stream->current(val);}
    
 
 protected:

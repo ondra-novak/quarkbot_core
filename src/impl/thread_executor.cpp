@@ -34,10 +34,18 @@ namespace quarkbot {
         manage_lock_me();
         return r;
     }
-    void ThreadExecutor::cancel(coro::cancel_signal *cancel_signal) {
+    bool ThreadExecutor::cancel(coro::cancel_signal *cancel_signal) {
         coro::prepared_coro out;
-        std::scoped_lock _(_mx);
-        out = _scheduler.cancel(cancel_signal);
+        {
+            std::scoped_lock _(_mx);
+            out = _scheduler.cancel(cancel_signal);
+        } 
+        if (out) {
+            IExecutionWorker::resume(std::move(out));
+            return true;
+        } else {
+            return false;
+        }
     }
 
     void ThreadExecutor::start() {

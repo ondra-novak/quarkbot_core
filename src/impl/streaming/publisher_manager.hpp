@@ -75,10 +75,12 @@ namespace quarkbot {
             return true;            
         }
 
-        bool any_publisher(const InstrumentKey &instrument, const PAccount &account, StreamTypeItem::Type type) const {
-            std::scoped_lock _(_mx);
-            auto iter = _map.find(Key{instrument, account, type});
-            return _map.end() != iter;
+        bool any_publisher(const InstrumentKey &instrument, const PAccount &account, StreamTypeItem::Type type)  {
+            bool active = false;
+            enum_all_publishers(instrument, account, type, [&](const auto &, const auto &){
+                active = true;
+            });
+            return active;
         }
 
         template<std::invocable<> Factory>

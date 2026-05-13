@@ -185,7 +185,7 @@ public:
     constexpr Decimal(T val): Decimal(normalize(static_cast<int64_t>(val),mantissa_digits)) {}
     
 
-    Decimal(double value):Decimal(from_double(value)) {}
+    Decimal(double value):Decimal(from_double(value)) {}    
 
     static Decimal from_double(double value) {
         auto b =value < 0;

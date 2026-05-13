@@ -7,18 +7,21 @@ namespace quarkbot {
 namespace bitfinex {
 
 
-Exchange::Exchange(network::PSSL_CTX sslctx, PExecutionWorker worker)
-    :_stream_manager(std::make_shared<StreamManager>(sslctx,worker))
-    ,_instr_map(network::SecureRestClient(sslctx, "https://api-pub.bitfinex.com/v2"))
+Exchange::Exchange(NetworkContext sslctx, PExecutionWorker worker)
+    :_stream_manager(std::make_shared<StreamManager>(sslctx,worker))              
+    ,_instr_map(sslctx)
     ,_worker(worker) 
  {
 
 
  }
 
+ void Exchange::report_price(const std::string &id, Decimal price) {
+    _instr_map.report_price(id, price);
+ }
 
 std::unique_ptr<IEventStreamBase> Exchange::subscribe_market_stream(std::string symbol, StreamTypeItem::Type type, const StreamParams *params) {
-    return _stream_manager->subscribe(symbol, type, params);    
+    return _stream_manager->subscribe(symbol, type, params, weak_from_this());    
 }
 
 PAccount Exchange::create_account([[maybe_unused]]const std::string &name, [[maybe_unused]]const std::string &credentials) {

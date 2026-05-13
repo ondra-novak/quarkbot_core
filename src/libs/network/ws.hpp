@@ -14,7 +14,7 @@ using PWebSocketSecure = std::shared_ptr<WebsocketStream<StreamWrapper<SSLSocket
 
 PWebSocketSecure wss_connect(const PSSL_CTX &sslctx, 
         std::string_view wss_url, 
-        std::span<std::pair<std::string_view, std::string_view> > extra_headers, 
+        std::span<const std::pair<std::string_view, std::string_view> > extra_headers, 
         StreamConfiguration cfg);
         
 template<std::invocable<Message> Handler>

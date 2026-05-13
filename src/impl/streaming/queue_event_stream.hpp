@@ -55,6 +55,11 @@ public:
         }
     }
 
+
+    virtual bool current(T &) override {
+        return false; //queue doesn't support this function
+    }
+
     virtual coro::awaitable<bool> read_internal(T &ref, std::size_t &missed) override {
         std::scoped_lock _(_mx);
         if (!_q.empty()) {

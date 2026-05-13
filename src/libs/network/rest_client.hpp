@@ -83,6 +83,10 @@ public:
         _global_headers.add_header(key, value);
     }
 
+    constexpr void add_headers(std::span<const std::pair<std::string_view, std::string_view> > hdrs) {
+        _global_headers.add_headers(hdrs);
+    }
+
     constexpr Response send(std::string_view method, std::string_view path,
             std::span<const std::pair<std::string_view, std::string_view> > headers, 
             BodyDef body = BodyDef{{},{}}) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "exchanges/bitfinex/network_context.hpp"
 #include "libs/network/sslobjects.hpp"
 #include "libs/network/ws.hpp"
 #include "utils/json.hpp"
@@ -22,11 +23,12 @@ namespace bitfinex {
             ok, full, closed, closing
         };
 
-        PublicStream(network::PSSL_CTX ctx);
+        PublicStream(NetworkContext ctx);
         ~PublicStream();
 
         State subscribe_ticker(std::string symbol, Callback callback);
         State subscribe_trades(std::string symbol, Callback callback);        
+        State subscribe_orderbook(std::string symbol, Callback callback);
 
         class Exception: public std::runtime_error {
         public:
@@ -45,8 +47,13 @@ namespace bitfinex {
 
     protected:
 
+        struct AwaitingReg {
+            Callback cb;
+            std::promise<void> prom = {};
+        };
+
         using Callback_Map =  std::unordered_map<int, Callback>;
-        network::PSSL_CTX _sslctx;        
+        NetworkContext _sslctx;        
         std::thread _thr;
         std::stop_source _stpsrc;
         network::PWebSocketSecure _ws;
@@ -55,11 +62,11 @@ namespace bitfinex {
         Callback_Map _callbacks;        
         bool _closed = false;
         bool _closing = false;
-        std::atomic<std::promise<int> *>subscribe_promise = {};
+        std::atomic<AwaitingReg *> pending_subscribe = {};
         void worker(std::stop_token tkn);        
 
         State open();
-        int send_request(Json req, std::unique_lock<std::mutex> &lk);
+        void send_request(Json req, std::unique_lock<std::mutex> &lk, Callback cb);
         void cleanup();
 
 

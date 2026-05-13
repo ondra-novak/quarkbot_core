@@ -68,7 +68,7 @@ public:
         _manager.enum_all_publishers(_instrument, {}, OrderBook<1>::type, 
             [&](const StreamParams *, const PublisherManager<InstrumentType>::PPublisher &pub){
                 SnapshotPublisher &p = static_cast<SnapshotPublisher &>(*pub);
-                OrderBookView view(_bids[_bank],_asks[_bank], &_tp[_bank]);
+                OrderBookView view(_bids[_bank],_asks[_bank], _tp[_bank]);
                 p.write([&](OrderBookView &v)noexcept{
                     v = view;
                     return true;

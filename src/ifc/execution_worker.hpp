@@ -18,7 +18,7 @@ public:
     virtual ~IExecutionWorker() = default;
 
     virtual void resume(std::coroutine_handle<> h) noexcept = 0;
-    void resume(coro::prepared_coro h) {resume(h.release());}
+    void resume(coro::prepared_coro h) {if (h) resume(h.release());}
     ///Run a coroutine in this executable worker
     /**
         The coroutine runs in new worker detached from current worker
@@ -96,7 +96,7 @@ public:
 
      * @param cancel_signal alert flag used to identify sleeping awaitables
      */
-    virtual void cancel(coro::cancel_signal *cancel_signal) = 0;
+    virtual bool cancel(coro::cancel_signal *cancel_signal) = 0;
     
 protected:
 

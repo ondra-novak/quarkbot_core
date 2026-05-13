@@ -12,7 +12,7 @@ namespace quarkbot {
 
 namespace bitfinex {
 
-PublicStream::PublicStream(network::PSSL_CTX ctx):_sslctx(std::move(ctx)) {
+PublicStream::PublicStream(NetworkContext ctx):_sslctx(std::move(ctx)) {
 
 }
 
@@ -22,7 +22,7 @@ PublicStream::State PublicStream::open() {
     if (_closed) return closed;
     if ( _callbacks.size() > 25) return full;
     if (_ws == nullptr) {
-        _ws = network::wss_connect(_sslctx, "wss://api-pub.bitfinex.com/ws/2", {}, {});        
+        _ws = _sslctx.create_public_websocket();
         _thr = std::thread([&]{
             worker(_stpsrc.get_token());
         });
@@ -41,13 +41,11 @@ PublicStream::State PublicStream::subscribe_ticker(std::string symbol, Callback 
         {"channel","ticker"},
         {"symbol", symbol}
     };
-    int channel = send_request(std::move(req), lk);
-    _callbacks.emplace(channel, std::move(callback));
+    send_request(std::move(req), lk, std::move(callback));    
     return st;
 
-
-
 }
+
 PublicStream::State PublicStream::subscribe_trades(std::string symbol, Callback callback){
     std::scoped_lock _(_submx);
     std::unique_lock  lk(_mx);
@@ -58,21 +56,36 @@ PublicStream::State PublicStream::subscribe_trades(std::string symbol, Callback 
         {"channel","trades"},
         {"symbol", symbol}
     };
-    int channel = send_request(std::move(req), lk);
-    _callbacks.emplace(channel, std::move(callback));
+    send_request(std::move(req), lk, std::move(callback));    
     return st;
-
 }
 
-int PublicStream::send_request(Json req, std::unique_lock<std::mutex> &lk) {
-    std::promise<int> result;
-    subscribe_promise = &result;
+PublicStream::State PublicStream::subscribe_orderbook(std::string symbol, Callback callback){
+    std::scoped_lock _(_submx);
+    std::unique_lock  lk(_mx);
+    State st = open();
+    if (st!=ok) return st;
+    Json req = {
+        {"event","subscribe"},
+        {"channel","bookl"},
+        {"symbol", symbol},
+        {"prec","R0"}
+    };
+    send_request(std::move(req), lk, std::move(callback));    
+    return st;
+}
+
+
+void PublicStream::send_request(Json req, std::unique_lock<std::mutex> &lk, Callback cb) {
+    AwaitingReg result{std::move(cb)};
+    
+    pending_subscribe = &result;
     _ws->send({network::FrameType::text,req.to_string()});
-    auto f = result.get_future();
+    auto f = result.prom.get_future();
     lk.unlock();
-    int res = f.get(); //TODO consider timeout
+    f.wait(); //TODO consider timeout
     lk.lock();
-    return res;
+    
 }
 
 void PublicStream::worker(std::stop_token tkn) {
@@ -92,16 +105,19 @@ void PublicStream::worker(std::stop_token tkn) {
                     auto event = jmsg["event"];
                     if (event.is_string()) {
                         if (event.as_text() == "subscribed") {
-                            auto p = subscribe_promise.exchange(nullptr);
+                            auto p = pending_subscribe.exchange(nullptr);
                             if (p) {
-                                p->set_value(jmsg["chanId"].as_int());
+                                std::scoped_lock _(_mx);
+                                int chan = jmsg["chanId"].as_int();
+                                _callbacks[chan] = std::move(p->cb);
+                                p->prom.set_value();   
                             }
                         }
                         else if (event.as_text() == "error") {
-                            auto p = subscribe_promise.exchange(nullptr);
+                            auto p = pending_subscribe.exchange(nullptr);
                             if (p) {
-                                p->set_exception(std::make_exception_ptr(Exception(jmsg["code"].as_int(), jmsg["msg"].as<std::string>())));
-                            }
+                                p->prom.set_exception(std::make_exception_ptr(Exception(jmsg["code"].as_int(), jmsg["msg"].as<std::string>())));
+                            }                        
                         }
                     }
                 } else if (jmsg.is_array()) {
@@ -116,7 +132,9 @@ void PublicStream::worker(std::stop_token tkn) {
                     if (cb) {
                         try {
                             keep = (*cb)(std::move(jmsg));
-                            if (tkn.stop_requested()) return;
+                            if (tkn.stop_requested()) {
+                                return;
+                            }
                         } catch (...) {
                             keep = false;
                         }

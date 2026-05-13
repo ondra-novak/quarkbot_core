@@ -152,6 +152,11 @@ namespace network {
             append_nl();
         }
 
+        constexpr void add_headers(std::span<const std::pair<std::string_view, std::string_view> > hdrs) {
+            for (auto &[k,v]: hdrs) add_header(k,v);
+        }
+    
+
         constexpr void add_header(std::string_view key, std::size_t value) {
             append_text(key);
             append_text(": ");

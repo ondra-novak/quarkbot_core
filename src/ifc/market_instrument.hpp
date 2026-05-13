@@ -156,10 +156,10 @@ static_assert(HasStreamParams<ClosedBarInterval<300> >);
 struct OrderBookView {
     std::span<OrderBookLevel> bids = {};
     std::span<OrderBookLevel> asks = {};
-     std::chrono::system_clock::time_point *time = nullptr;
+    std::chrono::system_clock::time_point time;
 
     OrderBookView() = default;
-    OrderBookView(std::span<OrderBookLevel> bids,std::span<OrderBookLevel> asks,std::chrono::system_clock::time_point *time)
+    OrderBookView(std::span<OrderBookLevel> bids,std::span<OrderBookLevel> asks,std::chrono::system_clock::time_point time)
         :bids(bids),asks(asks),time(time) {}
 
     OrderBookView &operator=(const OrderBookView &other) noexcept{
@@ -168,7 +168,7 @@ struct OrderBookView {
             auto dasks = std::min(asks.size(), other.asks.size());
             std::copy_n(other.bids.begin(), dbids, bids.begin());
             std::copy_n(other.asks.begin(), dasks, asks.begin());
-            if (time && other.time) *time = *other.time;
+            time = other.time;
         }        
         return *this;
     }
@@ -206,15 +206,23 @@ struct TradeCounter : public MarketInstrumentStreamTypeItem {
 
 struct PeriodicSnapshotView : public Quote{
 public:    
+    static constexpr Type type = "periodic_snapshot";
     Decimal last_price;
     PeriodicSnapshotView &view() {return *this;}
-    using ParamType =  StreamDoubleParam<unsigned int, int>;
+    using ParamType =  StreamSingleParam<unsigned int>;
 };
 
-template<unsigned interval, int offset = 0>
+///Stream with snapshot
+/**
+    The stream produces value in specified interval . The adapter chooses the best approach to obtain these values.
+    For short periods, it can subscribe a stream
+    For long periords, it can use REST request for ticker value
+    
+ */
+template<unsigned interval>
 requires(interval >= 1)
 struct PeriodicSnapshot : PeriodicSnapshotView{
-    constexpr static auto params =ParamType{{},interval, offset};
+    constexpr static auto params =ParamType{{},interval};
 };
 
 ///Stream is updated when some informations about instrument changed
