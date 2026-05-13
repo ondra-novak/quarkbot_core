@@ -6,17 +6,13 @@
 #include "exchanges/bitfinex/network_context.hpp"
 #include "exchanges/bitfinex/public_stream.hpp"
 #include "impl/streaming/lock_free_publisher.hpp"
-#include "impl/streaming/publisher_manager.hpp"
-#include "libs/network/sslobjects.hpp"
 #include "ifc/market_instrument.hpp"
 #include "ifc/stream_defs.hpp"
 #include "ifc/streaming.hpp"
 #include "utils/hashable.hpp"
 #include <chrono>
-#include <coroutine>
 #include <memory>
 #include <unordered_map>
-#include <unordered_set>
 namespace quarkbot {
 namespace bitfinex{
 
@@ -41,7 +37,15 @@ namespace bitfinex{
             std::array<OrderBookLevel, 25> _bids;
             std::array<OrderBookLevel, 25> _asks;  
             std::chrono::system_clock::time_point _tp;          
-            operator OrderBookView() {
+
+            constexpr OrderbookSnapshot() {
+                for (auto &x: _asks) {
+                    x.price = Decimal::max();
+                    x.size = 0;
+                }
+            }
+
+            operator OrderBookView() noexcept {
                 return OrderBookView(_bids, _asks, _tp);
             }
         };
@@ -50,25 +54,48 @@ namespace bitfinex{
         using QuoteStream = LockFreePublisher<Quote, 1>;
         using TradeCounterStream = LockFreePublisher<TradeCounter, 1>;
         using CloseBarStream = LockFreePublisher<TradeCounter, 1>;
-        using OrderBookStream = LockFreePublisher<OrderBookView, 1>;
         using PeriodicSnapshotStream = LockFreePublisher<PeriodicSnapshotView, 1>;
+        class OrderBookStream : public LockFreePublisher<OrderbookSnapshot, 1> {
+        public:
+            OrderBookStream():LockFreePublisher<OrderbookSnapshot, 1>(
+                [](std::shared_ptr<PublisherBase> this_shared) -> std::unique_ptr<IEventStreamBase> {
+                    auto me = std::static_pointer_cast<OrderBookStream>(this_shared);
+                    return std::make_unique<StreamSubscriber<OrderBookView, OrderBookStream> >(me);
+                }) {}
+        };
 
     protected:
+
+        using TradeStreamMap = std::unordered_map<std::string, std::weak_ptr<TradeStream> >;
+        using QuoteStreamMap = std::unordered_map<std::string, std::weak_ptr<QuoteStream> >;
+        using TradeCounterStreamMap = std::unordered_map<std::string, std::weak_ptr<TradeCounterStream> >;
+        using CloseBarStreamMap = std::unordered_map<std::string, std::weak_ptr<CloseBarStream> >;
+        using OrderBookStreamMap = std::unordered_map<std::string, std::weak_ptr<OrderBookStream> >;
+        using PeriodicSnapshotStreamMap = std::unordered_map<std::string, std::weak_ptr<PeriodicSnapshotStream> >;
+
+        TradeStreamMap  _mapTradeStream;
+        QuoteStreamMap  _mapQuoteStream;
+        TradeCounterStreamMap  _mapTradeCounterStream;
+        CloseBarStreamMap  _mapCloseBarStream;
+        OrderBookStreamMap  _mapOrderBookStream;
+        PeriodicSnapshotStreamMap  _mapPeriodicSnapshotStream;
+
+        template<typename T>
+        auto create_subscriber(T &map, const std::string &symbol);
+        template<typename ... Map>
+        auto find_streams(const std::string &symbol, Map &... maps);
+        
+
+
         enum class StreamType {
             trades,
-            ticker
+            ticker,
+            orderbook
         };
 
-        struct StreamRegKey {
-            std::string instrument;
-            StreamType type;
+        bool is_stream_active(const std::string &id, StreamType type) const;
+        void subscribe_public_stream_if_needed(const std::string &id, StreamType type, std::weak_ptr<IPriceReport> rpt = {});
 
-            bool operator==(const StreamRegKey &other) const = default;
-            std::size_t get_hash() const {
-                Hasher<std::string> h;
-                return h(instrument)+static_cast<std::size_t>(type);
-            }
-        };
 
         struct PeriodicStreamRegKey {
             std::string instrument;
@@ -94,8 +121,6 @@ namespace bitfinex{
         std::vector<std::unique_ptr<PublicStream> > _streams;
         NetworkContext _sslctx;
         PExecutionWorker _worker;
-        PublisherManager<std::string> _manager;
-        std::unordered_set<StreamRegKey, Hasher<StreamRegKey> > _active_subscribtions;
         std::unordered_map<PeriodicStreamRegKey,PeriodicStreamRegVal, Hasher<PeriodicStreamRegKey> > _active_periodic_subscriptions;        
         PBulkRestTicket _bulk_rest_ticker = {};
 
@@ -129,9 +154,8 @@ namespace bitfinex{
         };
         void subscribe_trades_if_needed(const std::string &symbol, std::weak_ptr<IPriceReport> reporter);
         void subscribe_ticker_if_needed(const std::string &symbol);
+        void subscribe_orderbook_if_needed(const std::string &symbol);
         
-        template<typename ... Map>
-        auto find_streams(const std::string &symbol, Map &... maps);
 
         void subscribe_to_scream_bgr(std::function<PublicStream::State(PublicStream &)> fn);
         std::shared_ptr<PeriodicSnapshotStream> retrieve_periodic_stream(const std::string &id, unsigned int period);                

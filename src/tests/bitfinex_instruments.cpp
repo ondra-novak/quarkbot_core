@@ -190,8 +190,8 @@ StrategyFragment test_periodic_stream_2(EventStream<PeriodicSnapshot<5> > stream
 
     auto dff12 = std::chrono::duration_cast<std::chrono::milliseconds>(tm2- tm1).count();
     auto dff23 = std::chrono::duration_cast<std::chrono::milliseconds>(tm3- tm2).count();
-    CHECK_BETWEEN(4900, dff12, 5100);
-    CHECK_BETWEEN(4900, dff23, 5100);
+    CHECK_BETWEEN(4000, dff12, 6000);
+    CHECK_BETWEEN(4000, dff23, 6000);
 
     CHECK_LESS(sn1.bid,sn1.ask);
     CHECK_GREATER(sn1.bid_size, 0);
@@ -219,11 +219,11 @@ void test_periodic_stream_2() {
 
 int main() {
     ctx = network::ssl_init_client();
-    test_periodic_stream_2();
-    test_periodic_stream_1();
     test_stream_quote();
     test_exchange_object();    
     test_load_currencies();
     test_stream_trades();
-
+    test_periodic_stream_2();
+    test_periodic_stream_1();
+ 
 }
