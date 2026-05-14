@@ -6,13 +6,14 @@
 #include "types.hpp"
 #include "ifc/streaming.hpp"
 #include "utils/decimal.hpp"
+#include <chrono>
 #include <memory>
 namespace quarkbot {
 
 
 
 
-class IMarketInstrument {
+class IMarketInstrument : public IPublisher<MarketInstrumentStreamTypeItem>{
 public:
     struct Info : ContractInfo {
         Decimal min_lot_size = {};
@@ -51,9 +52,6 @@ public:
     virtual PExchange get_exchange() const = 0;
 
     virtual const Info &get_info() const = 0;
-
-    ///Internal
-    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) = 0;
     
     ///Create tradable instrument from the instrument
     /**
@@ -61,14 +59,6 @@ public:
       @return reference to tradable instrument, can be nullptr if not available for trading with this account
      */
     virtual awaitable<PTradableInstrument> create_tradable_instrument(PAccount account) = 0;
-
-    ///Subscribe market event stream
-    template<StreamType<MarketInstrumentStreamTypeItem> T>
-    EventStream<T> subscribe() {
-        auto x =  subscribe_stream_internal(T::type, stream_params<T>);
-        if (x) return EventStream<T>(std::move(x));
-        else return EventStream<T>();
-    }
 
 };
 
@@ -138,20 +128,57 @@ struct ClosedBar  {
     ClosedBar &view() {return *this;}
     static constexpr MarketInstrumentStreamTypeItem::Type type = "closed_bar";
     using ParamType =  StreamSingleParam<unsigned int>;
+    static std::size_t to_interval_index(std::chrono::system_clock::time_point tp, unsigned int interval_sec) {
+        return static_cast<std::size_t>(std::chrono::system_clock::to_time_t(tp)/interval_sec);
+    }
 };
 
 template<unsigned int _interval_sec>
 struct ClosedBarInterval: ClosedBar, MarketInstrumentStreamTypeItem{
     constexpr static auto params =ParamType {{},_interval_sec};
     std::chrono::system_clock::time_point interval_begin() const {
-        return std::chrono::system_clock::time_point(std::chrono::seconds(interval_index * _interval_sec));
+        return std::chrono::system_clock::from_time_t(static_cast<time_t>(interval_index * _interval_sec));        
     }
     std::chrono::system_clock::time_point interval_end() const {
-        return std::chrono::system_clock::time_point(std::chrono::seconds(interval_index * (_interval_sec+1)));
+        return std::chrono::system_clock::from_time_t(static_cast<time_t>(interval_index * _interval_sec+1));
     }
 };
 
-static_assert(HasStreamParams<ClosedBarInterval<300> >);
+struct DecimalRange {
+    uint64_t encoded;
+    constexpr DecimalRange(Decimal val):encoded(std::bit_cast<uint64_t>(val)) {}
+    constexpr Decimal as_decimal() const {return std::bit_cast<Decimal>(encoded);  }
+};
+
+struct RangeBarView: MarketInstrumentStreamTypeItem {
+    static constexpr MarketInstrumentStreamTypeItem::Type type = "ranged_bar";
+    using ParamType =  StreamSingleParam<Decimal>;
+    Decimal open = 0;
+    Decimal high = 0;
+    Decimal low = 0;
+    Decimal close = 0;
+    Decimal volume = 0; //volume is optional, if not available, it is set to zero
+
+    /**
+    gap indication. This indicates, that current tick was too far from the previous, 
+    which would otherwise create virtual candles. As the virtual candles creation 
+    isn't  supported. reader should create them by own if they need them.
+
+    When gap is true, (close - high) or (low - close) is larger than specified range.
+    The actual value of close is (last - range) or (last + range) (depends on direction)
+    The new candle is opened 
+     */
+    bool gap = false; 
+    RangeBarView &view() {return *this;}
+    std::chrono::system_clock::time_point open_tp = {};
+    std::chrono::system_clock::time_point close_tp = {};
+};
+
+template<DecimalRange range>
+struct RangedBar : RangeBarView {
+    constexpr static auto params = ParamType{{}, range.as_decimal()};
+};
+
 
 struct OrderBookView {
     std::span<OrderBookLevel> bids = {};

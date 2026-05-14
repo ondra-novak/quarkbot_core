@@ -14,7 +14,7 @@ namespace quarkbot {
 
 
 
-class ITradableInstrument {
+class ITradableInstrument: public IPublisher<TradableInstrumentStreamTypeItem> {
 public:
     virtual ~ITradableInstrument() = default;
 
@@ -64,18 +64,6 @@ public:
 
     ///converts tradable instrument into market instrument
     virtual PMarketInstrument get_instrument() const = 0;
-
-    ///Internal
-    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) = 0;
-
-
-    ///Subscribe account event stream
-    template<StreamType<TradableInstrumentStreamTypeItem> T>
-    EventStream<T> subscribe() {
-        auto x =  subscribe_stream_internal(T::type, stream_params<T>);
-        if (x) return EventStream<T>(std::move(x));
-        else return EventStream<T>();
-    }
 
     
     const IMarketInstrument::Info &get_info() const {

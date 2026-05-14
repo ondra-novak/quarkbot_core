@@ -31,7 +31,9 @@ bool StreamManager::is_stream_active(const std::string &id, StreamType type) con
                 || _mapPeriodicSnapshotStream.find(id) != _mapPeriodicSnapshotStream.end();
         case StreamType::trades:
             return _mapTradeStream.find(id) != _mapTradeStream.end()
-                || _mapTradeCounterStream.find(id) != _mapTradeCounterStream.end();
+                || _mapTradeCounterStream.find(id) != _mapTradeCounterStream.end()
+                || _mapCloseBarStream.find(id) != _mapCloseBarStream.end()
+                || _mapRangeBarStream.find(id) != _mapRangeBarStream.end();
     }
 }
 
@@ -55,22 +57,22 @@ void StreamManager::subscribe_public_stream_if_needed(const std::string &symbol,
             fn = [=,this](PublicStream &s){
                 return s.subscribe_trades(tsymbol,TradeParser{this, symbol, std::move(rpt)});
             };
-            break;                        
+            break;                                
         default:
             return;
     }
     subscribe_to_scream_bgr(std::move(fn));;
 }
 
-template<typename T>
-auto StreamManager::create_subscriber(T &map, const std::string &symbol) {
+template<typename T, typename ... Args>
+auto StreamManager::create_subscriber(T &map, const std::string &symbol, Args && ... args) {
     auto &ref = map[symbol];
     auto pub = ref.lock();
     if (!pub) {
         pub = std::make_shared<typename T::mapped_type::element_type>();
         ref = pub;
     }
-    return pub->create_subscriber(pub);
+    return pub->create_subscriber(pub, std::forward<Args>(args)...);
 }
 
 
@@ -98,6 +100,16 @@ std::unique_ptr<IEventStreamBase> StreamManager::subscribe(std::string symbol, S
     else if (type == OrderBook<25>::type) {
         subscribe_public_stream_if_needed(symbol, StreamType::orderbook);
         out = create_subscriber(_mapOrderBookStream, symbol);
+    }
+    else if (type == ClosedBar::type) {
+        subscribe_public_stream_if_needed(symbol, StreamType::trades);
+        unsigned int param = static_cast<const ClosedBar::ParamType *>(params)->param;
+        out = create_subscriber(_mapCloseBarStream, symbol, param);
+    }
+    else if (type == RangeBarView::type) {
+        subscribe_public_stream_if_needed(symbol, StreamType::trades);
+        Decimal param = static_cast<const RangeBarView::ParamType *>(params)->param;
+        out = create_subscriber(_mapRangeBarStream, symbol, param);
     }
     return out;
 }
@@ -155,8 +167,10 @@ auto StreamManager::find_streams(const std::string &symbol, Map &... maps) {
 
 bool  StreamManager::TradeParser::operator()(const Json message) {
 
-    auto [ts, tc] = owner->find_streams(symbol, owner->_mapTradeStream, owner->_mapTradeCounterStream);
-    bool active = ts || tc;
+    auto [ts, tc, cb, rb] = owner->find_streams(symbol, owner->_mapTradeStream, 
+                owner->_mapTradeCounterStream, owner->_mapCloseBarStream, 
+                owner->_mapRangeBarStream);
+    bool active = ts || tc || cb || rb;
     if (message.is_null()) {        
         if (active) {
             std::scoped_lock _(owner->_mx);
@@ -172,8 +186,10 @@ bool  StreamManager::TradeParser::operator()(const Json message) {
         auto amn = Decimal::from_string(data[2].as_text());
         Side side = amn < 0?Side::sell:Side::buy;
         auto size = abs(amn);
-        auto price = Decimal::from_string(data[3].as_text());
+        auto price = Decimal::from_string(data[3].as_text());        
         if (ts) ts->publish(Trade{{},price,size, mts, side});
+        if (cb) cb->publish(Trade{{},price,size, mts, side});
+        if (rb) rb->publish(Trade{{},price,size, mts, side});
         if (tc) {
             TradeCounter cntr = {};
             auto s = tc->get_top_seq();
@@ -476,6 +492,9 @@ bool StreamManager::OrderbookParser::operator()(const Json message) {
     return active;
   
 }
+
+    
+
 
 
 }

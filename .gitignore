@@ -10,3 +10,5 @@
 /secret
 /.worktrees
 /.vscode
+/.claude
+/.clangd

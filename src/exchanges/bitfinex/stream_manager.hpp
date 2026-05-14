@@ -5,6 +5,8 @@
 #include "exchanges/bitfinex/iprice_report.hpp"
 #include "exchanges/bitfinex/network_context.hpp"
 #include "exchanges/bitfinex/public_stream.hpp"
+#include "exchanges/bitfinex/stream_helpers.hpp"
+#include "exchanges/multipublisher.hpp"
 #include "impl/streaming/lock_free_publisher.hpp"
 #include "ifc/market_instrument.hpp"
 #include "ifc/stream_defs.hpp"
@@ -50,10 +52,10 @@ namespace bitfinex{
             }
         };
 
+
         using TradeStream = LockFreePublisher<Trade, 1>;
         using QuoteStream = LockFreePublisher<Quote, 1>;
         using TradeCounterStream = LockFreePublisher<TradeCounter, 1>;
-        using CloseBarStream = LockFreePublisher<TradeCounter, 1>;
         using PeriodicSnapshotStream = LockFreePublisher<PeriodicSnapshotView, 1>;
         class OrderBookStream : public LockFreePublisher<OrderbookSnapshot, 1> {
         public:
@@ -63,6 +65,8 @@ namespace bitfinex{
                     return std::make_unique<StreamSubscriber<OrderBookView, OrderBookStream> >(me);
                 }) {}
         };
+        using CloseBarStream = Multipublisher<Trade, LockFreePublisher<ClosedBar, 1>, ClosedBarCalc, unsigned int>;
+        using RangeBarStream = Multipublisher<Trade, LockFreePublisher<RangeBarView, 1>, RangeBarCalc, Decimal>;
 
     protected:
 
@@ -70,6 +74,7 @@ namespace bitfinex{
         using QuoteStreamMap = std::unordered_map<std::string, std::weak_ptr<QuoteStream> >;
         using TradeCounterStreamMap = std::unordered_map<std::string, std::weak_ptr<TradeCounterStream> >;
         using CloseBarStreamMap = std::unordered_map<std::string, std::weak_ptr<CloseBarStream> >;
+        using RangeBarStreamMap = std::unordered_map<std::string, std::weak_ptr<RangeBarStream> >;
         using OrderBookStreamMap = std::unordered_map<std::string, std::weak_ptr<OrderBookStream> >;
         using PeriodicSnapshotStreamMap = std::unordered_map<std::string, std::weak_ptr<PeriodicSnapshotStream> >;
 
@@ -77,11 +82,12 @@ namespace bitfinex{
         QuoteStreamMap  _mapQuoteStream;
         TradeCounterStreamMap  _mapTradeCounterStream;
         CloseBarStreamMap  _mapCloseBarStream;
+        RangeBarStreamMap  _mapRangeBarStream;
         OrderBookStreamMap  _mapOrderBookStream;
         PeriodicSnapshotStreamMap  _mapPeriodicSnapshotStream;
 
-        template<typename T>
-        auto create_subscriber(T &map, const std::string &symbol);
+        template<typename T, typename ... Args>
+        auto create_subscriber(T &map, const std::string &symbol, Args && ... args);
         template<typename ... Map>
         auto find_streams(const std::string &symbol, Map &... maps);
         

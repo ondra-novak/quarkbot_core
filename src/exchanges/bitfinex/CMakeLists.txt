@@ -5,5 +5,6 @@ exchange.cpp
     instrument.cpp
     public_stream.hpp
     public_stream.cpp
-    stream_manager.cpp)
+    stream_manager.cpp
+    stream_helpers.cpp)
 target_link_libraries(quarkbot_bitfinex PRIVATE quarkbot_network  quarkbot_impl quarkbot_ifc)

@@ -113,5 +113,23 @@ protected:
 };
 
 
+template<typename StreamTypeClass = StreamTypeItem>
+class IPublisher {
+protected:
+
+    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) = 0;
+
+public:
+
+    virtual ~IPublisher() = default;
+
+    template<StreamType<StreamTypeClass> T>
+    EventStream<T> subscribe() {
+        auto x =  subscribe_stream_internal(T::type, stream_params<T>);
+        if (x) return EventStream<T>(std::move(x));
+        else return EventStream<T>();
+    }
+};
+
 
 }
