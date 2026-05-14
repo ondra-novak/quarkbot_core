@@ -33,6 +33,11 @@ namespace quarkbot {
             });
         }
 
+        //retrieve reference to top value, useful only for publisher to apply incrmeents
+        const ViewType &get_top_value_ref() const {
+            return _queue.get_top_value_ref();
+        }
+
         template<typename X>
         requires(std::is_nothrow_assignable_v<X, ViewType>)
         bool read(X &target, Seq &seq) {

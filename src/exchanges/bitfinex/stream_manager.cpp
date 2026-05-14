@@ -9,6 +9,7 @@
 #include "market_instrument.hpp"
 #include "stream_defs.hpp"
 #include "streaming.hpp"
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <memory>
@@ -374,6 +375,30 @@ awaitable<PeriodicSnapshotView> StreamManager::request_ticker(std::shared_ptr<St
 
 }
  
+
+bool StreamManager::order_bids(const OrderBookLevel &a, const OrderBookLevel &b) {
+    return a.price > b.price;
+}
+bool StreamManager::order_asks(const OrderBookLevel &a, const OrderBookLevel &b) {
+    return a.price < b.price;
+}
+
+
+static void copy_and_insert(auto beg, auto end, auto out, auto val, auto cmp) {
+    while (beg != end && cmp(*beg, val)) {
+        *out++ = *beg++;
+    }
+    if (beg != end) {
+        *out++  = val;
+        if (!cmp(val, *beg)) {
+            ++beg;
+        } else {
+            --end;
+        }
+        std::copy(beg, end, out);
+    }
+}
+
 bool StreamManager::OrderbookParser::operator()(const Json message) {
     auto [ob] = owner->find_streams(symbol, owner->_mapOrderBookStream);
     bool active = !!ob;
@@ -386,27 +411,72 @@ bool StreamManager::OrderbookParser::operator()(const Json message) {
         Json data = message[1];
         if (!data.is_array()) return active;
         if (data[0].is_array()) { 
-            //snapshot
+            OrderbookSnapshot snap;
+            auto ibid = snap._bids.begin();
+            auto iask = snap._asks.begin();
             for (const auto &x: data[0].as_array()) {
                 Decimal price = Decimal::from_string(x[1].as_text());
                 Decimal size = Decimal::from_string(x[2].as_text());
-                apply_increment(price, size);
+                if (size > 0) {
+                    if (ibid != snap._bids.end()) {
+                        ibid->price = price;
+                        ibid->size = size;
+                        ++ibid;
+                    }
+                } else if (size < 0) {
+                    if (iask != snap._asks.end()) {
+                        iask->price = price;
+                        iask->size = -size;
+                        ++iask;
+                    }
+                }
             }
+            while (iask != snap._asks.end()) {
+                iask->price = Decimal::max();
+                iask->size = 0;
+                ++iask;
+            }
+            while (ibid != snap._bids.end()) {
+                ibid->price = 0;
+                ibid->size = 0;
+                ++ibid;
+            }
+            std::sort(snap._bids.begin(), snap._bids.end(), order_bids);
+            std::sort(snap._asks.begin(), snap._asks.end(), order_asks);
+            ob->publish(snap);
         } else{
             Decimal price = Decimal::from_string(data[1].as_text());
             Decimal size = Decimal::from_string(data[2].as_text());
-            apply_increment(price, size);
-
+            auto &top = ob->get_top_value_ref();
+            ob->write([&](OrderbookSnapshot &new_snapshot)noexcept->bool{
+                if (size > 0) {
+                    OrderBookLevel newlev{price,size};
+                    std::copy(top._asks.begin(), top._asks.end(), new_snapshot._asks.begin());
+                    copy_and_insert(top._bids.begin(), top._bids.end(), new_snapshot._bids.begin(), newlev, order_bids);
+                } else if (size < 0) {
+                    OrderBookLevel newlev{price,-size};
+                    std::copy(top._bids.begin(), top._bids.end(), new_snapshot._bids.begin());
+                    copy_and_insert(top._asks.begin(), top._asks.end(), new_snapshot._asks.begin(), newlev, order_asks);
+                } else {
+                    auto biter = std::copy_if(top._bids.begin(), top._bids.begin(), new_snapshot._bids.begin(),
+                        [&](const OrderBookLevel &a){return a.price != price;});
+                    auto aiter = std::copy_if(top._asks.begin(), top._asks.begin(), new_snapshot._asks.begin(),
+                        [&](const OrderBookLevel &a){return a.price != price;});
+                    while (biter != new_snapshot._bids.end()) {
+                        *biter++ = OrderBookLevel{0,0};
+                    }
+                    while (aiter != new_snapshot._asks.end()) {
+                        *aiter++ = OrderBookLevel{Decimal::max(),0};
+                    }
+                }
+                return true;
+            });
         }
-        //todo
     }
     return active;
   
 }
 
-void StreamManager::OrderbookParser::apply_increment(Decimal price, Decimal size) {
-    //todo
-}
 
 }
 }

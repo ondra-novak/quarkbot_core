@@ -150,7 +150,6 @@ namespace bitfinex{
             StreamManager *owner;            
             std::string symbol;
             bool operator()(const Json message);
-            void apply_increment(Decimal price, Decimal size);
         };
         void subscribe_trades_if_needed(const std::string &symbol, std::weak_ptr<IPriceReport> reporter);
         void subscribe_ticker_if_needed(const std::string &symbol);
@@ -166,6 +165,9 @@ namespace bitfinex{
                     unsigned int interval,
                     PeriodicStreamRegVal &reg                    
                 );
+
+        static bool order_bids(const OrderBookLevel &a, const OrderBookLevel &b);
+        static bool order_asks(const OrderBookLevel &a, const OrderBookLevel &b);
     };
 
 }

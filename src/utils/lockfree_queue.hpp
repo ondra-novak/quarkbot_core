@@ -43,6 +43,14 @@ public:
         return _cur_seq.load(std::memory_order_relaxed);
     }
 
+    ///retrieve top value, useful only for publisher to apply increments
+    const T &get_top_value_ref() const {
+        auto s = _cur_seq.load(std::memory_order_relaxed)-1;
+        auto idx = s % nitems;
+        return _queue[idx];
+
+    }
+
 protected:
 
     static constexpr auto nitems = count+reserved;
