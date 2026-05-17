@@ -15,8 +15,15 @@ namespace bitfinex {
             ,_nonce(static_cast<std::uint64_t>(std::chrono::system_clock::to_time_t(
                     std::chrono::system_clock::now()) - 1778762645L)) {}
 
+        Signer(Signer &&other)
+                :_api_key(std::move(other._api_key))
+                ,_secret(std::move(other._secret))
+                ,_nonce(other._nonce.load(std::memory_order_relaxed)) {
+                    other._nonce.store(0, std::memory_order_relaxed);
+                }
+                
         struct RequestSigned {
-            std::string sign_text;
+            std::string signature;
             std::uint64_t nonce;
         };
         struct ChannelSigned: RequestSigned {

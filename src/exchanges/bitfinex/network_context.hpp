@@ -27,6 +27,9 @@ namespace bitfinex {
         network::PWebSocketSecure create_public_websocket() {
             return  network::wss_connect(_sslctx, "wss://api-pub.bitfinex.com/ws/2", static_headers, {});        
         }
+        network::PWebSocketSecure create_auth_websocket() {
+            return  network::wss_connect(_sslctx, "wss://api.bitfinex.com/ws/2", static_headers, {});        
+        }
 
     protected:
         network::PSSL_CTX _sslctx;

@@ -15,6 +15,8 @@ add_library(quarkbot_impl
     leveldb_storage.cpp
     thread_executor.hpp
     thread_executor.cpp
+    logger.cpp
+    logger.hpp
 )
 
 target_link_libraries(quarkbot_impl

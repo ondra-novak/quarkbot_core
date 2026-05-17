@@ -89,10 +89,6 @@ public:
         return iter->second;
     }
 
-     awaitable<Position> get_position(PMarketInstrument) override {
-        return Position{};   //todo implement later, but not required for simulator
-     }
-
 protected:    
     std::string _name;
     std::unordered_map<std::string, WalletInfoExt> _wallet;

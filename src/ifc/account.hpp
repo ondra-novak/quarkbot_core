@@ -50,9 +50,6 @@ public:
         @retval false transfer
     */  
     virtual awaitable<bool> transfer(UnderlyingCurrency currency, PAccount to_account, Decimal amount)  = 0;
-
-    ///Retrive current position on given market instrument
-    virtual awaitable<Position> get_position(PMarketInstrument instrument) = 0;
 };  
 
 

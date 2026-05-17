@@ -166,10 +166,6 @@ void PublicStream::worker(std::stop_token tkn) {
     }
 
     if (!tkn.stop_requested()) { //exit without stop token - stream closed        
-        {
-            std::scoped_lock _(_mx);
-            _closing = true; //this thread is busy now, used for reconnect
-        }
         //signal reconnect
         for (auto &[k, v]: _callbacks) {
             v(Json());

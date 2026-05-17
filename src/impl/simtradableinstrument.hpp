@@ -17,7 +17,7 @@ namespace quarkbot {
 
 class SimInstrument;
 class SimAccount;
-class StrategyFragment;
+
 
 class SimTradableInstrument final: public ITradableInstrument, public std::enable_shared_from_this<SimTradableInstrument> {
 public:

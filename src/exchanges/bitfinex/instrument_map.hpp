@@ -30,6 +30,9 @@ namespace quarkbot {
             using UnifiedCurrenciesMap = std::unordered_map<std::string, std::string>;
             void report_price(const std::string &id, Decimal price);
 
+            static Decimal calculate_tick_size(Decimal price);
+
+
         protected:
             struct InstrumentListKey {
                 std::string id;
@@ -71,7 +74,6 @@ namespace quarkbot {
             void load_futures_geometry(Map &new_map, const CurrencyMap &new_cur_map, network::SecureRestClient &client,const IExchange *ex);
             void initialize_steps(Map &new_map, network::SecureRestClient &client);
 
-            static Decimal calculate_tick_size(Decimal price);
 
             static UnderlyingCurrency create_currency_from_id(const CurrencyMap &cmap, std::string_view id, const IExchange *ex);
  

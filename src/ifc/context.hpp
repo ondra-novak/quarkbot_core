@@ -1,9 +1,8 @@
 #pragma once
 
-#include "basic_coro/coroutine.hpp"
+#include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
 #include "defs.hpp"
-#include "memory.hpp"
 #include <functional>
 #include <memory>
 #include <memory_resource>
@@ -17,19 +16,6 @@ namespace quarkbot {
     };
 
 
-    class StrategyFragment : public coro::coroutine<void> {
-    public:
-        class promise_type: public coro::coroutine<void>::promise_type {
-        public:            
-            void *operator new(std::size_t sz) {return mem_pool.allocate(sz);}
-            void operator delete(void *ptr, std::size_t sz) {return mem_pool.deallocate(ptr, sz);}
-        };
-
-        StrategyFragment() = default;
-        StrategyFragment(coro::coroutine<void> x):coro::coroutine<void>(std::move(x)) {}
-    };
-
-   
 
     class StrategyContext {
     public:

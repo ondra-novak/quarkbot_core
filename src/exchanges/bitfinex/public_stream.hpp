@@ -30,6 +30,8 @@ namespace bitfinex {
         State subscribe_trades(std::string symbol, Callback callback);        
         State subscribe_orderbook(std::string symbol, Callback callback);
 
+
+
         class Exception: public std::runtime_error {
         public:
             Exception(int code, std::string message)
@@ -61,7 +63,6 @@ namespace bitfinex {
         std::mutex _submx;
         Callback_Map _callbacks;        
         bool _closed = false;
-        bool _closing = false;
         std::atomic<AwaitingReg *> pending_subscribe = {};
         void worker(std::stop_token tkn);        
 

@@ -2,6 +2,7 @@
 
 #include "basic_coro/awaitable_transform.hpp"
 #include "basic_coro/prepared_coro.hpp"
+#include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
 #include "ifc/context.hpp"
 #include "order_defs.hpp"
@@ -314,6 +315,13 @@ public:
         while (co_await(ord.next()) && co_await hub->push(ord));
     }
 
+    ///determines whether update carries done status (is_done_status)
+    static bool is_done_update(const Update &up) {        
+        if (std::holds_alternative<OrderStatus>(up)) return is_done_status(std::get<OrderStatus>(up));
+        if (std::holds_alternative<OrderRejectionReason>(up)    //rejection
+            || std::holds_alternative<RejectionWithText>(up)) return true; //rejection
+        return false;
+    }
 
 protected:
 

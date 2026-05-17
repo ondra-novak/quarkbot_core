@@ -35,6 +35,7 @@ bool StreamManager::is_stream_active(const std::string &id, StreamType type) con
                 || _mapCloseBarStream.find(id) != _mapCloseBarStream.end()
                 || _mapRangeBarStream.find(id) != _mapRangeBarStream.end();
     }
+    return true;
 }
 
 void StreamManager::subscribe_public_stream_if_needed(const std::string &symbol, StreamType type, std::weak_ptr<IPriceReport> rpt ) {

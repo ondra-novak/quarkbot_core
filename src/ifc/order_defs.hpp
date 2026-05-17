@@ -143,6 +143,12 @@ enum class OrderRejectionReason : uint8_t{
     timeout,
     //order expired before delivered
     expired,
+    //reduce order doesn't reduce position
+    reduce_doesnt_reduce,
+    //order rejected because too large slippage
+    slippage,
+    //rejected because exchange as an internal issue
+    exchange_issue,
     //internal error  (probably adapter error, connection, etc)
     internal_error,
     //other reason (textural),

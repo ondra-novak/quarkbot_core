@@ -9,5 +9,6 @@ exchange.cpp
     stream_helpers.cpp
     account.hpp
     account.cpp
-    signer.cpp)
+    signer.cpp
+    auth_stream.cpp)
 target_link_libraries(quarkbot_bitfinex PRIVATE quarkbot_network  quarkbot_impl quarkbot_ifc)

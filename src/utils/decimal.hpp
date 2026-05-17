@@ -551,6 +551,6 @@ public:
 
 };
 
-constexpr Decimal operator "" _dec(const char* k){
+constexpr Decimal operator ""_dec(const char* k){
       return Decimal::from_string(k);
 }

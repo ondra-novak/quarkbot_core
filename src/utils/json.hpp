@@ -41,7 +41,11 @@ public:
     requires(std::is_integral_v<T> && std::is_arithmetic_v<T>)
     operator T() const {
         if (empty()) return static_cast<T>(0);
-        return static_cast<T>(std::strtoll(this->c_str(), nullptr,10));
+        if (find_first_of("eE") != npos) { //there can scientific number, in this case, use double conversion
+                return static_cast<T>(std::strtod(this->c_str(), nullptr));
+        } else {
+                return static_cast<T>(std::strtoll(this->c_str(), nullptr,10));
+        }
     }
     template<typename T>
     requires(std::is_floating_point_v<T>)
