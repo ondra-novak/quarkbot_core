@@ -90,7 +90,7 @@ namespace quarkbot {
     using LogFormatString = LogFormatBasicString<char, std::type_identity_t<_Args>...>;
 
     template<typename ... Args>
-    inline void log(LogLevel level, LogFormatString<Args...> format, Args &&... args ) {
+    inline void logOutput(LogLevel level, LogFormatString<Args...> format, Args &&... args ) {
         auto &buffer = Logger::get_buffer();
         if (Logger::instance.cur_level < level) return;        
         std::format_to<std::back_insert_iterator<std::vector<char> >, typename LoggerTypeType<Args>::type...>(
@@ -99,5 +99,29 @@ namespace quarkbot {
         buffer.clear();
     }
 
+    template<typename ... Args>
+    inline void logDebug(LogFormatString<Args...> format, Args &&... args ) {
+        logOutput(LogLevel::debug, format, std::forward<Args>(args)...);
+    }
+    template<typename ... Args>
+    inline void logTrace(LogFormatString<Args...> format, Args &&... args ) {
+        logOutput(LogLevel::trace, format, std::forward<Args>(args)...);
+    }
+    template<typename ... Args>
+    inline void logInfo(LogFormatString<Args...> format, Args &&... args ) {
+        logOutput(LogLevel::info, format, std::forward<Args>(args)...);
+    }
+    template<typename ... Args>
+    inline void logWarning(LogFormatString<Args...> format, Args &&... args ) {
+        logOutput(LogLevel::warning, format, std::forward<Args>(args)...);
+    }
+    template<typename ... Args>
+    inline void logError(LogFormatString<Args...> format, Args &&... args ) {
+        logOutput(LogLevel::error, format, std::forward<Args>(args)...);
+    }
+    template<typename ... Args>
+    inline void logFatal(LogFormatString<Args...> format, Args &&... args ) {
+        logOutput(LogLevel::fatal, format, std::forward<Args>(args)...);
+    }
     
 }

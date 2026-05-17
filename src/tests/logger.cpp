@@ -27,7 +27,7 @@ void test_logger(LogLevel level, const std::source_location &location, std::stri
 
 struct TesterClass {
     static void test_log() {
-        log(LogLevel::debug, "{}={}", "y",[]{return "test";});;
+        logOutput(LogLevel::debug, "{}={}", "y",[]{return "test";});;
 
     }
 
@@ -66,15 +66,15 @@ int main() {
     Logger::instance.cur_level = LogLevel::debug;
     Logger::instance.log_sink = test_logger;
 
-    log(LogLevel::debug, "{} {}", "Hello", 42);
+    logOutput(LogLevel::debug, "{} {}", "Hello", 42);
     CHECK_EQUAL(prev_line, "Hello 42");
     CHECK(prev_log_level == LogLevel::debug);
     CHECK(std::string_view(prev_source_loc.file_name()).ends_with("logger.cpp"));
 
-    log(LogLevel::debug, "{}", Json{10,20});
+    logOutput(LogLevel::debug, "{}", Json{10,20});
     CHECK_EQUAL(prev_line, "[10,20]");
 
-    log( LogLevel::debug,"{}", []{return 42;});
+    logOutput( LogLevel::debug,"{}", []{return 42;});
     CHECK_EQUAL(prev_line, "42");
     std::error_code ec;
 
@@ -84,8 +84,9 @@ int main() {
     
     log_to_file(p);
 //    log_to_stderr();
-    log(LogLevel::debug, "{}", Json{{"a",10},{"b",{1,2,3}}});
-    log(LogLevel::debug, "{}={}", "x",12);
+    logDebug("{}", Json{{"a",10},{"b",{1,2,3}}});
+    logDebug("{}={}", "x",12);
+    logDebug("new\nline");
     TesterClass::test_log();
 
     log_close();
@@ -106,6 +107,11 @@ int main() {
     CHECK_EQUAL(ex.context,"-");
     CHECK_EQUAL(ex.payload,"x=12");
     CHECK_EQUAL(ex.line,88);
+
+    std::getline(f,ln);
+    ex = extract_log(ln);
+    CHECK_EQUAL(ex.payload,"new\x7fline");
+    CHECK_EQUAL(ex.line,89);
 
 
     std::getline(f,ln);
