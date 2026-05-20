@@ -1,6 +1,6 @@
 #include "ssl_stream.hpp"
-#include "libs/network/socket.hpp"
-#include "libs/network/sslobjects.hpp"
+#include "socket.hpp"
+#include "sslobjects.hpp"
 
 #include <chrono>
 #include <memory>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "libs/network/string_utils.hpp"
-#include "libs/network/ws_parser.hpp"
+#include "string_utils.hpp"
+#include "ws_parser.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>

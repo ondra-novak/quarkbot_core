@@ -1,6 +1,6 @@
 #include "rest.hpp"
-#include "libs/network/crack_url.hpp"
-#include "libs/network/ssl_stream.hpp"
+#include "crack_url.hpp"
+#include "ssl_stream.hpp"
 
 namespace network {
 

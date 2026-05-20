@@ -1,7 +1,7 @@
 #pragma once
 
-#include "libs/network/socket.hpp"
-#include "libs/network/sslobjects.hpp"
+#include "socket.hpp"
+#include "sslobjects.hpp"
 #include "stream_concept.hpp"
 #include <array>
 #include <chrono>

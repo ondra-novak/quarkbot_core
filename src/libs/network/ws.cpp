@@ -2,8 +2,8 @@
 #include "http_parser.hpp"
 #include "http_status_exception.hpp"
 #include "base64.hpp"
-#include "libs/network/crack_url.hpp"
-#include "libs/network/ws_stream.hpp"
+#include "crack_url.hpp"
+#include "ws_stream.hpp"
 #include "string_utils.hpp"
 #include <iterator>
 #include <openssl/sha.h>

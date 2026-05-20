@@ -1,9 +1,9 @@
 #pragma once
 
-#include "libs/network/ssl_stream.hpp"
-#include "libs/network/sslobjects.hpp"
-#include "libs/network/ws_parser.hpp"
-#include "libs/network/ws_stream.hpp"
+#include "ssl_stream.hpp"
+#include "sslobjects.hpp"
+#include "ws_parser.hpp"
+#include "ws_stream.hpp"
 #include <stdexcept>
 #include <thread>
 namespace network {

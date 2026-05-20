@@ -14,7 +14,6 @@ set(BASIC_TESTS
     serializer.cpp
     signals.cpp
     websocket_binance.cpp
-    bitfinex_instruments.cpp
     logger.cpp
 )
 
@@ -32,4 +31,3 @@ foreach (testFile ${BASIC_TESTS})
 endforeach()
 
 target_link_libraries(test_websocket_binance PRIVATE quarkbot_network)
-target_link_libraries(test_bitfinex_instruments PRIVATE quarkbot_bitfinex)

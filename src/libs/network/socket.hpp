@@ -1,6 +1,6 @@
 #pragma once
 
-#include "libs/network/sslobjects.hpp"
+#include "sslobjects.hpp"
 #include <chrono>
 #include <concepts>
 #include <cstdint>

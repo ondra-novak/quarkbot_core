@@ -1,7 +1,7 @@
 #pragma once
 
-#include "libs/network/http_parser.hpp"
-#include "libs/network/string_utils.hpp"
+#include "http_parser.hpp"
+#include "string_utils.hpp"
 #include "stream_concept.hpp"
 #include <charconv>
 #include <concepts>
