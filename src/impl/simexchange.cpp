@@ -193,9 +193,11 @@ void SimExchange::place_order(Order ord) {
 }
 
 PMarketInstrument SimExchange::create_instrument(IMarketInstrument::Info def) {
-    auto instr =  std::make_shared<SimInstrument>(def, shared_from_this());
-    _instrument_names.emplace(def.name, instr);
-    return instr;
+    auto &instr = _instrument_names[def.name];
+    instr.info = def;
+    auto ref = std::make_shared<SimInstrument>(instr.info, shared_from_this());;
+    instr._ref = ref;
+    return ref;;
 }
 UnderlyingCurrency SimExchange::create_currency(std::string_view name, bool is_unified) {
     return UnderlyingCurrency{std::string(name), is_unified?std::string(name):std::string(), this};

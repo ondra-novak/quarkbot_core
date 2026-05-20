@@ -4,5 +4,5 @@ add_library(print_events_strategy
     print_events.cpp
 )
 
-target_link_libraries(print_events_strategy PRIVATE quarkbot_impl)
+target_link_libraries(print_events_strategy PRIVATE quarkbot_impl quarkbot_ifc)
 

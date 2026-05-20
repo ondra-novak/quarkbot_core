@@ -20,7 +20,7 @@ namespace quarkbot {
 
         SimExchange &get_exchange() {return *_exchange.get();}
 
-        StrategyContext &get_context() {return _context;}
+        StrategyContext get_context() {return _context;}
 
         void add_instrument(IMarketInstrument::Info instrument_def);
 

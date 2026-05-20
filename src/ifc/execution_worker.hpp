@@ -97,6 +97,7 @@ public:
      * @param cancel_signal alert flag used to identify sleeping awaitables
      */
     virtual bool cancel(coro::cancel_signal *cancel_signal) = 0;
+
     
 protected:
 
