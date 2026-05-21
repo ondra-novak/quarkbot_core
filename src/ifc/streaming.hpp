@@ -24,6 +24,10 @@ public:
     virtual void close() = 0;
 };
 
+template<typename T> concept HasStreamView = requires(T val) {
+    {val.view()};
+};
+
 template<typename ViewType>
 class IEventStream: public IEventStreamBase {
 public:
@@ -74,24 +78,35 @@ class IEventStream<ViewType>::Null: public IEventStream<ViewType> {
     virtual coro::awaitable<bool> read_internal(ViewType &, std::size_t &) {return false;};
 };
 
+template<typename T>
+struct StreamViewType {
+    using type = T;
+};
+template<HasStreamView T>
+struct StreamViewType<T> {
+    using type = decltype(std::declval<T>().view());
+};
+
 
 ///Event stream for specific type of events - wrapper over IEventStreamBase, which provides typed access to event data
 /**
 @tparam T type of events, must satisfy StreamType concept. The stream provides access to event data through T::view() method
 */
-template<StreamType T>
+template<typename T>
 class EventStream {
 public:
     ///Type of view returned by T::view() method
-    using ViewType = std::decay_t<decltype(std::declval<T>().view())>;
+    using ViewType = typename StreamViewType<T>::type;
 
-    ///default constructor creates closed stream
-    EventStream():_stream(std::make_unique<typename IEventStream<ViewType>::Null>()) {}
     ///constructor from IEventStreamBase pointer, stream is open if pointer is not null
     EventStream(std::unique_ptr<IEventStream<ViewType> > stream):_stream(std::move(stream)) {}  
 
-    EventStream(std::unique_ptr<IEventStreamBase> stream)
-        :_stream(static_cast<IEventStream<ViewType> *>(stream.release())) {}
+    static EventStream from_base(std::unique_ptr<IEventStreamBase> base) {
+        return EventStream(std::unique_ptr<IEventStream<ViewType> >(static_cast<IEventStream<ViewType> *>(base.release())));        
+    }
+    static EventStream create_null() {
+        return EventStream(std::make_unique<typename IEventStream<ViewType>::Null>());
+    }
 
     ///check if stream is open
     bool is_open() const {return _stream->is_open();}
@@ -100,12 +115,26 @@ public:
     ///conversion to bool - true if stream is open, false if closed
     operator bool() const {return is_open();}
     ///read next event, if available, and copy it to ref
-    coro::awaitable<bool> next(T &val) {return _stream->next(val.view());}
+    coro::awaitable<bool> next(T &val) {
+        if constexpr (HasStreamView<T>) {
+            return _stream->next(val.view());
+        } else {
+            return _stream->next(val);
+        }
+    }
+        
     ///read next event, if available, and copy it to ref, also report count of missed events     
     coro::awaitable<bool> next(T &val, std::size_t &missed) {return _stream->next(val.view(), missed);}
 
-    bool current(T &val) {return _stream->current(val);}
+    bool current(T &val) {
+          if constexpr (HasStreamView<T>) {
+            return _stream->current(val.view());
+        } else {
+            return _stream->current(val);
+        }
+    }
    
+    auto get() const {return _stream.get();}
 
 protected:
     std::unique_ptr<IEventStream<ViewType> > _stream;
@@ -126,8 +155,8 @@ public:
     template<StreamType<StreamTypeClass> T>
     EventStream<T> subscribe() {
         auto x =  subscribe_stream_internal(T::type, stream_params<T>);
-        if (x) return EventStream<T>(std::move(x));
-        else return EventStream<T>();
+        if (x) return EventStream<T>::from_base(std::move(x));
+        else return EventStream<T>::create_null();
     }
 };
 

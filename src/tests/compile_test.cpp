@@ -24,6 +24,7 @@ template class quarkbot::SchedulerRealTime<void (*)() >;
 #include "../ifc/message_bus.hpp"
 #include "../ifc/hub.hpp"
 #include "../ifc/shared_lockable.hpp"
+#include "../ifc/strategy_publisher.hpp"
 
 template class quarkbot::Hub<int>;
 
