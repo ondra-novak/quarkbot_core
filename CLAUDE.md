@@ -2,100 +2,110 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Build
+## Project Overview
+
+Quarkbot Core is a C++23 trading interface library using coroutines for writing async trading strategies. It provides a full backtesting/simulation framework with no live exchange adapters (those are separate projects).
+
+## Build Commands
 
 ```bash
-# Configure (only needed once)
-cmake -B build
+# Configure (from repo root)
+mkdir -p build && cd build
+cmake ..
 
-# Build everything
-make -C build -j$(nproc)
+# Build all targets
+cmake --build . -j$(nproc)
 
 # Run all tests
 ctest --test-dir build
 
 # Run a single test binary
-./build/tests/tests_decimal_test
+./build/tests/test_order_test
+./build/tests/test_decimal_test
+
+# Build with clang (edit default_build_profile.conf or pass directly)
+cmake -DCMAKE_CXX_COMPILER=clang++ ..
 ```
 
-Test binaries land in `build/tests/`. The build outputs libraries to `build/lib/` and executables to `build/bin/`.
+Test binaries are in `build/tests/`, strategy executables in `build/bin/`.
 
-The project requires **C++23**, **LevelDB** (`libleveldb-dev`), and **ZLIB**. The `BasicCoro` coroutine library is fetched automatically via CMake FetchContent.
-
-To customise CMake flags (e.g. switch compiler), edit `default_build_profile.conf`.
+To add a compiler flag override, edit `default_build_profile.conf` (one `-DVariable=Value` per line).
 
 ## Architecture
 
-Everything lives in the `quarkbot` namespace. The codebase is split into three layers:
+The codebase follows a strict layered design:
 
-### Interfaces (`src/ifc/`)
-
-Pure-virtual contracts that exchange adapters and simulators must implement:
-
-- **`IExchange`** — top-level factory: creates accounts and lists instruments.
-- **`IMarketInstrument`** — read-only market data access; subscribe to event streams.
-- **`ITradableInstrument`** — adds order placement/cancellation on top of a market instrument; created from `IMarketInstrument::create_tradable_instrument(account)`.
-- **`IAccount`** — holds wallet/margin state.
-- **`IExecutionWorker`** — runs coroutines; one per thread. `IExecutionWorker::current()` returns the worker for the calling thread.
-- **`IScheduler`** — `now()`, `sleep_until()`, `sleep_for()`. In backtest the time is simulated.
-- **`IStorage`** / **`IStorageTransaction`** — key-value store with optional per-key revision history. Backed by LevelDB in production, `MemStorage` in tests.
-- **`IBacktestDataSource`** — yields `Event{time, instrument, variant<Quote,Trade,OrderBookIncrement>}` one at a time.
-
-### Strategy API (`src/ifc/context.hpp`, `src/ifc/order.hpp`, etc.)
-
-Strategies are written as C++20 coroutines returning **`StrategyFragment`** (a specialisation of `coro::coroutine<void>` with a pool-allocated promise).
-
-A strategy receives a **`StrategyContext`** containing:
-```cpp
-std::vector<PTradableInstrument> instruments;
-PScheduler scheduler;
-PStorage storage;
-PExecutionWorker exec_worker;
-StrategyMode mode;  // live_trading | backtest | paper_trading
-std::function<awaitable<coro::void_type>()> stop_signal;
+```
+User Strategies
+    └── Core Interfaces (src/ifc/)        ← abstract contracts only
+        └── Implementations (src/impl/)   ← simulation/backtest engines
+            └── Utilities (src/utils/)    ← decimal, pubsub, signals, queues
+                └── Network (src/libs/network/)  ← SSL, WebSocket, REST
 ```
 
-**Placing orders** — call `instrument->place_order(params, name)`, which returns an `Order`. Await order events:
-```cpp
-while (co_await order.next_event()) { /* check order.get_status() / order.read_fill() */ }
-```
+### Interface Layer (`src/ifc/`)
 
-**Subscribing to market data** — call `instrument->subscribe<T>()` where `T` is a `StreamType`:
-```cpp
-EventStream<Quote> qs = instr->subscribe<Quote>();
-Quote q;
-while (co_await qs.next(q)) { /* use q */ }
-```
+All interfaces live here. Key types defined in `defs.hpp`:
 
-Built-in stream types: `Quote`, `Trade`, `OrderBookIncrement`, `ClosedBar` / `ClosedBarInterval<seconds>`, `OrderBook<depth>`, `TradeCounter` (on `IMarketInstrument`); `ExternalFill`, `FundingEvent`, `OrderEvent` (on `ITradableInstrument`).
+- `PExchange` / `IExchange` — entry point; resolves instruments and accounts
+- `PAccount` / `IAccount` — wallet and balance queries
+- `PTradableInstrument` / `ITradableInstrument` — order placement and management
+- `PMarketInstrument` / `IMarketInstrument` — market data subscriptions and metadata
+- `PExecutionWorker` / `IExecutionWorker` — coroutine scheduler; `schedule()` transfers execution context
+- `PBacktestDataSource` / `IBacktestDataSource` — historical data feed for backtesting
+- `IEventStream<ViewType>` / `IPublisher<StreamTypeClass>` — typed event streaming
 
-**Adding a new stream type**: derive from `MarketInstrumentStreamTypeItem` or `TradableInstrumentStreamTypeItem`, add `static constexpr Type type = "unique_string_id"` and a `view()` method returning a copy-assignable type.
+The `Order` class (`order.hpp`) is a state machine that tracks fills and status transitions. `Hub<T>` (`hub.hpp`) is a coroutine synchronization primitive (push/pop).
 
-### Implementations (`src/impl/`)
+### Coroutine Model
 
-- **`SimExchange` / `SimInstrument` / `SimTradableInstrument` / `SimAccount` / `SimExecutor`** — full simulated exchange used in backtesting.
-- **`BacktestExecutor`** — implements both `IExecutionWorker` and `IScheduler`; drives simulated time and the coroutine dispatch queue. The backtest loop feeds events from the data source, advances simulated time, and resumes waiting coroutines in order.
-- **`Backtest`** — convenience wrapper that wires the above together; see `src/exec/print_events.cpp` for usage.
-- **Data sources**: `MMBOT_backtest_datasource` (price-list CSV), `TardisTradesDataSource` / `TardisQuotesDataSource` (Tardis.dev CSV exports), `MergedDataSource` (merges multiple sources by time).
-- **Streaming internals** (`src/impl/streaming/`): `LockFreePublisher<ViewType, N>` is the hot-path publisher; `PublisherManager` routes subscribe calls to the right publisher by stream type string.
+The library uses `BasicCoro` (fetched via CMake FetchContent from `ondra-novak/basic_coro`):
+
+- `awaitable<T>` — standard awaitable wrapper
+- `StrategyFragment` — fire-and-forget coroutine (used for event handlers)
+- `StrategyFunction<T>` — coroutine returning T
+- `coroutine` = `coro::coroutine<void>`
+
+Strategies are coroutines launched under a `BacktestExecutor` (single-threaded event loop). All async work uses `co_await`.
+
+### Implementation Layer (`src/impl/`)
+
+- `SimExchange` / `SimAccount` / `SimTradableInstrument` — in-memory simulation
+- `BacktestExecutor` — thread-local coroutine event loop; drives simulation time
+- `SimExecutor` — fills orders against market data with configurable slippage
+- Data sources: `TardisDataSource`, `MMBotDataSource`, `MergedDataSource`, `ConfiguredDataSource`
+- `LockFreePublisher<T>` — ring-buffer publisher; `QueueEventStream` — buffered subscriber
+- `MemStorage` / `LevelDBStorage` — key-value storage implementations
 
 ### Utilities (`src/utils/`)
 
-Header-only helpers: `Decimal` (fixed-point arithmetic), `double_buffer.hpp` (lock-aware double-buffer queue used inside `Order::State`), `pubsub.hpp`, `lockfree_queue.hpp`, `dispatcher.hpp`, `signals.hpp`, and technical analysis primitives in `src/ta/` (`EMA`, `BB_EMA`).
+- `decimal.hpp` — fixed-point decimal for financial arithmetic (avoid floating point for prices/quantities)
+- `pubsub.hpp` / `signals.hpp` / `signals_async.hpp` — pub-sub and signal/slot
+- `lockfree_queue.hpp` — SPSC/MPSC lock-free queue
+- `scheduled_queue.hpp` — priority queue with time-based execution
+- `acb.hpp` — Average Cost Basis tracking
 
-### Strategies (`src/strategies/`)
+### Technical Analysis (`src/ta/`)
 
-Each strategy is a shared library (or compiled unit) exposing a single factory function:
+`ema.hpp` (EMA) and `bb_ema.hpp` (Bollinger Bands over EMA).
+
+### Test Harness (`src/tests/check.h`)
+
+Custom macro-based assertions — no external test framework:
+
 ```cpp
-StrategyFragment my_strategy(StrategyContext &context);
+CHECK(expr)
+CHECK_EQUAL(a, b)
+CHECK_GREATER(a, b)
+CHECK_EXCEPTION(expr, ExceptionType)
 ```
 
-`print_events` is the reference/demo strategy. `trending` is a more complete example using `ClosedBarInterval` and limit orders.
+Each `.cpp` in `src/tests/` becomes a separate test binary named `test_<filename>`.
 
-## Key conventions
+## Key Conventions
 
-- `P<X>` type aliases are `shared_ptr<IX>` (e.g. `PAccount = shared_ptr<IAccount>`).
-- `awaitable<T>` is `coro::awaitable<T>` from BasicCoro.
-- `Order::next_event()` **must** be awaited from an execution worker thread; calling it elsewhere throws.
-- `is_done_status(OrderStatus)` covers `filled`, `canceled`, `rejected`, `replaced`, `lost`.
-- `Decimal` literals: `1000_dec`, `0.00001_dec`.
+- All public interfaces use `shared_ptr` aliases (`PExchange`, `PAccount`, etc.) — prefer these over raw `std::shared_ptr<IExchange>`.
+- Financial values use `Decimal` from `utils/decimal.hpp`, not `double`.
+- Streaming events (quotes, trades, bars) are subscribed via `IMarketInstrument::subscribe*()` returning `EventStream<T>`, then consumed with `co_await stream.next(ref)`.
+- The `BacktestExecutor` is single-threaded; strategies must not block — use `co_await` for all waits.
+- `ThreadExecutor` wraps `BacktestExecutor` for multi-threaded scenarios.
