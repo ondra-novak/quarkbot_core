@@ -10,11 +10,9 @@
 #include "utils/hashable.hpp"
 #include <algorithm>
 #include <chrono>
-#include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
-#include <system_error>
 #include <unordered_set>
 
 namespace quarkbot {
@@ -49,8 +47,8 @@ std::unique_ptr<IEventStreamBase> SimExchange::subscribe_stream(
         return connect_to<Trade, TradePublisher>(instrument, params);
     } else if (type == ClosedBar::type) {
         return connect_to<ClosedBar, ClosedBarPublisher>(instrument, params);
-    } else if (type == TradeCounter::type) {
-        return connect_to<TradeCounter, TradeCounterPublisher>(instrument, params);
+    } else if (type == TradeStatCounter::type) {
+        return connect_to<TradeStatCounter, TradeCounterPublisher>(instrument, params);
     } else {
         return {};
     }
@@ -154,19 +152,15 @@ void SimExchange::on_event(const std::string &instrument, Trade tr) {
             });
         }
     });
-    _streams.enum_all_publishers(mi, {}, TradeCounter::type, [&](const StreamParams *, PublisherManager<>::PPublisher pub){
+    _streams.enum_all_publishers(mi, {}, TradeStatCounter::type, [&](const StreamParams *, PublisherManager<>::PPublisher pub){
         auto tcpub = std::static_pointer_cast<TradeCounterPublisher>(pub);
-        TradeCounter cntr = {};
+        TradeStatCounter cntr = {};
         auto s = tcpub->get_top_seq();
         if (s > 0) [[likely]] {
             --s;
             tcpub->read(cntr,s);
         }
-        cntr.last_price = tr.price;
-        cntr.volume += tr.size;
-        cntr.trades++;
-        cntr.time = tr.time;                
-        tcpub->write([&](TradeCounter &c) noexcept {c = cntr; return true;});        
+        tcpub->publish(cntr.add(tr));
     });
     
 }

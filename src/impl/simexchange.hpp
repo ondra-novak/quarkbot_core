@@ -25,7 +25,7 @@ public:
     using QuotePublisher = LockFreePublisher<Quote, 1>;
     using TradePublisher = LockFreePublisher<Trade, 1>;
     using ClosedBarPublisher = LockFreePublisher<ClosedBar, 1>;
-    using TradeCounterPublisher = LockFreePublisher<TradeCounter, 1>;
+    using TradeCounterPublisher = LockFreePublisher<TradeStatCounter, 1>;
 
     ///this function creates empty account, credentials are ignored
     virtual PAccount create_account(const std::string &name, const std::string &credentials)  override;

@@ -15,6 +15,7 @@ set(BASIC_TESTS
     signals.cpp
     websocket_binance.cpp
     logger.cpp
+    timer.cpp
 )
 
 
