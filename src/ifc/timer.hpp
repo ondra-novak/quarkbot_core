@@ -7,7 +7,6 @@
 #include <unistd.h>
 namespace quarkbot {
 
-
 ///convenience class for managing single timer from coroutine. RAII object
 /** @note object can be used only in context of execution worker
 
@@ -37,19 +36,7 @@ public:
     ///non copyable
     Timer &operator=(const Timer &) = delete;
 
-    ///destructor. If there is thread waiting for join, it is notified and allowed to finish
-    ~Timer() {
-        notify_exit();
-    }
 
-    ///manually notify that coroutune which using timer for scheduling is finished. Useful when joining in a destructor.
-    void notify_exit() {
-        auto eptr = _exited.exchange(nullptr, std::memory_order_relaxed);
-        if (eptr) {
-            eptr->store(true, std::memory_order_relaxed);
-            eptr->notify_all();            
-        }        
-    }
 
     ///sleep for specified duration or until alerted
     /**
@@ -99,30 +86,11 @@ public:
         return _worker->cancel(&_cancel_signal);
     }   
 
-    ///cancel timer and wait until sleeping coroutine finishes
-     /**
-        Interrupts any ongoing sleep operation and waits until sleeping coroutine finishes. 
-        This is useful when timer is used in a destructor and we want to make sure that sleeping coroutine 
-        is finished before object is destroyed. The wait operation can be interrupted by notify_exit function, 
-        so it is recommended to call notify_exit before object destruction when using this function in a destructor.
-
-        @note there can be only one thread waiting for join, so it is not recommended to call this function from multiple threads.
-    */
-    void cancel_and_join() {
-        std::atomic<bool> *expected = nullptr;
-        std::atomic<bool> waiting = false;
-        if (!_exited.compare_exchange_strong(expected, &waiting, std::memory_order_relaxed)) {
-            throw std::runtime_error("Timer: multiple threads waiting for join is not allowed");
-        }
-        _worker->cancel(&_cancel_signal);
-        waiting.wait(false);
-    }
-
 protected:
     PExecutionWorker _worker;
     coro::cancel_signal _cancel_signal;
-    std::atomic<std::atomic<bool> *> _exited = nullptr;
 };
+
 
 
 }

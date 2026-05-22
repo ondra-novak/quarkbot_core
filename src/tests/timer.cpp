@@ -1,9 +1,11 @@
 #include "ifc/timer.hpp"
 #include "check.h"
 #include "ifc/defs.hpp"
+#include "ifc/minimutex.hpp"
 #include "ifc/strategy_fragment.hpp"
 #include "impl/thread_executor.hpp"
 #include <chrono>
+#include <mutex>
 
 using namespace quarkbot;
 
@@ -14,20 +16,23 @@ public:
 
     TestTimerObject(PExecutionWorker worker):_timer(worker) {};
 
-    StrategyFragment run_in_cycle() {
+    StrategyFragment run_in_cycle() {        
+        std::lock_guard _(_exit_notify);
         while (co_await _timer.sleep_for(std::chrono::milliseconds(10))) {
             _counter++;
         }
-        _timer.notify_exit();
     }
 
     unsigned int stop_join_and_get_counter() {
-        _timer.cancel_and_join();
+        _timer.cancel();
+        _exit_notify.lock();    //wait until task is done
         return _counter;
     }
 
 protected:
     Timer _timer;
+    //we use minimutex as exit notify
+    Minimutex _exit_notify;
     unsigned int _counter = 0;
 };
 
