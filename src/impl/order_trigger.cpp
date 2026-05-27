@@ -11,8 +11,16 @@
 
 namespace quarkbot {
 
+   template<typename Fn>
+    auto OrderTrigger::update_state(const Order &ord, Fn &&fn){
+        std::scoped_lock _(_mx);
+        auto &st = _order_map[ord];
+        return fn(st);
+    }
+
 
     void OrderTrigger::register_order(Order ord){
+        update_state(ord, [](auto &){/* empty, just initialize state*/});
         _worker->run(monitor_order(shared_from_this(), std::move(ord)));
     }
  
@@ -35,10 +43,8 @@ namespace quarkbot {
             auto o = std::get<Order*>(st.phase);
             //cancel order
             o->cancel();
-        } else {
-            //other status nothing can happen now
-            return;
-        }
+        } 
+        //mark order canceled                
         st.canceled = true;
     }
 
@@ -48,7 +54,7 @@ namespace quarkbot {
         if (iter == _order_map.end()) return false;
         auto &st = iter->second;
         if (st.canceled) return false;
-        if (std::holds_alternative<Stream*>(st.phase)){
+        if (std::holds_alternative<Stream*>(st.phase)){            
             auto &s = std::get<Stream *>(st.phase);
             s->close();
         } else {
@@ -58,12 +64,6 @@ namespace quarkbot {
         return true;
     }
 
-   template<typename Fn>
-    auto OrderTrigger::update_state(const Order &ord, Fn &&fn){
-        std::scoped_lock _(_mx);
-        auto &st = _order_map[ord];
-        return fn(st);
-    }
 
     void OrderTrigger::unreg_order(const Order &ord) {
         std::scoped_lock _(_mx);
@@ -83,6 +83,7 @@ namespace quarkbot {
             if (params.type == OrderType::limit){
                 if (params.limit_price <= 0_dec) {
                     order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
+                    me->unreg_order(order);
                     co_return;
                 }     
                 trigger_price = params.limit_price;
@@ -91,14 +92,40 @@ namespace quarkbot {
             } else if (params.type == OrderType::stop || params.type == OrderType::stoplimit || params.type == OrderType::alert) {
                 if (params.stop_price <= 0_dec) {
                     order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_params, "missing stop price"});
+                    me->unreg_order(order);
                     co_return;
                 }     
-                trigger_price = params.limit_price;
+                if (params.type == OrderType::stoplimit && params.limit_price <= 0_dec){
+                    order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
+                    me->unreg_order(order);
+                    co_return;
+                }
+
+                trigger_price = params.stop_price;
                 trigger_sign = static_cast<int>(params.side);
             } else {
                 //report error - not supported
                 order.update_order(Order::RejectionWithText{OrderRejectionReason::unsupported, "unsupported order for local trigger"});
+                me->unreg_order(order);
                 co_return ;
+            }
+
+            //handle replace now
+            auto repl = order.get_replaced_order();
+            if (repl) {
+                auto replst = repl->get_status();
+                if (replst == OrderStatus::sent){
+                    order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_replace, "not ready for replace"});
+                    me->unreg_order(order);
+                    co_return ;
+                }
+                if (!me->cancel_order_for_replace(*repl)) {
+                    order.update_order(Order::RejectionWithText{OrderRejectionReason::order_not_found, "order cannot be replaced"});
+                    me->unreg_order(order);
+                    co_return ;
+                }
+                //we no longer need replaced order, so reset it
+                repl.reset();
             }
 
             //retrieve instrument for subscription
@@ -107,9 +134,16 @@ namespace quarkbot {
             //subscribe trades
             Stream ev= instr->get_instrument()->subscribe<Trade>();
             //create and update state with reference to event stream
-            me->update_state(order, [&](State &st){
+            auto canceled = me->update_state(order, [&](State &st){
                 st.phase = &ev;           
+                return st.canceled;
             });
+
+            if (canceled) {
+                order.update_order(OrderStatus::canceled);          
+                me->unreg_order(order);
+                co_return;
+            }
 
             //update order status
             order.update_order(OrderStatus::pending_trigger);
@@ -152,7 +186,7 @@ namespace quarkbot {
                     co_return;
                 default:
                     //report error
-                    order.update_order(Order::RejectionWithText{OrderRejectionReason::insufficient_funds, "Failed to convert parameters of the order"});
+                    order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_params, "Failed to convert parameters of the order"});
                     me->unreg_order(order);
                     co_return;
             }
@@ -173,7 +207,7 @@ namespace quarkbot {
             order.update_order(prev_status);
 
             //update state in order map, detect canceled state atomically
-            bool canceled = me->update_state(order, [&](State &st){
+            canceled = me->update_state(order, [&](State &st){
                 st.phase = &new_order;
                 return st.canceled;
             });
