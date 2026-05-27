@@ -102,6 +102,11 @@ static_assert(test_string(1234567.89_dec, 1, "1234567.9"));
 static_assert(test_string(123456.789_dec, 2, "123456.79"));
 static_assert(test_string(0_dec, 2, "0.00"));
 
+static_assert(static_cast<int>(123e4_dec) == 1230000);
+static_assert(static_cast<int>(123e-1_dec) == 12);
+static_assert(static_cast<int>(-123e4_dec) == -1230000);
+static_assert(static_cast<int>(-123e-1_dec) == -12);
+
 
 int main() {    
     std::vector<char> buff;

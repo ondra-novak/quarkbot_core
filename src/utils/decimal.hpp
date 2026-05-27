@@ -7,6 +7,7 @@
 
 #include <compare>
 #include <cstdint>
+#include <format>
 #include <iterator>
 #include <limits>
 #include <stdatomic.h>
@@ -148,6 +149,11 @@ public:
     static constexpr Exponent exponent_max = std::numeric_limits<Exponent>::max();
     static constexpr Exponent exponent_min = std::numeric_limits<Exponent>::min();
 
+    constexpr explicit operator double() const {return to_double();}
+    constexpr explicit operator int() const {return to_int();}
+    constexpr explicit operator long() const {return to_long();}
+    constexpr explicit operator float() const {return static_cast<float>(to_double());}
+    constexpr explicit operator bool() const {return _packed != 0;}
 
     constexpr Exponent exponent() const {
         return static_cast<std::int8_t>(_packed & 0xFF);
@@ -194,7 +200,6 @@ public:
         return normalize(static_cast<std::int64_t>((b?-1:1)*std::round(value * std::pow(10,-lg+mantissa_digits))), static_cast<Exponent>(lg));
     }
 
-    constexpr explicit operator bool() const {return _packed != 0;}
     
     friend constexpr Decimal scaleb10(const Decimal &src, int exponent) {
         if (!src) return src;
@@ -260,6 +265,20 @@ public:
            
     constexpr double to_double() const {
         return static_cast<double>(mantissa()) * pow10c(exponent() - mantissa_digits);
+    }
+    constexpr std::intmax_t to_intmax() const {
+        auto e = exponent();
+        if (e  <= 0) return 0;
+        auto adje = e - static_cast<int>(mantissa_digits);
+        if (adje < 0) return _decimal_details::divide_pow10(mantissa(), static_cast<unsigned int>(-adje));
+        else return _decimal_details::multiply_pow10(mantissa(), static_cast<unsigned int>(adje));
+    }
+
+    constexpr int to_int() const {
+        return static_cast<int>(to_intmax());
+    }
+    constexpr long to_long() const {
+        return static_cast<long>(to_intmax());
     }
     
     constexpr bool operator==(const Decimal &other) const = default;
@@ -554,3 +573,78 @@ public:
 constexpr Decimal operator ""_dec(const char* k){
       return Decimal::from_string(k);
 }
+
+
+template <>
+struct std::formatter<Decimal> {
+    // Zdola zdědíme nebo interně použijeme formatter pro řetězce
+    std::formatter<std::string_view> string_formatter;
+    
+    char presentation = 'g';
+    int precision = -1;
+
+    // 1. Parsování formátovacího řetězce
+    constexpr auto parse(std::format_parse_context& ctx) {
+        auto it = ctx.begin();
+        auto end = ctx.end();
+
+        // Najdeme, kde končí specifikace pro Decimal (hledáme tečku nebo typ f/e/g)
+        auto dec_spec = it;
+        while (dec_spec != end && *dec_spec != '}' && *dec_spec != '.' && 
+               *dec_spec != 'f' && *dec_spec != 'e' && *dec_spec != 'g') {
+            ++dec_spec;
+        }
+
+        // 1a. Část PŘED tečkou/typem (šířka, zarovnání) předáme string_formatteru.
+        // Vytvoříme si pod-kontext, aby si string_formatter naparsoval své věci.
+        std::format_parse_context sub_ctx(std::string_view(it, end), ctx.next_arg_id());
+        string_formatter.parse(sub_ctx);
+        
+        // Posuneme náš iterátor na místo, kde string_formatter skončil nebo kde začíná Decimal specifikace
+        it = dec_spec;
+
+        // 1b. Naparsujeme přesnost (např. .2)
+        if (it != end && *it == '.') {
+            ++it;
+            precision = 0;
+            while (it != end && *it >= '0' && *it <= '9') {
+                precision = precision * 10 + (*it - '0');
+                ++it;
+            }
+        }
+
+        // 1c. Naparsujeme typ prezentace (f, e, g)
+        if (it != end && (*it == 'f' || *it == 'e' || *it == 'g')) {
+            presentation = *it;
+            ++it;
+        }
+
+        // Kontrola správnosti ukončení
+        if (it != end && *it != '}') {
+            throw std::format_error("Neplatná syntaxe formátu pro Decimal.");
+        }
+
+        return it;
+    }
+
+    // 2. Formátování
+    auto format(const Decimal& d, std::format_context& ctx) const {
+        std::string res;
+
+        // Získání čistého textového řetězce z vašeho typu Decimal
+        if (presentation == 'f') {
+            res = d.to_string_fixed(precision == -1 ? 6 : precision);
+        } else if (presentation == 'e') {
+            res = d.to_string_sci(precision == -1 ? 6 : precision);
+        } else {
+            if (precision != -1) {
+                res = d.to_string_fixed(precision);
+            } else {
+                res = d.to_string();
+            }
+        }
+
+        // Delegujeme finální formátování (zarovnání, šířku) na string_formatter
+        return string_formatter.format(res, ctx);
+    }
+};
