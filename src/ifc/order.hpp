@@ -312,7 +312,7 @@ public:
     */    
     StrategyFragment feed_to(std::shared_ptr<Hub<Order> > hub) {
         Order ord = *this;
-        while (co_await(ord.next()) && co_await hub->push(ord));
+        while (co_await(ord.next()) && co_await hub->send(ord));
     }
 
     ///determines whether update carries done status (is_done_status)
