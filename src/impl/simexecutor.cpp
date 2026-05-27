@@ -1,4 +1,5 @@
 #include "simexecutor.hpp"
+#include "ifc/order_defs.hpp"
 #include "impl/simexchange.hpp"
 #include "siminstrument.hpp"    
 #include "ifc/defs.hpp"
@@ -92,18 +93,16 @@ namespace quarkbot {
         const Order &ord = order.ord;
         const OrderParametersGen<Decimal> &params = ord.get_parameters();
 
-        if (params.quantity <= 0) {
+        if (params.quantity <= 0 && params.type != OrderType::alert) {
             set_order_status(ord, Order::RejectionWithText{ OrderRejectionReason::invalid_params, "Invalid quantity" });
             return false;
         }
-
-        if (params.type != OrderType::stop && params.type != OrderType::market && params.limit_price <= Decimal(0)) {
-            set_order_status(ord, Order::RejectionWithText{  OrderRejectionReason::invalid_params ,"Invalid or missing limit price"});
+        if (is_stop_order(params.type) && params.stop_price <= Decimal(0)) {
+            set_order_status(ord, Order::RejectionWithText{  OrderRejectionReason::invalid_params ,"Invalid or missing stop price"});
             return false;
         }
-
-        if ((params.type == OrderType::stop || params.type == OrderType::stoplimit || params.type == OrderType::oco) && params.stop_price <= Decimal(0)) {
-            set_order_status(ord, Order::RejectionWithText{ OrderRejectionReason::invalid_params , "Invalid or missing stop price"});
+        if (is_limit_order(params.type) && params.limit_price <= Decimal(0)) {
+            set_order_status(ord, Order::RejectionWithText{ OrderRejectionReason::invalid_params , "Invalid or missing limit price"});
             return false;
         }
         if (params.time_in_force != TimeInForce::gtc && params.time_in_force != TimeInForce::ioc) {
@@ -133,9 +132,21 @@ namespace quarkbot {
     }
     bool SimExecutor::match_order(ActiveOrder &order, Quote &quote, bool taker) {
         auto &params  = order.ord.get_parameters();
+        {
+            auto &p = params.side == Side::sell?quote.bid:quote.ask;
+            int sid = static_cast<int>(params.side);
+            if (real_order_type(order) == OrderType::alert) {
+                Decimal dp = params.stop_price - p;
+                if (sgn(dp) * sid < 0) {
+                    set_order_status(order.ord, {OrderStatus::filled});
+                    return true;
+                }
+                return false;
+            }
+        }
         while (order.filled < params.quantity) {
 
-            if (!_last_quote.has_value()) return false;            
+            if (!_last_quote.has_value()) return false;
             auto leave_quant = params.quantity - order.filled;
             auto &p = params.side == Side::sell?quote.bid:quote.ask;
             auto &s = params.side== Side::sell?quote.bid_size:quote.ask_size;
@@ -150,16 +161,16 @@ namespace quarkbot {
                 case OrderType::stoplimit:
                 case OrderType::oco:
                     dp = params.stop_price - p;
-                    if (sgn(dp) * sid < 0) order.trig = true;  
+                    if (sgn(dp) * sid < 0) order.trig = true;
                     else return false;
                     break;
                 case OrderType::market:
                     if (dq > 0) {
-                        create_fill(order, p, dq,quote.time,taker); 
+                        create_fill(order, p, dq,quote.time,taker);
                         s -= dq;
                     }
                     else create_fill(order, Decimal(p.to_double() + p.to_double() *_slippage*static_cast<double>(params.side)), leave_quant,quote.time,taker);
-                    break;                
+                    break;
 
                 case OrderType::limit_post_only:
                     if (taker && sgn(dp) * sid > 0) {
@@ -182,11 +193,7 @@ namespace quarkbot {
                     }
                     return false;
                 case OrderType::alert:
-                    if (sgn(dp) * sid < 0) {
-                        set_order_status(order.ord, {OrderStatus::filled});
-                        return true;
-                    }
-                    return false;                                                       
+                    break; // handled above, unreachable
             }
         }
 

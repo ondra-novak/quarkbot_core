@@ -7,7 +7,7 @@ namespace quarkbot {
 
 
 enum class OrderType : char{
-    ///alert - not order exactly, limit_price is mandatory, amount must be zero, is marked filled when price is reached from given side 
+    ///alert - works as stop, stop_price is mandatory, filled when triggered, no fill generated
     /** alerts can be emulated if not supported on exchange */
     alert,
     ///market order - amount is mandarory
@@ -42,13 +42,13 @@ enum class TimeInForce : char {
 inline constexpr bool is_limit_order(OrderType type) {
     return type == OrderType::limit
         || type == OrderType::limit_post_only
-        || type == OrderType::oco
-        || type == OrderType::alert;
+        || type == OrderType::oco; 
 }
 
 inline constexpr bool is_stop_order(OrderType type) {
     return type == OrderType::stop
         || type == OrderType::stoplimit
+        || type == OrderType::alert
         || type == OrderType::oco;
 }
 
@@ -71,7 +71,19 @@ struct OrderParametersGen {
     bool reduce_only = false;
     ///create or increase to hedge side - can open reverse position if supported on exchange
     bool hedge = false;
-    ///Enforce that stop or alert is triggered on local side, not on exchange, even if exchange supports it.    
+    ///Enforce that limit, stop or alert is triggered on local side, not on exchange, even if exchange supports it.    
+    /**
+        - limit - converted to trigger, which is placed to the exchange when instrument price reaches the limit price 
+        - stop - converted to trigger placing market order
+        - stoplimit - converted to trigger placing limit order
+        - alert - reported as filled when prices is triggered
+
+        @note some of settings are not supported, for example time_in_force is applied to final order, until order is
+        triggered, GTC is in effect. Also such an order cannot be replaced when it is already triggered. It is also
+        possible, that some values of the order will not be accessible, for example the order id. The order cannot be
+        stored in storage - however when the trigger is activated, created order will be stored in the storage. 
+
+    */
     bool local_trigger = false;
     ///time in force
     TimeInForce time_in_force = TimeInForce::gtc;
@@ -90,7 +102,9 @@ using OrderRequest = OrderParametersGen<TargetValue>;
 enum class OrderStatus : uint8_t {
     ///order sent, not confirmed yet
     sent,
-    ///order is active, open, waiting in orderbook, waiting to trigger, there can be partial fills (see fills)
+    ///order is awaiting trigger, this state is used for locally managed triggers, should not be emited by exchanges. 
+    pending_trigger,
+    ///order is active, open, waiting in orderbook, there can be partial fills (see fills)
     open,    
     ///order is done, filled complete
     filled,

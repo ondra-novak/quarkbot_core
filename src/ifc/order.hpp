@@ -72,7 +72,8 @@ public:
         ResultAndExecWorker<bool> awaiting = {};
         ///post co_await operation
         coro::awaitable_transform<awaitable<bool>, std::shared_ptr<State> > _awt_conv;
-        
+        ///order has been canceled internally - reserved for adapter
+        std::atomic<bool> canceled = {};
 
         State(OrderParametersGen<Decimal> params, 
               PTradableInstrument instrument,
@@ -183,7 +184,6 @@ public:
                 awaiting(true);
             }
         }
-
 
         static awaitable<bool> next_event(std::shared_ptr<State> me) {         
             auto inner = [](std::shared_ptr<State> me)->awaitable<bool>{
@@ -322,6 +322,12 @@ public:
             || std::holds_alternative<RejectionWithText>(up)) return true; //rejection
         return false;
     }
+
+    ///Retrieve internal record key - for some advanced persistence
+    auto get_record_key() const {return _state->key;}
+
+    ///Access internal state - reserved for adapters, the strategy should not use it
+    auto access_internal_state() const {return _state;}
 
 protected:
 

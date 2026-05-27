@@ -6,7 +6,6 @@ target_sources(quarkbot_impl PUBLIC
          BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/.." FILES
             backtest.hpp
             merged_data_source.hpp
-            report_fills_to_csv.hpp
             simtradableinstrument.hpp
             configured_data_source.hpp
             simaccount.hpp
@@ -28,6 +27,7 @@ target_sources(quarkbot_impl PUBLIC
             mem_storage.hpp
             siminstrument.hpp
             mmbot_data_source.hpp
+            order_trigger.hpp
 )
 
 target_sources(  quarkbot_impl PRIVATE 
@@ -45,6 +45,7 @@ target_sources(  quarkbot_impl PRIVATE
             backtest_executor.cpp
             simtradableinstrument.cpp
             configured_data_source.cpp
+            order_trigger.cpp
 )
 
 target_link_libraries(quarkbot_impl
