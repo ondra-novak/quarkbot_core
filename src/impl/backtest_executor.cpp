@@ -1,5 +1,7 @@
 #include "backtest_executor.hpp"
-#include "ifc/execution_worker.hpp"
+
+#include <memory>
+#include <stdexcept>
 
 namespace quarkbot {
 
@@ -10,8 +12,15 @@ void BacktestExecutor::flush_queue() {
     }
 }
 
-void BacktestExecutor::attach_to_thread() {
-    _current_worker = weak_from_this();;
+std::shared_ptr<BacktestExecutor> BacktestExecutor::create() {
+    auto cur = IExecutionWorker::current();
+    auto me = std::dynamic_pointer_cast<BacktestExecutor>(cur);
+    if (!me) {
+        if (cur) throw std::runtime_error("Thread is alread execution worker of different type");
+        auto me = std::shared_ptr<BacktestExecutor>();
+        _current_worker = me;
+    }
+    return me;
 }
 
 
@@ -44,7 +53,7 @@ awaitable<bool> BacktestExecutor::sleep_for(std::chrono::system_clock::duration 
 bool BacktestExecutor::cancel(coro::cancel_signal *cancel_signal) {
     auto r = _scheduler.cancel(cancel_signal);
     if (r) {
-        IExecutionWorker::resume(std::move(r));
+        resume(r.release());
         return true;
     } else {
         return false;

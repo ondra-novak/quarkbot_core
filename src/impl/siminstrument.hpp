@@ -4,6 +4,7 @@
 #include "ifc/types.hpp"
 #include "simexchange.hpp"
 #include <memory>
+#include <stdexcept>
 
 namespace quarkbot {
 
@@ -20,9 +21,9 @@ public:
     virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params)  override {
         return _exchange->subscribe_stream(shared_from_this(), nullptr, type, params);
     }
-    virtual awaitable<PTradableInstrument> create_tradable_instrument(PAccount account) override {
+    virtual PTradableInstrument create_tradable_instrument(PAccount account) override {
         auto acc = std::dynamic_pointer_cast<SimAccount>(account);
-        if (!acc) return std::  nullopt; //return nullopt because it throws an exception if accessed.
+        if (!acc) throw std::runtime_error("Incompatible account (create_tradable_instrument)");
         return _exchange->create_tradable_instrument(shared_from_this(), acc);
     }
 

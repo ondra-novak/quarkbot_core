@@ -1,0 +1,56 @@
+#pragma once
+
+#include "../underlying.hpp"
+#include "../types.hpp"
+#include "../streaming.hpp"
+namespace quarkbot {
+
+
+class IMarketInstrument : public IPublisher{
+public:
+    struct Info : ContractInfo {
+        Decimal min_lot_size = {};
+        Decimal max_lot_size = Decimal::max();
+        Decimal lot_size_increment = {};
+        Decimal price_increment = {};
+        Decimal min_volume = {};
+        Decimal leverage = {};      //0 used for spot
+        Decimal fee_rate_maker = {};
+        Decimal fee_rate_taker = {};
+        ///underlying currency for quotes
+        UnderlyingCurrency quote_currency;
+        ///underlying currency for pnl, can be different - for example inverted futures 
+        UnderlyingCurrency pnl_currency;
+        ///underlying currenct for asset if exists (nullopt for contracts, stocks and non currency assets)
+        std::optional<UnderlyingCurrency> asset_wallet;
+        ///instrument name - not need to be unique (exchange related)
+        std::string name;
+
+        ///instrument is leveraged
+        bool is_leveraged() const {return leverage > 0;}
+        ///there is a wallet for asset
+        bool asset_has_wallet() const {return !is_leveraged() && asset_wallet.has_value();}
+
+        Decimal calc_initial_margin(Decimal price, Decimal quantity) const {
+            if (leverage) {
+                return calc_turnover_pnl_currency(price, quantity) * reciprocal(leverage);
+            } else {
+                return 0;
+            }
+        }
+    
+    };
+    virtual ~IMarketInstrument() = default;
+
+    virtual PExchange get_exchange() const = 0;
+
+    virtual const Info &get_info() const = 0;
+    
+    ///Create tradable instrument from the instrument
+    /**
+      @param account associated account
+      @return reference to tradable instrument, can be nullptr if not available for trading with this account
+     */
+    virtual PTradableInstrument create_tradable_instrument(PAccount account) = 0;
+};
+}

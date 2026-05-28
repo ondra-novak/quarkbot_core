@@ -1,10 +1,9 @@
 #pragma once
 
 #include "ifc/defs.hpp"
-#include "ifc/market_instrument.hpp"
+#include "ifc/stream/trade.hpp"
+#include "ifc/stream/quote.hpp"
 #include "ifc/order.hpp"
-#include "ifc/underlying.hpp"
-#include "impl/simaccount.hpp"
 #include <chrono>
 #include <memory>
 namespace quarkbot {
@@ -46,7 +45,6 @@ protected:
 
     std::vector<ActiveOrder> _active_orders;
     std::optional<Quote> _last_quote;
-    PReporter _reporter;
     std::uint64_t _random_key = 0;
 
     bool validate_order(ActiveOrder &order);
@@ -60,7 +58,7 @@ protected:
 
     static PSimInstrument extract_instrument(const Order &ord);
 
-    void set_order_status(const Order &ord, Order::Update &&st);
+    void set_order_status(const Order &ord, OrderInternalState::Update &&st);
     void accept_order(const Order &ord);
 
     //TODO implement reporting of order blocking

@@ -5,44 +5,44 @@
 #include "check.h"
 
 
-quarkbot::StrategyFragment print_events(quarkbot::PHub<int>  s) {
+quarkbot::StrategyFragment print_events(quarkbot::Hub<int>  s) {
     int v;
     bool r;
     for (int i = 0; i < 5; i++) {
-        bool r = co_await s->receive(v);
+        bool r = co_await s.receive(v);
         CHECK(r);
         CHECK_EQUAL(v, i);
     }
-    r = co_await s->receive(v);
+    r = co_await s.receive(v);
     CHECK(!r);
     co_return;
 }
 
-quarkbot::StrategyFragment send_events(quarkbot::PHub<int>  s) {
+quarkbot::StrategyFragment send_events(quarkbot::Hub<int>  s) {
     for (int i = 0; i < 5; i++) {
-        co_await s->send(i);
+        co_await s.send(i);
     }
-    s->close();
+    s.close();
 }
     
-quarkbot::StrategyFragment print_events_2(quarkbot::PHub<int>  s) {
+quarkbot::StrategyFragment print_events_2(quarkbot::Hub<int>  s) {
     std::optional<int> v;
     bool r;
     for (int i = 0; i < 5; i++) {
-        bool r = co_await s->receive(v);
+        bool r = co_await s.receive(v);
         CHECK(r);
         CHECK_EQUAL(*v, i);
     }
-    r = co_await s->receive(v);
+    r = co_await s.receive(v);
     CHECK(!r);
     co_return;
 }
 
-quarkbot::StrategyFragment send_events_2(quarkbot::PHub<int>  s) {
+quarkbot::StrategyFragment send_events_2(quarkbot::Hub<int>  s) {
     for (int i = 0; i < 5; i++) {
-        co_await s->send(std::move(i));
+        co_await s.send(std::move(i));
     }
-    s->close();
+    s.close();
 }
 
 

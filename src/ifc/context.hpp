@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <memory_resource>
+#include "tradable_instrument.hpp"
 #include <vector>
 namespace quarkbot {
 
@@ -29,16 +30,14 @@ namespace quarkbot {
     public:
         ///List of tradable instruments available to the strategy
         /** the strategy can query for accounts and exchanges through the instruments */
-        std::vector<PTradableInstrument> instruments;
+        std::vector<TradableInstrument> instruments;
         ///Storage associated with the strategy
         PStorage storage;
         ///Reference to strategy execute worker
-        PExecutionWorker exec_worker;
+        ExecutionWorker exec_worker{nullptr};
         ///current strategy mode
         StrategyMode mode;
-        ///Reporter - strategy should report it state by this object
-        PReporter reporter;
-
+        
         ///co_await on this to wait on stop signal
         /**
         There can be multiple awaiting coroutines. All these coroutines are resumed on stop signal
@@ -59,7 +58,7 @@ namespace quarkbot {
         template<StrategyClass _S>
         friend void start_strategy(_S &strategy_instance, StrategyContext &&ctx) {
             auto worker = ctx.exec_worker;
-            worker->run(strategy_instance.start(std::move(ctx)));
+            worker.run(strategy_instance.start(std::move(ctx)));
         }
 
         ///create and start the strategy
@@ -76,14 +75,14 @@ namespace quarkbot {
             auto stop_awaitable = ctx.stop_signal();
             //create strategy instance
             _S strategy;
-            co_await worker->schedule();
+            co_await worker.schedule();
             //run strategy, wait until exit
             co_await strategy.start(std::move(ctx));            
             //wait until context stop
             co_await stop_awaitable;
             //scheduler twice
-            co_await worker->schedule();
-            co_await worker->schedule();            
+            co_await worker.schedule();
+            co_await worker.schedule();            
             //strategy is destroyed here
         }
 

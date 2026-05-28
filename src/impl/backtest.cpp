@@ -18,10 +18,9 @@ namespace quarkbot {
             std::span<std::pair<std::string, Decimal> > wallet)
         :_exchange(std::make_shared<SimExchange>())
         ,_data(std::move(data_source))
-        ,_executor(std::make_shared<BacktestExecutor>())
         ,_account(_exchange->create_account(std::move(account_name),wallet))
         {
-            _context.exec_worker = _executor;
+            _context.exec_worker = ExecutionWorker(_executor);
             _context.mode = StrategyMode::backtest;            
             _context.stop_signal = [this] -> awaitable<coro::void_type> {
                 if (_stopped) return {};
@@ -38,12 +37,12 @@ namespace quarkbot {
 
     void Backtest::add_instrument(IMarketInstrument::Info instrument_def) {
         auto instr = _exchange->create_instrument(instrument_def);        
-        auto tinstr = instr->create_tradable_instrument(_account).get();
+        auto tinstr = instr->create_tradable_instrument(_account);
         _context.instruments.push_back(std::static_pointer_cast<ITradableInstrument>(std::move(tinstr)));
     }
     
     void Backtest::run(StrategyFragment fragment) {        
-        _executor->attach_to_thread();
+        _executor = BacktestExecutor::create();
         auto event = _data->next_event();
         if (!event) return;
         _executor->set_time(event->time);

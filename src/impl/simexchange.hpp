@@ -2,12 +2,14 @@
 
 
 #include "ifc/defs.hpp"
-#include "ifc/exchange.hpp"
 #include "ifc/market_instrument.hpp"
 #include "ifc/stream_defs.hpp"
 #include "ifc/streaming.hpp"
+#include "ifc/stream/closedbar.hpp"
+#include "ifc/stream/tradestat.hpp"
 #include "ifc/types.hpp"
 #include "ifc/underlying.hpp"
+#include "ifc/abstract/iexchange.hpp"
 #include "simaccount.hpp"
 #include "simexecutor.hpp"
 #include "streaming/lock_free_publisher.hpp"
@@ -28,8 +30,8 @@ public:
     using TradeCounterPublisher = LockFreePublisher<TradeStatCounter, 1>;
 
     ///this function creates empty account, credentials are ignored
-    virtual PAccount create_account(const std::string &name, const std::string &credentials)  override;
-    virtual std::vector<PMarketInstrument> get_market_instruments() override;
+    virtual Account create_account(const std::string &name, const std::string &credentials)  override;
+    virtual std::vector<MarketInstrument> get_market_instruments() override;
     virtual std::vector<UnderlyingCurrency> get_all_currencies()  override;
     virtual std::string_view get_name() const override;
 
@@ -37,7 +39,7 @@ public:
     PTradableInstrument create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account);
 
     PMarketInstrument create_instrument(IMarketInstrument::Info def);
-    virtual PMarketInstrument create_instrument(std::string_view id, InstrumentType type) override;
+    virtual MarketInstrument create_instrument(std::string_view id, InstrumentType type) override;
     UnderlyingCurrency create_currency(std::string_view name, bool is_unified = true);
     UnderlyingCurrency create_currency(std::string_view name) const;
     

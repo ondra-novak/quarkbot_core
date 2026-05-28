@@ -1,8 +1,7 @@
 #pragma once 
-#include "ifc/defs.hpp"
-#include "ifc/market_instrument.hpp"
-#include "impl/streaming/lock_free_publisher.hpp"
+#include "lock_free_publisher.hpp"
 #include "publisher_manager.hpp"
+#include "ifc/stream/orderbook.hpp"
 #include <chrono>
 
 

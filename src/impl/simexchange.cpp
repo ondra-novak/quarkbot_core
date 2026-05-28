@@ -1,4 +1,6 @@
 #include "simexchange.hpp"
+#include "ifc/account.hpp"
+#include "ifc/market_instrument.hpp"
 #include "ifc/types.hpp"
 #include "ifc/underlying.hpp"
 #include "impl/simaccount.hpp"
@@ -199,24 +201,24 @@ UnderlyingCurrency SimExchange::create_currency(std::string_view name, bool is_u
 UnderlyingCurrency SimExchange::create_currency(std::string_view name) const {
     return UnderlyingCurrency{std::string(name), std::string(name), this};
 }
-PAccount SimExchange::create_account(const std::string &name, const std::string &)  {
-    return std::make_shared<SimAccount>(name, std::span<std::pair<UnderlyingCurrency, Decimal> >{});
+Account SimExchange::create_account(const std::string &name, const std::string &)  {
+    return Account(std::make_shared<SimAccount>(name, std::span<std::pair<UnderlyingCurrency, Decimal> >{}));
 }
-std::vector<PMarketInstrument> SimExchange::get_market_instruments()  {
-    std::vector<PMarketInstrument> out;
+std::vector<MarketInstrument> SimExchange::get_market_instruments()  {
+    std::vector<MarketInstrument> out;
     for (auto &[k,v]:_instrument_names) {
         auto lk = v.get(shared_from_this());
-        if (lk) out.push_back(std::move(lk));
+        if (lk) out.push_back(MarketInstrument(std::move(lk)));
     }
     return out;
 }
 
-PMarketInstrument SimExchange::create_instrument(std::string_view id, InstrumentType type) {
+MarketInstrument SimExchange::create_instrument(std::string_view id, InstrumentType type) {
     std::string idstr(id);
     auto instr = resolve_instrument(idstr);
     if (!instr) throw std::runtime_error("Unknown instrument: SimExchange / " + idstr);
     if (instr->get_info().type != type) throw std::runtime_error("Instrument found, but different type: SimExchange / " + idstr );   
-    return instr;
+    return MarketInstrument(std::move(instr));
     
 }
 

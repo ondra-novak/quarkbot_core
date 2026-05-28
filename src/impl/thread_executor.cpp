@@ -14,6 +14,12 @@ namespace quarkbot {
         _dispatch_queue.push(std::move(h));
         manage_lock_me();
     }
+
+    std::shared_ptr<ThreadExecutor> ThreadExecutor::create(){
+            auto x = std::make_shared<ThreadExecutor>();
+            x->start();
+            return x;
+        }
     PExecutionWorker ThreadExecutor::spawn() noexcept {
         return create();
     }
@@ -41,7 +47,7 @@ namespace quarkbot {
             out = _scheduler.cancel(cancel_signal);
         } 
         if (out) {
-            IExecutionWorker::resume(std::move(out));
+            resume(out.release());
             return true;
         } else {
             return false;

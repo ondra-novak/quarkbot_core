@@ -1,22 +1,21 @@
 #pragma once
-
-#include "abstract/iexchange.hpp"
-#include "ifc/account.hpp"
-#include "ifc/market_instrument.hpp"
+#include "../defs.hpp"
+#include "../types.hpp"
+#include "../underlying.hpp"
+#include <string_view>
+#include <vector>
 
 namespace quarkbot {
 
-class Exchange {
+class MarketInstrument;
+class Account;
+
+///Interface for an exchange. This is the main entry point for users of the library; all interactions with the exchange are done through this interface and objects obtained from it.
+class IExchange {
 public:
-    Exchange(std::shared_ptr<IExchange> state):_state(std::move(state)) {}
-      ///create account object which is mapped to an account on the exchange. Format of credentials is exchange-specific (e.g. API key, secret, etc); for backtesting/simulation it can be left empty or used to specify initial wallet.
-    Account create_account(const std::string &name, const std::string &credentials)  {
-        return _state->create_account(name, credentials);
-    }
-    ///get list of all instruments available on the exchange.
-    std::vector<MarketInstrument> get_market_instruments() {
-        return _state->get_market_instruments();
-    }
+    virtual ~IExchange() = default;
+    virtual Account create_account(const std::string &name, const std::string &credentials)  = 0;
+    virtual std::vector<MarketInstrument> get_market_instruments()  = 0;
     ///Create instrument object by id. Id format is exchange-specific (e.g. symbol, contract code, etc).
     /**
     @param id Instrument identifier (e.g. symbol, contract code, etc). Format is exchange-specific.
@@ -28,21 +27,14 @@ public:
           Internally instruments are held as weak_refs, so if all references to an instrument are released, it can be destroyed and recreated on the next call to this function. 
           However, as long as there is at least one reference to an instrument, it will not be destroyed and the same object will be returned.
      */
-    MarketInstrument create_instrument(std::string_view id, InstrumentType type)  {
-        return _state->create_instrument(id, type);
-    }
+    virtual MarketInstrument create_instrument(std::string_view id, InstrumentType type)  = 0;
     ///query list of all currencies available on the exchange. This is used for wallet management and PnL calculations; it may or may not correspond to actual tradable assets on the exchange.
-    std::vector<UnderlyingCurrency> get_all_currencies()  {
-        return _state->get_all_currencies();
-    }
+    virtual std::vector<UnderlyingCurrency> get_all_currencies()  = 0;
     ///get exchange name. This is used for informational purposes and may be used in logging, etc.
-    std::string_view get_name() const{
-        return _state->get_name();
-    }
+    virtual std::string_view get_name() const = 0;
+    
 
 
-protected:
-    std::shared_ptr<IExchange> _state;
 };
 
-}
+} // namespace quarkbot

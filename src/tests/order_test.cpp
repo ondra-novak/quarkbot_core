@@ -1,3 +1,5 @@
+#include "ifc/abstract/order_internal.hpp"
+#include "ifc/execution_worker.hpp"
 #include "impl/simexchange.hpp"
 #include "impl/backtest_executor.hpp"
 #include "ifc/backtest_data_source.hpp"
@@ -14,13 +16,12 @@ using namespace quarkbot;
 struct OrderFixture {
     std::shared_ptr<BacktestExecutor>     executor;
     std::shared_ptr<SimExchange>          exchange;
-    PAccount                              account;
-    PTradableInstrument                   instrument;
+    Account                               account = {nullptr};
+    TradableInstrument                   instrument = {nullptr};
     std::chrono::system_clock::time_point t0 = std::chrono::system_clock::now();
 
     OrderFixture() {
-        executor = std::make_shared<BacktestExecutor>();
-        executor->attach_to_thread();
+        executor = BacktestExecutor::create();
 
         exchange = std::make_shared<SimExchange>();
 
@@ -43,7 +44,7 @@ struct OrderFixture {
 
         std::vector<std::pair<std::string, Decimal>> wallet = {{"USD", 10000_dec}};
         account    = exchange->create_account("test", wallet);
-        instrument = minstr->create_tradable_instrument(account).get();
+        instrument = minstr->create_tradable_instrument(account.get_handle());
     }
 };
 
@@ -68,7 +69,7 @@ static void drain_until_done(Order &order) {
 static void test_limit_buy_fills_on_quote() {
     OrderFixture fx;
 
-    Order order = fx.instrument->place_order(
+    Order order = fx.instrument.place_order(
         OrderRequest{.side = Side::buy, .type = OrderType::limit,
                      .quantity = 1_dec, .limit_price = 100_dec},
         "buy_test");
@@ -98,7 +99,7 @@ static void test_limit_buy_fills_on_quote() {
 static void test_limit_sell_fills_on_quote() {
     OrderFixture fx;
 
-    Order order = fx.instrument->place_order(
+    Order order = fx.instrument.place_order(
         OrderRequest{.side = Side::sell, .type = OrderType::limit,
                      .quantity = 1_dec, .limit_price = 102_dec},
         "sell_test");
@@ -128,7 +129,7 @@ static void test_limit_sell_fills_on_quote() {
 static void test_limit_buy_fills_on_trade() {
     OrderFixture fx;
 
-    Order order = fx.instrument->place_order(
+    Order order = fx.instrument.place_order(
         OrderRequest{.side = Side::buy, .type = OrderType::limit,
                      .quantity = 1_dec, .limit_price = 100_dec},
         "buy_trade_test");
@@ -154,7 +155,7 @@ static void test_market_buy_fills_immediately() {
     OrderFixture fx;
     fx.exchange->set_slippage(0.0);  // disable slippage so fill price == ask exactly
 
-    Order order = fx.instrument->place_order(
+    Order order = fx.instrument.place_order(
         OrderRequest{.side = Side::buy, .type = OrderType::market, .quantity = 1_dec},
         "mkt_buy_test");
     drain_status(order);
@@ -177,7 +178,7 @@ static void test_market_buy_fills_immediately() {
 static void test_cancel_order() {
     OrderFixture fx;
 
-    Order order = fx.instrument->place_order(
+    Order order = fx.instrument.place_order(
         OrderRequest{.side = Side::buy, .type = OrderType::limit,
                      .quantity = 1_dec, .limit_price = 100_dec},
         "cancel_test");
@@ -193,7 +194,7 @@ static void test_replace_order() {
     OrderFixture fx;
 
     // Place original limit buy @ 100
-    Order original = fx.instrument->place_order(
+    Order original = fx.instrument.place_order(
         OrderRequest{.side = Side::buy, .type = OrderType::limit,
                      .quantity = 1_dec, .limit_price = 100_dec},
         "orig_test");
@@ -201,7 +202,7 @@ static void test_replace_order() {
     CHECK(original.get_status() == OrderStatus::open);
 
     // Replace with lower limit @ 98
-    Order replacement = fx.instrument->place_order(
+    Order replacement = fx.instrument.place_order(
         OrderRequest{.side = Side::buy, .type = OrderType::limit,
                      .quantity = 1_dec, .limit_price = 98_dec},
         original,
@@ -235,7 +236,7 @@ static void test_replace_order() {
 static void test_order_next_coroutine() {
     OrderFixture fx;
 
-    Order order = fx.instrument->place_order(
+    Order order = fx.instrument.place_order(
         OrderRequest{.side = Side::buy, .type = OrderType::limit,
                      .quantity = 1_dec, .limit_price = 100_dec},
         "coro_test");
@@ -255,7 +256,7 @@ static void test_order_next_coroutine() {
 
     StrategyFragment frag = launch_coro();
     // Enqueue the coroutine on the executor and run until it suspends
-    fx.executor->run(std::move(frag));
+    ExecutionWorker(fx.executor).run(std::move(frag));
     fx.executor->flush_queue();
 
     // Coroutine should have suspended waiting for an update — not yet done
@@ -275,7 +276,7 @@ static void test_order_next_coroutine() {
         .fees       = Decimal(0),
         .fee_rate   = Decimal(1),
     };
-    order.update_order(Order::Update{std::move(fill)});
+    order.update_order(OrderInternalState::Update{std::move(fill)});
 
     // Pump the executor so the coroutine resumes
     fx.executor->flush_queue();

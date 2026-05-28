@@ -1,6 +1,6 @@
-#include "ifc/timer.hpp"
 #include "check.h"
 #include "ifc/defs.hpp"
+#include "ifc/execution_worker.hpp"
 #include "ifc/minimutex.hpp"
 #include "ifc/strategy_fragment.hpp"
 #include "impl/thread_executor.hpp"
@@ -14,7 +14,7 @@ using namespace quarkbot;
 class TestTimerObject {
 public:
 
-    TestTimerObject(PExecutionWorker worker):_timer(worker) {};
+    TestTimerObject(ExecutionWorker worker):_timer(worker) {};
 
     StrategyFragment run_in_cycle() {        
         std::lock_guard _(_exit_notify);
@@ -39,9 +39,9 @@ protected:
 
 
 int main() {
-    auto worker = ThreadExecutor::create();
+    ExecutionWorker worker( ThreadExecutor::create());
     TestTimerObject obj(worker);
-    worker->run(obj.run_in_cycle());
+    worker.run(obj.run_in_cycle());
     std::this_thread::sleep_for(std::chrono::seconds(1));
     auto count = obj.stop_join_and_get_counter();
     CHECK_BETWEEN(90, count, 110);

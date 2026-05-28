@@ -58,6 +58,16 @@ template<StreamType T>
 constexpr const StreamParams *stream_params = ExtractStreamParams<T>::value;
 
 
+template<typename X>
+struct StreamSingleParam: StreamParams {
+    X param;
+};
+
+template<typename X, typename Y>
+struct StreamDoubleParam: StreamParams {
+    X param1;
+    Y param2;
+};
 
 
 

@@ -21,7 +21,7 @@ namespace quarkbot {
 
     void OrderTrigger::register_order(Order ord){
         update_state(ord, [](auto &){/* empty, just initialize state*/});
-        _worker->run(monitor_order(shared_from_this(), std::move(ord)));
+        _worker.run(monitor_order(shared_from_this(), std::move(ord)));
     }
  
     void OrderTrigger::cancel_order(Order ord){
@@ -82,7 +82,7 @@ namespace quarkbot {
             //validate and prepare limit order
             if (params.type == OrderType::limit){
                 if (params.limit_price <= 0_dec) {
-                    order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
+                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
                     me->unreg_order(order);
                     co_return;
                 }     
@@ -91,12 +91,12 @@ namespace quarkbot {
             //validate and prepare stop like orders
             } else if (params.type == OrderType::stop || params.type == OrderType::stoplimit || params.type == OrderType::alert) {
                 if (params.stop_price <= 0_dec) {
-                    order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_params, "missing stop price"});
+                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_params, "missing stop price"});
                     me->unreg_order(order);
                     co_return;
                 }     
                 if (params.type == OrderType::stoplimit && params.limit_price <= 0_dec){
-                    order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
+                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
                     me->unreg_order(order);
                     co_return;
                 }
@@ -105,7 +105,7 @@ namespace quarkbot {
                 trigger_sign = static_cast<int>(params.side);
             } else {
                 //report error - not supported
-                order.update_order(Order::RejectionWithText{OrderRejectionReason::unsupported, "unsupported order for local trigger"});
+                order.update_order(OrderRejectionWithText{OrderRejectionReason::unsupported, "unsupported order for local trigger"});
                 me->unreg_order(order);
                 co_return ;
             }
@@ -115,12 +115,12 @@ namespace quarkbot {
             if (repl) {
                 auto replst = repl->get_status();
                 if (replst == OrderStatus::sent){
-                    order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_replace, "not ready for replace"});
+                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_replace, "not ready for replace"});
                     me->unreg_order(order);
                     co_return ;
                 }
                 if (!me->cancel_order_for_replace(*repl)) {
-                    order.update_order(Order::RejectionWithText{OrderRejectionReason::order_not_found, "order cannot be replaced"});
+                    order.update_order(OrderRejectionWithText{OrderRejectionReason::order_not_found, "order cannot be replaced"});
                     me->unreg_order(order);
                     co_return ;
                 }
@@ -132,7 +132,7 @@ namespace quarkbot {
             auto instr = order.get_instrument();
 
             //subscribe trades
-            Stream ev= instr->get_instrument()->subscribe<Trade>();
+            Stream ev= instr.get_instrument().subscribe<Trade>();
             //create and update state with reference to event stream
             auto canceled = me->update_state(order, [&](State &st){
                 st.phase = &ev;           
@@ -152,7 +152,7 @@ namespace quarkbot {
             Trade tev;
             while (true) {
                 //read trade event
-                bool r = co_await ev.next(tev);
+                bool r = co_await ev.receive(tev);
                 //when stream is closed 
                 if (!r) {
                     //mark order canceled
@@ -186,7 +186,7 @@ namespace quarkbot {
                     co_return;
                 default:
                     //report error
-                    order.update_order(Order::RejectionWithText{OrderRejectionReason::invalid_params, "Failed to convert parameters of the order"});
+                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_params, "Failed to convert parameters of the order"});
                     me->unreg_order(order);
                     co_return;
             }
@@ -200,7 +200,7 @@ namespace quarkbot {
             ordreq.reduce_only = params.reduce_only;        
             
             //place the order
-            Order new_order = instr->place_order(ordreq, order.get_name());
+            Order new_order = instr.place_order(ordreq, order.get_name());
 
             //mark original order sent
             OrderStatus prev_status = OrderStatus::sent;        
@@ -225,10 +225,10 @@ namespace quarkbot {
                 if (st != prev_status) {
                     //handle open status
                     if (st == OrderStatus::open) {
-                        order.update_order(Order::OpenStatus{order.get_id(), order.get_record_key()});    
+                        order.update_order(OrderOpenStatus{order.get_id(), order.get_record_key()});    
                     //handle rejected status
                     } else if (st == OrderStatus::rejected){
-                        order.update_order(Order::RejectionWithText{order.get_reject_reason(), order.get_rejection_message()});    
+                        order.update_order(OrderRejectionWithText{order.get_reject_reason(), order.get_rejection_message()});    
                     } else {
                         //forward any other status
                         order.update_order(st);
@@ -241,7 +241,7 @@ namespace quarkbot {
             //exit
             co_return;        
         } catch (const std::exception &e) {
-            order.update_order(Order::RejectionWithText{OrderRejectionReason::internal_error, e.what()});
+            order.update_order(OrderRejectionWithText{OrderRejectionReason::internal_error, e.what()});
             me->unreg_order(order);
             co_return;
         }

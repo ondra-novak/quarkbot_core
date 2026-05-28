@@ -1,127 +1,137 @@
 #pragma once
 
-#include <basic_coro/awaitable.hpp>
-#include "ifc/defs.hpp"
-#include "ifc/stream_defs.hpp"
-#include "ifc/streaming.hpp"
 #include "market_instrument.hpp"
+#include "abstract/itradable_instrument.hpp"
+#include "account.hpp"
 #include "order.hpp"
-#include "utils/acb.hpp"
-#include "utils/function_view.hpp"
-#include "storage.hpp"
-#include <chrono>
+
 namespace quarkbot {
 
-
-
-class ITradableInstrument: public IPublisher<TradableInstrumentStreamTypeItem> {
+class TradableInstrument{
 public:
-    virtual ~ITradableInstrument() = default;
+    TradableInstrument(std::shared_ptr<ITradableInstrument> state):_state(std::move(state)){}
 
-    ///Place an order on the instrument
+    ///Place order on this instrument
     /**
     @param params order parameters
-    @param order_to_replace (optional) reference to existing order, which will be replaced. The way how
-    order is replaced depends on exchange. Replaced order is finished with replaced status. 
-    To prevent double execution in case of failure, the original order can be cancaled 
-    even if replace fails.
-    @param name order name, any arbitrary text which helps to strategy to identify the order
+    @param name optional name for order, can be used for debugging or logging purposes. 
+    @return Order object representing placed order. You can co_await on this object for order updates or read fills from it.
      */
-    virtual Order place_order(const OrderRequest &params, Order order_to_replace, std::string_view name = {}) = 0;
-    virtual Order place_order(const OrderRequest &params, std::string_view name = {}) = 0;
+    Order place_order(const OrderRequest &params, std::string_view name = {}){
+        return _state->place_order(params, {}, name);
+    }
 
-
-    ///Attach storage and restore active orders
+    ///Replace order on this instrument
     /**
-        @param storage storage object
-        @param key_name name of key used to store fills. The function derives key name for stored object 
-            (adds suffix ":o")
-        @return list of restored orders
-    */
-    virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) = 0;
-
- 
-    ///Cancel order 
+    @param params new order parameters
+    @param order_to_replace order to replace. It must be active order on this instrument.   
+    @param name optional name for order, can be used for debugging or logging purposes.
+    @return Order object representing placed order. You can co_await on this object for order updates or read fills from it.
+     */     
+    Order place_order(const OrderRequest &params, Order order_to_replace, std::string_view name = {}) {
+        return _state->place_order(params, order_to_replace.get_handle(), name);
+    }
+    ///Attach storage to this instrument and restore opened orders from storage
     /**
-    This handles implementation of function cancel() on order
-    */
-    virtual void cancel_order(Order order) = 0;
+    The storage is used to remember opened order, to store fills and other statistics for later retrieval.
+    You should attach storage per instrument at the very beginning of the strategy.
+    @param storage storage to attach
+    @param key_name name of the key in storage, where orders will be stored. It shoud be unique per instrument.
+    @return vector of active orders. Each order receives status "restored". The actual status and fills are later retrieved throug
+    the co_awaiting on each order. 
 
-    ///Cancel all orders associated with this instrument
+    The main operation of this function is to find and identify orders on the exchange and retrieve its state and history.
+    If the order is not found onf the exachnge, it receives status "lost".    
+    */
+    std::vector<Order> attach_storage(PStorage storage, std::string key_name) {
+        return _state->attach_storage(std::move(storage), std::move(key_name));
+    }
+    ///Cancel alll orders on this instrument
+    bool cancel_all_orders() {
+        return _state->cancel_all_orders();
+    }
+
+    ///Get current position on this instrument
     /**
-        Cancels orders managed by this strategy. 
-        Doesn't cancel any other orders
-        @retval true canceled some orders
-        @retval false no orders found to cancel
-    */
-    virtual bool cancel_all_orders() = 0;
+    It returns actual position on the exchange (if available). For the strategy logic, it is recommended to track position by processing fills.
+    This function performs a request to the exchange which can take some time, this is the reason why the function is asynchronous.
+    If position is not available, async operation is marked canceled.
+     */
+    awaitable<Position> get_position() const {return _state->get_position();}
 
-    ///Get associated account
-    virtual PAccount get_account() const = 0;
+    ///Get account associated with this instrument
+    Account get_account() const{return _state->get_account();   }
+    ///Get market instrument associated with this tradable instrument
+    MarketInstrument get_instrument() const {return _state->get_instrument();}
 
-    ///Retrieves position (from exchange)
-    virtual awaitable<Position> get_position() const = 0;
-
-    ///converts tradable instrument into market instrument
-    virtual PMarketInstrument get_instrument() const = 0;
-
-    
+    ///Get information about this instrument
     const IMarketInstrument::Info &get_info() const {
-        return get_instrument()->get_info();
+        return _state->get_instrument()->get_info();
     }
-
+    ///get exchange associated with this instrument
     PExchange get_exchange() const {
-        return get_instrument()->get_exchange();
+        return _state->get_instrument()->get_exchange();
     }
 
-    OrderParameters convert_request_to_params(OrderRequest req, Side cur_position_side) {
-        const auto &info = get_info();
-        int aps = static_cast<int>(req.side);
-        int aqs = req.side == cur_position_side?1:-1;
-        return {
-            req.side,
-            req.type,
-            req.quantity.get_rounded(info.lot_size_increment, aqs),
-            req.limit_price.get_rounded(info.price_increment, aps),
-            req.stop_price.get_rounded(info.price_increment, aps),
-            req.leverage,
-            req.reduce_only,
-            req.hedge
-        };
+    ///Convert order request to order parameters.
+    /**
+    Conversion adjusts quantity and price to the increments of the instrument, 
+    also can adjust other parameters based on request and current position. 
+    You can override this function in your implementation of ITradableInstrument 
+    to provide custom conversion logic.
+    */
+    OrderParameters convert_request_to_params(const OrderRequest &req, Side cur_position_side) {
+        return _state->convert_request_to_params(req, cur_position_side);
     }
 
+    bool operator==(const TradableInstrument &) const = default;
+   
+
+    ///Subscribe to stream of events related to this instrument
+    /**
+    You can subscribe only streams implementing TradableInstrumentStreamTypeItem interface.
+    For example ExternalFill or FundingUpdate. These streams are private - related to the instrument and account.
+    If you need to subscribe public streams (market streams), you can subscribe to them through MarketInstrument.    
+    */
+    template<StreamType<TradableInstrumentStreamTypeItem> T>
+    EventStream<T> subscribe() {
+        auto x =  _state->subscribe_stream_internal(T::type, stream_params<T>);
+        if (x) return EventStream<T>::from_base(std::move(x));
+        else return EventStream<T>::create_null();
+    }
+
+    ///Get handle to internal state.
+    /**
+    You can use this handle to call functions of ITradableInstrument interface, but be careful with it,
+     because it can cause undefined behavior if used after the instrument is destroyed.
+     */
+
+    auto get_handle() const {return _state;}
+
+protected:
+    std::shared_ptr<ITradableInstrument> _state;
 };
 
-///Streaming type - listen on fills from other sources - for example from other strategies, liquidation engine or user's manual trades.
-struct ExternalFill : public Fill, public TradableInstrumentStreamTypeItem {
-    static constexpr Type type = "external_fill";
-    Fill &view() {return *this;}
-
-    ExternalFill(Fill f):Fill(std::move(f)) {};
-};
-
-///Streaming type - listen on funding events, if applicable for the instrument
-struct FundingEvent : public TradableInstrumentStreamTypeItem {
-    /// amount for this funding
-    Decimal amount;
-    /// rate,  if the funding is in different currency,
-    double rate = 1.0;
-
-    static constexpr Type type = "funding";
-    FundingEvent &view() {return *this;}
-};
 
 
 ///implementation of cancel_order for order
 inline void Order::cancel() {
     _state->instrument->cancel_order(*this);
 }
+inline TradableInstrument Order::get_instrument() const{
+    return _state->instrument;
+}
+
+
+inline TradableInstrument MarketInstrument::create_tradable_instrument(const Account &acc) const{
+    return _state->create_tradable_instrument(acc.get_handle());
+}
 
 ///implementation of get_turnover for order
 /** Because Order definition doesn't see ITradableInstrument, the implementation is done here */
 inline Decimal Order::get_turnover(Decimal price, Decimal filled) const {
         const auto &params = get_parameters();
-        const auto &info = get_instrument()->get_info();
+        const auto &info = get_instrument().get_info();
         filled = std::min(filled, params.quantity);
         auto leaves = params.quantity - filled;
         Decimal t1 = 0;

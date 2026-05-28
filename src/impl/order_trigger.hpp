@@ -1,9 +1,9 @@
 #pragma once 
 
 #include "ifc/defs.hpp"
-#include "ifc/market_instrument.hpp"
 #include "ifc/order.hpp"
 #include "ifc/strategy_fragment.hpp"
+#include "ifc/stream/trade.hpp"
 #include "ifc/streaming.hpp"
 #include "utils/hashable.hpp"
 #include <memory>
@@ -49,7 +49,7 @@ protected:
 
     std::mutex _mx;
     OrderMap _order_map;
-    PExecutionWorker _worker;
+    ExecutionWorker _worker;
 
     static StrategyFragment monitor_order(std::shared_ptr<OrderTrigger> me, Order order);
 

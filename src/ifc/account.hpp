@@ -1,45 +1,25 @@
 #pragma once
-#include "defs.hpp"
-#include "ifc/types.hpp"
-#include "ifc/underlying.hpp"
-#include "utils/decimal.hpp"
-
+#include "abstract/iaccount.hpp"
 
 namespace quarkbot {
 
-class IAccount {
+class Account {
 public:
+    using WalletInfo = IAccount::WalletInfo;
+    Account(std::shared_ptr<IAccount> state):_state(state) {}
 
-    struct WalletInfo {
-        ///available balance (can be used for trading)
-        Decimal balance = {};
-        ///unrealized pnl for open positions in this currency (if applicable)
-        Decimal unrealized_pnl = {};
-        ///blocked balance for opened orders (spot markets)
-        Decimal order_blocked = {};
-        ///initial margin for opened orders and positions (leveraged markets)
-        Decimal initial_margin = {};
-        ///maintenance margin for opened positions (leveraged markets)
-        Decimal maintenance_margin = {};
-
-        Decimal remaining_balance() const {
-            return balance + unrealized_pnl - order_blocked - initial_margin;
-        }
-    };
-
-    virtual ~IAccount() = default;
-    virtual std::string_view get_name() const = 0;
-
+    std::string_view get_name() const {return _state->get_name();}
+    
     ///Retrieve balance for given currency
-    virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency currency) const = 0;
-
+    awaitable<WalletInfo> get_balance(UnderlyingCurrency currency) const {return _state->get_balance(std::move(currency));}
+    
     ///Retrieves total equity of the account
     /**
     @param currency target currency. It returns equity in selected currency
     @return WalletInfo - if currency cannot be used, returns nullopt. It is recommended to select
     quote currency or pnl currency which should be supported
      */
-    virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency currency) const = 0;
+    awaitable<WalletInfo> get_total_equity(UnderlyingCurrency currency) const  {return _state->get_total_equity(std::move(currency));};
 
     ///transfer money from one account to other
     /**
@@ -49,8 +29,16 @@ public:
         @retval true transfered
         @retval false transfer
     */  
-    virtual awaitable<bool> transfer(UnderlyingCurrency currency, PAccount to_account, Decimal amount)  = 0;
-};  
+    awaitable<bool> transfer(UnderlyingCurrency currency, const Account &to_account, Decimal amount) const {
+            return _state->transfer(std::move(currency), to_account._state, amount);}
+
+    auto get_handle() const {return _state;}
+
+    bool operator==(const Account &) const = default;
+
+protected:
+    std::shared_ptr<IAccount> _state;
+};
 
 
 }

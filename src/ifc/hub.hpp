@@ -20,23 +20,28 @@ namespace quarkbot {
     it also allows to retrieve values from multiple sources to single coroutine or
     broadcast value to multiple coroutines
 
-    one side - producer - calls co_await push() to send produced value. The producer is
+    one side - producer - calls co_await send(var) to send produced value. The producer is
     blocked until the value is consumed
-    other side - consumer - calls co_await pop() to retrieve a value. The consumer is
+    other side - consumer - calls co_await receiver(var) to retrieve a value. The consumer is
     blocked until a value is produced
 
     the hub can be also closed by calling close(). In this case value exchange is impossible
 */
 template<typename T>
 class Hub {
+    struct State;
 public:
 
-
-    Hub() = default;
+    ///explicit construction of uninitialized wrapper
+    /**
+    This can be useful to declare variable as to avoid std::optional<Hub>. But the caller must ensure, that
+    variable is properly initialized before can be used. Using variable without initialization is UB
+     */
+    explicit Hub(std::nullptr_t) {}
 
     ///create shared hub
-    static std::shared_ptr<Hub> create() {
-        return std::make_shared<Hub>();
+    static Hub create() {
+        return Hub(std::make_shared<State>());
     }
 
 
@@ -53,7 +58,7 @@ public:
         in an execution worker of the consumer
     */
     awaitable<bool> send(T &&val) {
-        return write_gen(std::move(val));        
+        return _state->write_gen(std::move(val));        
     }
     ///send value, by copy - after return, reference value is unchanged
     /**
@@ -69,7 +74,7 @@ public:
 
     */
     awaitable<bool> send(const T &val) {
-        return write_gen(val);
+        return _state->write_gen(val);
     }
 
 
@@ -81,7 +86,7 @@ public:
         @retval false hub has been closed, no more value can be received
     */
     awaitable<bool> receive(T &val) {
-        return read_gen(val);
+        return _state->read_gen(val);
     }
 
     ///receive value from hub construct the value inside of optional
@@ -93,7 +98,7 @@ public:
         @retval false hub has been closed, no more value can be received
     */
     awaitable<bool> receive(std::optional<T> &val) {
-        return read_gen(val);
+        return _state->read_gen(val);
     }
 
     ///close the hub unblocking both sided
@@ -104,21 +109,17 @@ public:
         any futher attempt to push or pop value fails immediately
     */
     void close() {
-        std::scoped_lock _(_mx);
-        _closed = true;
-        _producers.clear();
-        _consumers.clear();
+        _state->close();
     }
 
-    ~Hub() {
-        close();
-    }
 
 private:
 
+    Hub(std::shared_ptr<State> state):_state(std::move(state)) {}
+
     class Common {
         coro::awaitable<bool>::result ntf;
-        PExecutionWorker worker;
+        ExecutionWorker worker;
     public:
         Common(coro::awaitable<bool>::result ntf)
             :ntf(std::move(ntf))
@@ -128,7 +129,7 @@ private:
         }
         coro::prepared_coro resume(bool value) {
             auto c = ntf(value);
-            if (c && worker) worker->resume(std::move(c));
+            if (c && worker) worker.resume(std::move(c));
             return c;
         }
     };
@@ -184,97 +185,108 @@ private:
         } 
     };
 
-    std::mutex _mx;
-    std::deque<Consumer> _consumers;
-    std::deque<Producer> _producers;
-    bool _closed = false;
+    struct State {
 
-    template<typename X>
-    awaitable<bool> write_gen(X &&val) {
-        //resume point for consumer
-        coro::prepared_coro rsm;
-        //lock internals
-        std::scoped_lock _(_mx);  
-        //return false if closed
-        if (_closed) return false;      
-        //if no consumers, prepare suspend function
-        if (_consumers.empty()) return [this,&val](auto promise) {
-            //resume point for consumer - returned 
-            coro::prepared_coro out;
-            //resume point for producer
+        std::mutex _mx;
+        std::deque<Consumer> _consumers;
+        std::deque<Producer> _producers;
+        bool _closed = false;
+
+        template<typename X>
+        awaitable<bool> write_gen(X &&val) {
+            //resume point for consumer
+            coro::prepared_coro rsm;
+            //lock internals
+            std::scoped_lock _(_mx);  
+            //return false if closed
+            if (_closed) return false;      
+            //if no consumers, prepare suspend function
+            if (_consumers.empty()) return [this,&val](auto promise) {
+                //resume point for consumer - returned 
+                coro::prepared_coro out;
+                //resume point for producer
+                coro::prepared_coro rsm;
+                //lock internals
+                std::scoped_lock _(_mx);
+                //resulve with false if closed
+                if (_closed) {
+                    out = promise(false);
+                } else if (_consumers.empty()) {
+                    //register producer if no consumers
+                    _producers.emplace_back(std::forward<X>(val), std::move(promise));
+                } else {
+                    //pick consumer, send value
+                    rsm = _consumers.front().send(std::forward<X>(val));
+                    //pop it
+                    _consumers.pop_front();
+                    //resolve with true
+                    out = promise(true);
+                }
+                return out;
+            }; else {
+                //pick consumer, send value
+                rsm = _consumers.front().send(std::forward<X>(val));
+                //resolve with true
+                _consumers.pop_front();
+                //return true;
+                return true;
+            }
+        }
+
+        template<typename X>
+        awaitable<bool> read_gen(X &target) {
+            //declare resume point for producer
             coro::prepared_coro rsm;
             //lock internals
             std::scoped_lock _(_mx);
-            //resulve with false if closed
-            if (_closed) {
-                out = promise(false);
-            } else if (_consumers.empty()) {
-                //register producer if no consumers
-                _producers.emplace_back(std::forward<X>(val), std::move(promise));
-            } else {
-                //pick consumer, send value
-                rsm = _consumers.front().send(std::forward<X>(val));
-                //pop it
-                _consumers.pop_front();
-                //resolve with true
-                out = promise(true);
-            }
-            return out;
-        }; else {
-            //pick consumer, send value
-            rsm = _consumers.front().send(std::forward<X>(val));
-            //resolve with true
-            _consumers.pop_front();
-            //return true;
-            return true;
-        }
-    }
-
-    template<typename X>
-    awaitable<bool> read_gen(X &target) {
-        //declare resume point for producer
-        coro::prepared_coro rsm;
-        //lock internals
-        std::scoped_lock _(_mx);
-        //return false is closed
-        if (_closed) return false;
-        //if no producents, prepare suspend point
-        if (_producers.empty()) return [this, &target](auto promise){
-            //output coroutine - to resume consumer
-            coro::prepared_coro out;
-            //resume point - to resume producer
-            coro::prepared_coro rsm;
-            //lock internals
-            std::scoped_lock _(_mx);            
-            if (_closed) {
-                //resolve with false if closed
-                out = promise(false);
-            } else if (_producers.empty()) {
-                //register consumer if no producers
-                _consumers.emplace_back(std::move(promise), target);
-            } else {
-                //assign its value to target
+            //return false is closed
+            if (_closed) return false;
+            //if no producents, prepare suspend point
+            if (_producers.empty()) return [this, &target](auto promise){
+                //output coroutine - to resume consumer
+                coro::prepared_coro out;
+                //resume point - to resume producer
+                coro::prepared_coro rsm;
+                //lock internals
+                std::scoped_lock _(_mx);            
+                if (_closed) {
+                    //resolve with false if closed
+                    out = promise(false);
+                } else if (_producers.empty()) {
+                    //register consumer if no producers
+                    _consumers.emplace_back(std::move(promise), target);
+                } else {
+                    //assign its value to target
+                    rsm = _producers.front().assign_to(target);
+                    //resolve with true
+                    out = promise(true);
+                    //remove producer from queue
+                    _producers.pop_front();
+                }
+                return out;
+            }; else {
+                //assign to target
                 rsm = _producers.front().assign_to(target);
-                //resolve with true
-                out = promise(true);
                 //remove producer from queue
                 _producers.pop_front();
+                //return true
+                return true;
             }
-            return out;
-        }; else {
-            //assign to target
-            rsm = _producers.front().assign_to(target);
-            //remove producer from queue
-            _producers.pop_front();
-            //return true
-            return true;
         }
-    }
+
+        void close() {
+            std::scoped_lock _(_mx);
+            _closed = true;
+            _producers.clear();
+            _consumers.clear();
+        }
+
+    } ;
+
+    std::shared_ptr<State> _state;
 
 
 };
 
-template<typename T>
-using PHub = std::shared_ptr<Hub<T> >;
 
 }

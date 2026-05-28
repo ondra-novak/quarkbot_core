@@ -1,5 +1,6 @@
 #include "simtradableinstrument.hpp"
 #include "ifc/order.hpp"
+#include "ifc/abstract/order_internal.hpp"
 #include "ifc/order_storage.hpp"
 #include "ifc/streaming.hpp"
 #include "ifc/tradable_instrument.hpp"
@@ -83,14 +84,14 @@ void SimTradableInstrument::liquidation() {
                 false,
                 TimeInForce::gtc,
                 ExecutionReason::liquidation
-            }));
+            },{}));
         }
     }
 }
 
-Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_ptr<OrderEx::State> old_state, std::string_view name) {
+Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_ptr<OrderInternalState> old_state, std::string_view name) {
 
-    auto st = std::make_shared<OrderEx::State>(
+    auto st = std::make_shared<OrderInternalState>(
         convert_request_to_params(req, _position.side),
         shared_from_this(),
         std::string(name),
@@ -105,7 +106,7 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
 
     const auto &params = new_order.get_parameters();
     if (params.side != Side::buy && params.side != Side::sell) {
-        new_order.update_order(Order::RejectionWithText{ OrderRejectionReason::invalid_params,"Invalid side"});
+        new_order.update_order(OrderRejectionWithText{ OrderRejectionReason::invalid_params,"Invalid side"});
         return new_order;
     }
     if (params.quantity < info.min_lot_size) {
@@ -115,7 +116,7 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
     if (is_limit_order(params.type) || is_stop_order(params.type)) {
         if (is_limit_order(params.type)) {
             if (params.limit_price <= 0) {
-                new_order.update_order(Order::RejectionWithText{ OrderRejectionReason::invalid_params, "Missing limit price"});
+                new_order.update_order(OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Missing limit price"});
                 return new_order;
             }
             if (info.min_volume > info.calc_turnover_pnl_currency(params.limit_price, params.quantity)) {
@@ -125,7 +126,7 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
         }
         if (is_stop_order(params.type)) {
             if (params.stop_price <= 0) {
-                new_order.update_order(Order::RejectionWithText{ OrderRejectionReason::invalid_params, "Missing limit price"});
+                new_order.update_order(OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Missing limit price"});
                 return new_order;
             }
             if (info.min_volume > info.calc_turnover_pnl_currency(params.stop_price, params.quantity)) {
@@ -152,19 +153,11 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
 
 
 
-Order SimTradableInstrument::place_order(const OrderRequest &params, Order order_to_replace, std::string_view name){
-    OrderEx rep_ord(order_to_replace);
-    auto st = rep_ord.get_state();
-    return place_order(params, st, name);
-}
-Order SimTradableInstrument::place_order(const OrderRequest &params, std::string_view name){
-    return place_order(params,{}, name);
-}
 void SimTradableInstrument::cancel_order(Order order){
     _instrument->get_sim_exchange()->cancel_order(order);
 }
 
-void SimTradableInstrument::on_order_update(Order ord, Order::Update &&status) {
+void SimTradableInstrument::on_order_update(Order ord, OrderInternalState::Update &&status) {
    
     if (std::holds_alternative<Fill>(status)) {
         const Fill &f = std::get<Fill>(status);
@@ -172,7 +165,7 @@ void SimTradableInstrument::on_order_update(Order ord, Order::Update &&status) {
     } else {
         if ((std::holds_alternative<OrderStatus>(status) && is_done_status(std::get<OrderStatus>(status)))
             || std::holds_alternative<OrderRejectionReason>(status)
-            || std::holds_alternative<Order::RejectionWithText>(status)) {
+            || std::holds_alternative<OrderRejectionWithText>(status)) {
                 if (ord == liquidation_order) {
                     liquidation_order.reset();
                 }        
@@ -195,11 +188,11 @@ std::vector<Order> SimTradableInstrument::attach_storage(PStorage storage, std::
 
     auto orders = _order_storage->load_opened_orders();
     for (auto &s: orders) {
-        auto st = std::make_shared<Order::State>(
+        auto st = std::make_shared<OrderInternalState>(
             s.first.parameters,
             shared_from_this(),
             s.first.name,
-            std::weak_ptr<Order::State>(),
+            std::weak_ptr<OrderInternalState>(),
             _order_storage
         );
         st->id = s.first.id;

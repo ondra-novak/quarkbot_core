@@ -4,6 +4,7 @@
 #include "ifc/defs.hpp"
 #include "ifc/execution_worker.hpp"
 #include <condition_variable>
+#include <memory>
 namespace quarkbot {
 
 
@@ -16,12 +17,7 @@ namespace quarkbot {
         virtual awaitable<bool> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr = nullptr) override;
         virtual bool cancel(coro::cancel_signal *cancel_signal) override;
 
-
-        static PExecutionWorker create() {
-            auto x = std::make_shared<ThreadExecutor>();
-            x->start();
-            return x;
-        }
+        static std::shared_ptr<ThreadExecutor> create();
 
         virtual ~ThreadExecutor();
 

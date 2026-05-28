@@ -177,4 +177,15 @@ inline constexpr bool is_done_status(OrderStatus status) {
            status == OrderStatus::lost ;
 }
 
+struct OrderRejectionWithText {
+    OrderRejectionReason reason;
+    std::string text;
+};
+
+struct OrderOpenStatus {
+    std::string id;
+    RecordKey key;
+};
+
+
 }

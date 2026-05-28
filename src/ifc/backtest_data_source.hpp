@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ifc/market_instrument.hpp"
 #include "ifc/types.hpp"
 #include "impl/simexchange.hpp"
+#include "ifc/stream/orderbook.hpp"
 #include "utils/decimal.hpp"
 #include <chrono>
 #include <optional>

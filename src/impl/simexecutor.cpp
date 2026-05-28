@@ -1,10 +1,12 @@
 #include "simexecutor.hpp"
 #include "ifc/order_defs.hpp"
+#include "ifc/abstract/order_internal.hpp"
 #include "impl/simexchange.hpp"
 #include "siminstrument.hpp"    
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
 #include "ifc/types.hpp"
+#include "ifc/tradable_instrument.hpp"
 #include "utils/decimal.hpp"
 #include "utils/random_string.hpp"
 #include "simtradableinstrument.hpp"
@@ -17,8 +19,8 @@ namespace quarkbot {
 
     SimExecutor::PSimInstrument SimExecutor::extract_instrument(const Order &ord) {
         auto instr = ord.get_instrument();
-        auto minstr = instr->get_instrument();
-        return std::dynamic_pointer_cast<SimInstrument>(minstr);        
+        auto minstr = instr.get_instrument();
+        return std::dynamic_pointer_cast<SimInstrument>(minstr.get_handle());        
     }
 
     void SimExecutor::place_order(Order ord) {
@@ -94,19 +96,19 @@ namespace quarkbot {
         const OrderParametersGen<Decimal> &params = ord.get_parameters();
 
         if (params.quantity <= 0 && params.type != OrderType::alert) {
-            set_order_status(ord, Order::RejectionWithText{ OrderRejectionReason::invalid_params, "Invalid quantity" });
+            set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Invalid quantity" });
             return false;
         }
         if (is_stop_order(params.type) && params.stop_price <= Decimal(0)) {
-            set_order_status(ord, Order::RejectionWithText{  OrderRejectionReason::invalid_params ,"Invalid or missing stop price"});
+            set_order_status(ord, OrderRejectionWithText{  OrderRejectionReason::invalid_params ,"Invalid or missing stop price"});
             return false;
         }
         if (is_limit_order(params.type) && params.limit_price <= Decimal(0)) {
-            set_order_status(ord, Order::RejectionWithText{ OrderRejectionReason::invalid_params , "Invalid or missing limit price"});
+            set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::invalid_params , "Invalid or missing limit price"});
             return false;
         }
         if (params.time_in_force != TimeInForce::gtc && params.time_in_force != TimeInForce::ioc) {
-            set_order_status(ord, Order::RejectionWithText{ OrderRejectionReason::invalid_params, "Unsupported time in force"});
+            set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Unsupported time in force"});
             return false;
         }
 
@@ -282,7 +284,7 @@ namespace quarkbot {
             generate_random_string(),
             order.ord.get_name(),
             tp,
-            order.ord.get_instrument()->get_info(),
+            order.ord.get_instrument().get_info(),
             order.ord.get_parameters().side,
             order.ord.get_parameters().reason_override,
             quantity,
@@ -291,7 +293,7 @@ namespace quarkbot {
             1.0
         };
         order.filled += quantity;
-        auto &simt = *static_cast<SimTradableInstrument *>(order.ord.get_instrument().get());
+        auto &simt = *static_cast<SimTradableInstrument *>(order.ord.get_instrument().get_handle().get());
         simt.on_order_update(order.ord, f);
     }
 
@@ -310,20 +312,20 @@ bool SimExecutor::cancel_all(PTradableInstrument instrument) {
     return false;
 }
 
-void SimExecutor::set_order_status(const Order &ord, Order::Update &&st) {
-    auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get());    
+void SimExecutor::set_order_status(const Order &ord, OrderInternalState::Update &&st) {
+    auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get_handle().get());    
     simt.on_order_update(ord, std::move(st));
 }
 
 void  SimExecutor::accept_order(const Order &ord) {
-    auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get());
+    auto &simt = *static_cast<SimTradableInstrument *>(ord.get_instrument().get_handle().get());
     std::string id = generate_random_string();
     std::hash<std::string> hasher;
     RecordKey rk({
         static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count()),
         hasher(id)
     });
-    simt.on_order_update(ord, Order::OpenStatus{id, rk});
+    simt.on_order_update(ord, OrderOpenStatus{id, rk});
 }
 
 }

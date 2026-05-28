@@ -8,11 +8,11 @@ quarkbot::StrategyFragment print_events(quarkbot::EventStream<int> s) {
     int v;
     bool r;
     for (int i = 0; i < 5; i++) {
-        bool r = co_await s.next(v);
+        bool r = co_await s.receive(v);
         CHECK(r);
         CHECK_EQUAL(v, i);
     }
-    r = co_await s.next(v);
+    r = co_await s.receive(v);
     CHECK(!r);
     co_return;
 }

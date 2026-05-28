@@ -2,12 +2,15 @@
 
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
+#include "ifc/abstract/order_internal.hpp"
 #include "ifc/order_storage.hpp"
-#include "ifc/tradable_instrument.hpp"
-#include "ifc/types.hpp"
 #include "impl/streaming/queue_event_stream.hpp"
+#include "siminstrument.hpp"
+#include "ifc/types.hpp"
 #include "simexecutor.hpp"
 #include "utils/decimal.hpp"
+#include "ifc/abstract/itradable_instrument.hpp"
+#include "ifc/stream/external_fill.hpp"
 
 #include <memory>
 #include <optional>
@@ -37,14 +40,13 @@ public:
     virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) override ;
     virtual PAccount get_account() const override ;
     virtual PMarketInstrument get_instrument() const override ;
-    virtual Order place_order(const OrderRequest &params, Order order_to_replace, std::string_view name = {}) override;
-    virtual Order place_order(const OrderRequest &params, std::string_view name = {}) override;
+    virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderInternalState>replaced , std::string_view name = {}) override;
     virtual void cancel_order(Order order) override;
     virtual bool cancel_all_orders() override;
     virtual awaitable<Position> get_position() const override {return _position;}
     virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) override;
 
-    void on_order_update(Order ord, Order::Update &&status);
+    void on_order_update(Order ord, OrderInternalState::Update &&status);
 
 protected:
 
@@ -69,7 +71,7 @@ protected:
     std::weak_ptr<QueueEventPublisher<ExternalFill> > _liquidation_stream;
 
     bool update_margin() {
-        const auto &info = get_info();
+        const auto &info = _instrument->get_info();
         bool ok = true;
         if (info.is_leveraged()) {
             Decimal buy_orders = {};
@@ -118,23 +120,11 @@ protected:
         return ok;
     }
 
-    class OrderEx: public Order {
-    public:
-        using State = Order::State;
-
-        OrderEx(Order ord):Order(std::move(ord)) {}
-
-        std::shared_ptr<State> get_state() const {
-            return this->_state;
-        }
-    };
-
 
     void liquidation();
     std::optional<Order> liquidation_order; 
 
-
-    virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderEx::State> old_state, std::string_view name = {});
+    
     
 
 };

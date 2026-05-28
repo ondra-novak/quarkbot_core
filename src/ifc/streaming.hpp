@@ -3,6 +3,7 @@
 #include "basic_coro/awaitable.hpp"
 #include "ifc/stream_defs.hpp"
 #include <memory>
+#include <type_traits>
 namespace quarkbot {
 
 
@@ -38,7 +39,7 @@ public:
     @retval true new event is available and copied to ref
     @retval false stream is closed or no new event is available
     */
-    coro::awaitable<bool> next(ViewType &ref) {
+    coro::awaitable<bool> receive(ViewType &ref) {
         std::size_t dummy;
         return read_internal(ref, dummy);
     }
@@ -49,7 +50,7 @@ public:
     @retval true new event is available and copied to ref
     @retval false stream is closed or no new event is available
     */
-    coro::awaitable<bool> next(ViewType &ref, std::size_t &missed) {
+    coro::awaitable<bool> receive(ViewType &ref, std::size_t &missed) {
         return read_internal(ref, missed);
     }    
 
@@ -84,7 +85,7 @@ struct StreamViewType {
 };
 template<HasStreamView T>
 struct StreamViewType<T> {
-    using type = decltype(std::declval<T>().view());
+    using type = std::remove_reference_t<decltype(std::declval<T>().view())>;
 };
 
 
@@ -115,11 +116,11 @@ public:
     ///conversion to bool - true if stream is open, false if closed
     operator bool() const {return is_open();}
     ///read next event, if available, and copy it to ref
-    coro::awaitable<bool> next(T &val) {
+    coro::awaitable<bool> receive(T &val) {
         if constexpr (HasStreamView<T>) {
-            return _stream->next(val.view());
+            return _stream->receive(val.view());
         } else {
-            return _stream->next(val);
+            return _stream->receive(val);
         }
     }
         
@@ -142,22 +143,12 @@ protected:
 };
 
 
-template<typename StreamTypeClass = StreamTypeItem>
 class IPublisher {
-protected:
-
-    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) = 0;
 
 public:
-
+    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) = 0;
     virtual ~IPublisher() = default;
 
-    template<StreamType<StreamTypeClass> T>
-    EventStream<T> subscribe() {
-        auto x =  subscribe_stream_internal(T::type, stream_params<T>);
-        if (x) return EventStream<T>::from_base(std::move(x));
-        else return EventStream<T>::create_null();
-    }
 };
 
 

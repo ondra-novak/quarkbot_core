@@ -20,14 +20,14 @@ The variant with @3 = false can happen only if previous call published the value
 
 */
 template<typename T, typename From, typename To>
-concept StreamTranformPreficate = std::is_invocable_r_v<bool, T, const From &, To &, bool>;
+concept StreamTranformPredicate = std::is_invocable_r_v<bool, T, const From &, To &, bool>;
 
 
     ///Implementation of stream transform 
 /**
 @see transform_stream
 */
-template<typename To,typename From,StreamTranformPreficate<From, To> Pred>
+template<typename To,typename From,StreamTranformPredicate<From, To> Pred>
 class StreamTransform: public IEventStream<To> {
 public:
 
@@ -72,12 +72,12 @@ protected:
 /**
 @tparam To target type
 @param source source stream
-@param pred predicate. See StreamTranformPreficate concept documentation
+@param pred predicate. See StreamTranformPredicate concept documentation
 
-@see StreamTranformPreficate;
+@see StreamTranformPredicate;
 
 */
-template<typename To, typename From, StreamTranformPreficate<From, To> Pred>
+template<typename To, typename From, StreamTranformPredicate<From, To> Pred>
 EventStream<To> transform_stream(EventStream<From> source, Pred pred) {
     return {
         std::make_unique<StreamTransform<To, From, Pred> >(std::move(source), std::move(pred))

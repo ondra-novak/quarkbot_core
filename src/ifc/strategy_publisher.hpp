@@ -179,14 +179,14 @@ protected:
 
     struct Result {
         awaitable<bool>::result result;
-        std::shared_ptr<IExecutionWorker> worker;//worker is optional here
+        ExecutionWorker worker;//worker is optional here
         coro::cancel_signal *cancel_sig;
         T *target;
         Revision *target_rev;
 
         coro::prepared_coro resolve(bool value) {
             coro::prepared_coro out;
-            if (worker) worker->resume(result(value));
+            if (worker) worker.resume(result(value));
             else out = result(value);
             return out;
         }
