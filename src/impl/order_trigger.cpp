@@ -5,11 +5,17 @@
 #include "ifc/market_instrument.hpp"
 #include "ifc/types.hpp"
 #include <exception>
+#include <memory>
 #include <mutex>
 #include <utility>
 #include <variant>
 
 namespace quarkbot {
+
+    std::shared_ptr<OrderTrigger> OrderTrigger::create(ExecutionWorker worker) {
+        return std::make_shared<OrderTrigger>(std::move(worker));
+    }
+
 
    template<typename Fn>
     auto OrderTrigger::update_state(const Order &ord, Fn &&fn){

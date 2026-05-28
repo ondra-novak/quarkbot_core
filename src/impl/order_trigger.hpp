@@ -14,10 +14,10 @@ namespace quarkbot {
 class OrderTrigger: public std::enable_shared_from_this<OrderTrigger> {
 public:
     
-    static std::shared_ptr<OrderTrigger> create(PExecutionWorker worker);
+    static std::shared_ptr<OrderTrigger> create(ExecutionWorker worker);
 
     ///don't use - to create object, call create()
-    OrderTrigger(PExecutionWorker worker);
+    OrderTrigger(ExecutionWorker worker);
 
     OrderTrigger(const OrderTrigger &) = delete;
     OrderTrigger &operator=(const OrderTrigger &) = delete;
