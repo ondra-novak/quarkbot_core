@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ifc/log.hpp"
 #include "order_internal.hpp"
 #include "../streaming.hpp"
 #include "imarket_instrument.hpp"
@@ -11,8 +12,10 @@ class Order;
 class ITradableInstrument: public IPublisher {
 public:
 
+
 virtual ~ITradableInstrument() = default;
-    virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderInternalState> order_to_replace, std::string_view name) = 0;
+    virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderInternalState> order_to_replace, 
+                std::string_view name, std::size_t param_class_hash) = 0;
     virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) = 0;
     virtual void cancel_order(Order order) = 0;
     virtual bool cancel_all_orders() = 0;

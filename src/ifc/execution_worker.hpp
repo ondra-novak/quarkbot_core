@@ -6,6 +6,7 @@
 #include "abstract/iexecution_worker.hpp"
 #include <chrono>
 #include <cstddef>
+#include <stdexcept>
 namespace quarkbot {
 
 class ExecutionWorker {
@@ -29,8 +30,7 @@ public:
         current execution worker. Just call the coroutine as normal function
     */
     void run(coroutine coro) {
-        resume(coro.release());
-        
+        resume(coro.release());       
     }
     ///Create new execution worker
     /**
@@ -107,6 +107,10 @@ public:
         return _worker->cancel(cancel_signal);
     }
 
+    ExecutionWorker &required() {
+        if (!_worker) throw std::runtime_error("Requires execution worker");
+        return *this;
+    }
 
     explicit operator bool() const {return static_cast<bool>(_worker);}
 

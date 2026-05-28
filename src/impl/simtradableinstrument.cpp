@@ -1,4 +1,5 @@
 #include "simtradableinstrument.hpp"
+#include "ifc/execution_worker.hpp"
 #include "ifc/order.hpp"
 #include "ifc/abstract/order_internal.hpp"
 #include "ifc/order_storage.hpp"
@@ -11,6 +12,7 @@
 #include <cassert>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <variant>
 namespace quarkbot {
 
@@ -84,19 +86,22 @@ void SimTradableInstrument::liquidation() {
                 false,
                 TimeInForce::gtc,
                 ExecutionReason::liquidation
-            },{}));
+            },{},{},0));
         }
     }
 }
 
-Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_ptr<OrderInternalState> old_state, std::string_view name) {
+Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_ptr<OrderInternalState> old_state, std::string_view name, std::size_t) {
 
+
+    ExecutionWorker worker = ExecutionWorker::current();
     auto st = std::make_shared<OrderInternalState>(
         convert_request_to_params(req, _position.side),
         shared_from_this(),
         std::string(name),
         old_state,
-        _order_storage
+        _order_storage,
+        worker.required().now()
     );
 
     Order new_order(st);    
@@ -193,7 +198,8 @@ std::vector<Order> SimTradableInstrument::attach_storage(PStorage storage, std::
             shared_from_this(),
             s.first.name,
             std::weak_ptr<OrderInternalState>(),
-            _order_storage
+            _order_storage,
+            ExecutionWorker::current().required().now()
         );
         st->id = s.first.id;
         st->filled = s.second;

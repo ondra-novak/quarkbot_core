@@ -6,6 +6,7 @@
 #include "../types.hpp"
 #include "../order_storage.hpp"
 #include "../order_defs.hpp"
+#include <chrono>
 #include <deque>
 #include <mutex>
 
@@ -30,6 +31,8 @@ struct OrderInternalState{
     std::weak_ptr<OrderInternalState> replaced_order = {};
     ///associated order storage
     std::shared_ptr<OrderStorage> storage;
+    ///time, when this order has been created (or restored)
+    std::chrono::system_clock::time_point create_time = {};
     ///internal order ID
     std::string id = {};
     ///adapter's generated unique record key - this can be used to store into database
@@ -60,12 +63,14 @@ struct OrderInternalState{
             PTradableInstrument instrument,
             std::string name,
             std::weak_ptr<OrderInternalState> replaced_order,
-            std::shared_ptr<OrderStorage> storage
+            std::shared_ptr<OrderStorage> storage,
+            std::chrono::system_clock::time_point create_time
     ):parameters(std::move(params))
         ,instrument(std::move(instrument))
         ,name(std::move(name))
         ,replaced_order(std::move(replaced_order))
         ,storage(std::move(storage))
+        ,create_time(create_time)
         {}
         
         

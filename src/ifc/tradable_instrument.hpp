@@ -1,11 +1,16 @@
 #pragma once
 
+#include "ifc/order_defs.hpp"
 #include "market_instrument.hpp"
 #include "abstract/itradable_instrument.hpp"
+#include "utils/class_hash.hpp"
 #include "account.hpp"
 #include "order.hpp"
+#include <concepts>
 
 namespace quarkbot {
+
+
 
 class TradableInstrument{
 public:
@@ -16,9 +21,10 @@ public:
     @param params order parameters
     @param name optional name for order, can be used for debugging or logging purposes. 
     @return Order object representing placed order. You can co_await on this object for order updates or read fills from it.
-     */
-    Order place_order(const OrderRequest &params, std::string_view name = {}){
-        return _state->place_order(params, {}, name);
+     */   
+    template<std::derived_from<OrderRequest> _Req = OrderRequest>
+    Order place_order(const _Req &params, std::string_view name = {}){
+        return _state->place_order(params, {}, name, class_hash<_Req>);
     }
 
     ///Replace order on this instrument
@@ -28,8 +34,10 @@ public:
     @param name optional name for order, can be used for debugging or logging purposes.
     @return Order object representing placed order. You can co_await on this object for order updates or read fills from it.
      */     
-    Order place_order(const OrderRequest &params, Order order_to_replace, std::string_view name = {}) {
-        return _state->place_order(params, order_to_replace.get_handle(), name);
+    template<std::derived_from<OrderRequest> _Req = OrderRequest>
+    Order place_order(const _Req &params, Order order_to_replace, std::string_view name = {}) {
+        return _state->place_order(params, order_to_replace.get_handle(), name,
+             class_hash<_Req>);
     }
     ///Attach storage to this instrument and restore opened orders from storage
     /**
@@ -131,7 +139,8 @@ inline TradableInstrument MarketInstrument::create_tradable_instrument(const Acc
 /** Because Order definition doesn't see ITradableInstrument, the implementation is done here */
 inline Decimal Order::get_turnover(Decimal price, Decimal filled) const {
         const auto &params = get_parameters();
-        const auto &info = get_instrument().get_info();
+        auto instr = get_instrument();
+        const auto &info = instr.get_info();
         filled = std::min(filled, params.quantity);
         auto leaves = params.quantity - filled;
         Decimal t1 = 0;

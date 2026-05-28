@@ -3,6 +3,7 @@
 #include "hub.hpp"
 #include "strategy_fragment.hpp"
 #include "abstract/order_internal.hpp"
+#include <chrono>
 
 
 
@@ -87,6 +88,8 @@ public:
     OrderRejectionReason get_reject_reason() const {return _state->reject_reason;}
     ///get rejection message
     const std::string &get_rejection_message() const {return _state->rejection_message;}    
+    ///returns time when order has been created
+    std::chrono::system_clock::time_point get_create_time() const {return _state->create_time;}
 
     ///update order status
     /**
