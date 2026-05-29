@@ -1,10 +1,12 @@
 #pragma once
 
+#include "utils/hashable.hpp"
 #include <algorithm>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 namespace quarkbot {
 
@@ -44,10 +46,22 @@ public:
         }
         return false;
     }
+    void collect_active(std::unordered_set<InstrumentRef> &refmap) {
+        std::scoped_lock _(_mx);
+        auto iter = _map.begin();
+        while (iter != _map.end()) {
+            if (iter->second.expired()) {
+                iter = _map.erase(iter);
+            } else {
+                refmap.insert(iter->first);
+                ++iter;
+            }
+        }
+    }
 
 protected:
     std::mutex _mx;
-    std::unordered_map<InstrumentRef, std::weak_ptr<Publisher> > _map;
+    std::unordered_map<InstrumentRef, std::weak_ptr<Publisher> , Hasher<InstrumentRef>> _map;
 };
 
 template<typename InstrumentRef, typename Publisher, typename Param>
@@ -85,7 +99,25 @@ public:
         }
         return true;
     }
-   
+
+    void collect_active(std::unordered_set<InstrumentRef> &refmap) {
+        std::scoped_lock _(_mx);
+        auto iter = _map.begin();
+        while (iter != _map.end()) {
+            auto &lst = iter->second;
+            auto e = std::remove_if(lst.begin(), lst.end(), [&](const Record &rc){
+                return rc._pub.expired();
+            });
+            lst.erase(e, lst.end());
+            if (lst.empty()) {
+                iter = _map.erase(iter);
+            } else {
+                refmap.insert(iter->first);
+                ++iter;
+            }
+        }
+    }
+
 
 
 protected:

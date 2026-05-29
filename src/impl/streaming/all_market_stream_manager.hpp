@@ -31,7 +31,7 @@ public:
     using ClosedBarStreamMap = ParametrizedStreamMap<InstrumentRef, ClosedBarPublisher, ClosedBar::Param>;
     using RangedBarStreamMap = ParametrizedStreamMap<InstrumentRef, RangedBarPublisher, RangedBar::Param>;
 
-    std::unique_ptr<IEventStreamBase> subscribe_stream(InstrumentRef instrument, std::size_t type, const void *param) {
+    std::unique_ptr<IEventStreamBase> subscribe_stream(const InstrumentRef &instrument, std::size_t type, const void *param) {
         switch (type) {
             case class_hash<Quote>: return _quotes.create_subscriber(instrument);
             case class_hash<Trade>: return _trades.create_subscriber(instrument);
@@ -43,19 +43,35 @@ public:
         }
     }
 
-    void on_event(const InstrumentRef &instrument, Quote qt) {
-        _quotes.with_publisher(instrument, [&](auto &pub){pub.publish(qt);});
-        _tickers.with_publisher(instrument,[&](auto &pub){pub.publish(pub.get_top_value_ref().add(qt));});
-        _closed_bars.enum_publisher(instrument,calculate_closed_bar(qt));
-        
+    bool on_event(const InstrumentRef &instrument, Quote qt) {
+        bool b1 = _quotes.with_publisher(instrument, [&](auto &pub){pub.publish(qt);});
+        bool b2 = _tickers.with_publisher(instrument,[&](auto &pub){pub.publish(pub.get_top_value_ref().add(qt));});
+        bool b3 = _closed_bars.enum_publisher(instrument,calculate_closed_bar(qt));
+        return b1||b2||b3;
+    }
 
-}
-    void on_event(const InstrumentRef &instrument, Trade tr) {
-        _trades.with_publisher(instrument, [&](auto &pub){pub.publish(tr);});
-        _trade_stats.with_publisher(instrument, [&](auto &pub){pub.publish(pub.get_top_value_ref().add(tr));});
-        _tickers.with_publisher(instrument, [&](auto &pub){pub.publish(pub.get_top_value_ref().add(tr));});
-        _closed_bars.enum_publisher(instrument,calculate_closed_bar(tr));
-        _ranged_bars.enum_publisher(instrument,calculate_ranged_bar(tr));        
+    bool on_event(const InstrumentRef &instrument, Trade tr) {
+        bool b1 = _trades.with_publisher(instrument, [&](auto &pub){pub.publish(tr);});
+        bool b2 = _trade_stats.with_publisher(instrument, [&](auto &pub){pub.publish(pub.get_top_value_ref().add(tr));});
+        bool b3 = _tickers.with_publisher(instrument, [&](auto &pub){pub.publish(pub.get_top_value_ref().add(tr));});
+        bool b4 = _closed_bars.enum_publisher(instrument,calculate_closed_bar(tr));
+        bool b5 = _ranged_bars.enum_publisher(instrument,calculate_ranged_bar(tr));        
+        return b1 || b2 || b3 || b4 || b5;
+    }
+    
+    template<typename T>
+    void collect_active(std::unordered_set<InstrumentRef> &refmap) {
+        if constexpr(std::is_same_v<Trade, T> ) {
+            _quotes.collect_active(refmap);
+            _tickers.collect_active(refmap);
+            _closed_bars.collect_active(refmap);
+        } else if constexpr(std::is_same_v<Trade, T> ) {
+            _trades.collect_active(refmap);
+            _trade_stats.collect_active(refmap);
+            _tickers.collect_active(refmap);
+            _closed_bars.collect_active(refmap);
+            _ranged_bars.collect_active(refmap);
+        } 
     }
 
 
