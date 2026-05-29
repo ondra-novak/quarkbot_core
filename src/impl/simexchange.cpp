@@ -1,17 +1,16 @@
 #include "simexchange.hpp"
 #include "ifc/account.hpp"
 #include "ifc/market_instrument.hpp"
+#include "ifc/stream/quote.hpp"
+#include "ifc/stream/trade.hpp"
 #include "ifc/types.hpp"
 #include "ifc/underlying.hpp"
 #include "impl/simaccount.hpp"
 #include "siminstrument.hpp"
 #include "ifc/defs.hpp"
-#include "ifc/stream_defs.hpp"
-#include "impl/streaming/publisher_manager.hpp"
 #include "simtradableinstrument.hpp"
 #include "utils/hashable.hpp"
 #include <algorithm>
-#include <chrono>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -19,12 +18,6 @@
 
 namespace quarkbot {
 
-template<typename T, typename Pub>
-std::unique_ptr<IEventStreamBase> SimExchange::connect_to(std::shared_ptr<SimInstrument> instrument, const StreamParams *params) {
-    PMarketInstrument gen_inst(instrument);
-    auto r =_streams.connect_to(gen_inst, {}, T::type, params,[]{return std::make_shared<Pub>();});
-    return r;
-}
 
 
 PAccount SimExchange::create_account(std::string name, std::span<std::pair<std::string, Decimal> > wallet) {
@@ -39,21 +32,9 @@ PAccount SimExchange::create_account(std::string name, std::span<std::pair<std::
 
 std::unique_ptr<IEventStreamBase> SimExchange::subscribe_stream(
         std::shared_ptr<SimInstrument> instrument,
-        std::shared_ptr<SimAccount> /*account*/,
-         StreamTypeItem::Type type,
-          const StreamParams *params) {
-
-    if (type == Quote::type) {
-        return connect_to<Quote, QuotePublisher>(instrument,params);
-    } else if (type == Trade::type) {
-        return connect_to<Trade, TradePublisher>(instrument, params);
-    } else if (type == ClosedBar::type) {
-        return connect_to<ClosedBar, ClosedBarPublisher>(instrument, params);
-    } else if (type == TradeStatCounter::type) {
-        return connect_to<TradeStatCounter, TradeCounterPublisher>(instrument, params);
-    } else {
-        return {};
-    }
+        std::size_t hash, const void *param) {
+    std::string name = instrument->get_info().name;
+    return _streams.subscribe_stream(name, hash, param);
 }
 
 
@@ -70,49 +51,12 @@ std::shared_ptr<SimInstrument> SimExchange::resolve_instrument(const std::string
 }
 
 
-inline void merge_closed_bar(ClosedBar &c, const Trade &t, size_t index) {
-    if (!c.trades) {
-        c.open = c.close = c.high = c.low = t.price;
-        c.volume = t.size;
-        c.trades = 1;
-        c.interval_index = index;
-    } else {
-        c.high = std::max(c.high, t.price);
-        c.low = std::min(c.low, t.price);
-        c.close = t.price;
-        c.trades++;
-        c.interval_index = index;
-        c.volume += t.size;
-    }
-}
-
 
 void SimExchange::on_event(const std::string &instrument, Quote qt) {
     auto mi = resolve_instrument(instrument);
     if (!mi) return;
     _executor.on_event(mi, qt); 
-    _streams.enum_all_publishers(mi, {}, Quote::type, [&](const StreamParams *, PublisherManager<>::PPublisher pub){
-        auto qtpub = std::static_pointer_cast<QuotePublisher>(pub);
-        qtpub->write([&](Quote &s) noexcept {s = qt;return true;});        
-    });
-    _streams.enum_all_publishers(mi, {}, ClosedBar::type, [&](const StreamParams *parm, PublisherManager<>::PPublisher pub){
-        auto cbpub = std::static_pointer_cast<ClosedBarPublisher>(pub);
-        auto p =  static_cast<const ClosedBar::ParamType *>(parm);
-        auto interval =p->param;
-        bool new_bar = false;
-        std::size_t new_tp = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::seconds>(qt.time.time_since_epoch()).count()/interval);
-        cbpub->write([&](ClosedBar &s) noexcept {            
-            if (s.interval_index != new_tp) {
-                new_bar = true;
-                return s.trades > 0;
-            } 
-            return false;
-        });
-        if (new_bar) cbpub->write([&](ClosedBar &s) noexcept {
-                s = {};
-                return false;
-        });
-    });
+    _streams.on_event(instrument, qt);
     for (auto &x: _tradable_instruments) {
         auto trad = x.lock();
         if (trad && trad->get_instrument().get() == mi.get()) {
@@ -127,43 +71,7 @@ void SimExchange::on_event(const std::string &instrument, Trade tr) {
     auto mi = resolve_instrument(instrument);
     if (!mi) return;
     _executor.on_event(mi, tr); //todo refere instrument by object
-    _streams.enum_all_publishers(mi, {}, Trade::type, [&](const StreamParams *, PublisherManager<>::PPublisher pub){
-        auto trpub = std::static_pointer_cast<TradePublisher>(pub);
-        trpub->write([&](Trade &s)noexcept {s = tr;return true;});        
-    });
-    _streams.enum_all_publishers(mi,{},ClosedBar::type, [&](const StreamParams *parm, PublisherManager<>::PPublisher pub){
-        auto cbpub = std::static_pointer_cast<ClosedBarPublisher>(pub);
-        auto p =  static_cast<const ClosedBar::ParamType *>(parm);
-        auto interval =p->param;
-        bool new_bar = false;
-        std::size_t new_tp = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::seconds>(tr.time.time_since_epoch()).count()/interval);
-        cbpub->write([&](ClosedBar &s) noexcept {            
-            if (s.interval_index != new_tp) {
-                new_bar = true;
-                return s.trades > 0;
-            } else{
-                merge_closed_bar(s, tr, new_tp);
-                return false;
-            }
-        });
-        if (new_bar) {
-            cbpub->write([&](ClosedBar &s) noexcept {
-                s = {};
-                merge_closed_bar(s, tr, new_tp);
-                return false;
-            });
-        }
-    });
-    _streams.enum_all_publishers(mi, {}, TradeStatCounter::type, [&](const StreamParams *, PublisherManager<>::PPublisher pub){
-        auto tcpub = std::static_pointer_cast<TradeCounterPublisher>(pub);
-        TradeStatCounter cntr = {};
-        auto s = tcpub->get_top_seq();
-        if (s > 0) [[likely]] {
-            --s;
-            tcpub->read(cntr,s);
-        }
-        tcpub->publish(cntr.add(tr));
-    });
+    _streams.on_event(instrument, tr);
     
 }
 

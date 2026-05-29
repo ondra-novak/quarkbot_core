@@ -48,8 +48,8 @@ void SimTradableInstrument::report_price(Decimal price) {
 }
 
 
-std::unique_ptr<IEventStreamBase> SimTradableInstrument::subscribe_stream_internal(std::string_view type, const StreamParams *) {
-     if (type == ExternalFill::type) {
+std::unique_ptr<IEventStreamBase> SimTradableInstrument::subscribe_stream(std::size_t hash, const void *) {
+     if (hash == class_hash<ExternalFill>) {
         auto s = _liquidation_stream.lock();
         if (s == nullptr) {
             s = std::make_shared<QueueEventPublisher<ExternalFill> >();
@@ -114,7 +114,7 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
         new_order.update_order(OrderRejectionWithText{ OrderRejectionReason::invalid_params,"Invalid side"});
         return new_order;
     }
-    if (params.quantity < info.min_lot_size) {
+    if (params.quantity < info.min_quantity) {
         new_order.update_order(OrderRejectionReason::too_small);
         return new_order;
     }
@@ -124,7 +124,7 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
                 new_order.update_order(OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Missing limit price"});
                 return new_order;
             }
-            if (info.min_volume > info.calc_turnover_pnl_currency(params.limit_price, params.quantity)) {
+            if (info.min_turnover > info.calc_turnover_pnl_currency(params.limit_price, params.quantity)) {
                 new_order.update_order( OrderRejectionReason::too_small);
                 return new_order;
             }
@@ -134,7 +134,7 @@ Order SimTradableInstrument::place_order(const OrderRequest &req, std::shared_pt
                 new_order.update_order(OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Missing limit price"});
                 return new_order;
             }
-            if (info.min_volume > info.calc_turnover_pnl_currency(params.stop_price, params.quantity)) {
+            if (info.min_turnover > info.calc_turnover_pnl_currency(params.stop_price, params.quantity)) {
                 new_order.update_order(OrderRejectionReason::too_small);
                 return new_order;
             }

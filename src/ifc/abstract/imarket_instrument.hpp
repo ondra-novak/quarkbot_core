@@ -8,15 +8,26 @@ namespace quarkbot {
 
 class IMarketInstrument : public IPublisher{
 public:
-    struct Info : ContractInfo {
-        Decimal min_lot_size = {};
-        Decimal max_lot_size = Decimal::max();
-        Decimal lot_size_increment = {};
+    struct Geometry {
+        ///minimal tradable quantity
+        Decimal min_quantity = {};
+        ///max tradable quantity
+        Decimal max_quantity = Decimal::max();
+        ///quantity increment
+        Decimal quantity_increment = {};
+        ///price increment
         Decimal price_increment = {};
-        Decimal min_volume = {};
-        Decimal leverage = {};      //0 used for spot
+        ///minimal allowed turnover (quantity*price)
+        Decimal min_turnover = {};
+        ///max leverage - specify 0 for spot
+        Decimal leverage = {};
+        ///free for maker - (0.01 = 1%)
         Decimal fee_rate_maker = {};
+        ///free for taker - (0.01 = 1%)
         Decimal fee_rate_taker = {};
+
+    };
+    struct Info : ContractInfo, Geometry{            
         ///underlying currency for quotes
         UnderlyingCurrency quote_currency;
         ///underlying currency for pnl, can be different - for example inverted futures 

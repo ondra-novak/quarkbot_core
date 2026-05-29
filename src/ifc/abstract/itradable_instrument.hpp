@@ -30,7 +30,7 @@ virtual ~ITradableInstrument() = default;
         return {
             req.side,
             req.type,
-            req.quantity.get_rounded(info.lot_size_increment, aqs),
+            req.quantity.get_rounded(info.quantity_increment, aqs),
             req.limit_price.get_rounded(info.price_increment, aps),
             req.stop_price.get_rounded(info.price_increment, aps),
             req.leverage,

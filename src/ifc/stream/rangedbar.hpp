@@ -13,7 +13,7 @@ struct DecimalRange {
     constexpr Decimal as_decimal() const {return std::bit_cast<Decimal>(encoded);  }
 };
 
-struct RangeBarView: MarketInstrumentStreamTypeItem {
+struct RangedBar: MarketInstrumentStreamTypeItem {
     static constexpr MarketInstrumentStreamTypeItem::Type type = "ranged_bar";
     using ParamType =  StreamSingleParam<Decimal>;
     Decimal open = 0;
@@ -35,10 +35,10 @@ struct RangeBarView: MarketInstrumentStreamTypeItem {
     std::chrono::system_clock::time_point open_tp = {};
     std::chrono::system_clock::time_point close_tp = {};
 
-    RangeBarView &view() {return *this;}
+    RangedBar &view() {return *this;}
 
     ///initialize new candle
-    RangeBarView init_open() {
+    RangedBar init_open() {
         return {*this, close, close, close, close,
              0, false, close_tp, close_tp};
     }
@@ -51,7 +51,7 @@ struct RangeBarView: MarketInstrumentStreamTypeItem {
     In this case returned candle is final current candle, and new candle must be 
     open by init_open() on returned candle
      */
-    std::pair<RangeBarView, bool> add(const Trade &tr, Decimal range) const {
+    std::pair<RangedBar, bool> add(const Trade &tr, Decimal range) const {
         auto new_close = tr.price;
         auto from_low = new_close - low;
         auto from_high = high - new_close;
@@ -81,31 +81,10 @@ struct RangeBarView: MarketInstrumentStreamTypeItem {
             ,broken
         };
     }
+
+    using Param = Decimal;
 };
 
-template<DecimalRange range>
-struct RangedBar : RangeBarView {
-    constexpr static auto params = ParamType{{}, range.as_decimal()};
-
-    ///create new candle according to close of current candle
-    RangedBar init_open() {
-        return RangeBarView::init_open();
-    }
-
-    ///create updated candle according current candle and new trade
-    /**
-    @param tr incoming trade
-    @return pair {update_candle, break flag}. If break flag is set, updated_candle
-        contains final version of closed candle. You need to create new candle by calling init_open in 
-        this final version, and then apply the same trade on that new candle to get next updated candle
-
-        @note if price moves twice as range, the flag "gap" indicates such situation. No virtual candles created
-     */
-    std::pair<RangedBar, bool>   add(const Trade &tr) const {
-        auto r = RangeBarView::add(tr, range.as_decimal());
-        return {r.first ,r.second};
-    }
-};
 
 
 }

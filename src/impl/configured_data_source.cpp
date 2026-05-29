@@ -18,10 +18,10 @@ IMarketInstrument::Info InstrumentSpec::resolve(SimExchange &exchange) const {
     info.quote_currency = exchange.create_currency(quote_currency);
     info.pnl_currency = exchange.create_currency(pnl_currency);
     if (asset_wallet) info.asset_wallet = exchange.create_currency(*asset_wallet);
-    info.min_lot_size = min_lot_size;
-    info.lot_size_increment = lot_size_increment;
+    info.min_quantity = min_lot_size;
+    info.quantity_increment = lot_size_increment;
     info.price_increment = price_increment;
-    info.min_volume = min_volume;
+    info.min_turnover = min_volume;
     info.leverage = leverage;
     info.fee_rate_maker = fee_rate_maker;
     info.fee_rate_taker = fee_rate_taker;

@@ -18,8 +18,8 @@ public:
 
     virtual PExchange get_exchange() const override {return _exchange;}
     virtual const Info &get_info() const override {return _cfg;}
-    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params)  override {
-        return _exchange->subscribe_stream(shared_from_this(), nullptr, type, params);
+    virtual std::unique_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) override {
+        return _exchange->subscribe_stream(shared_from_this(), class_hash, params);
     }
     virtual PTradableInstrument create_tradable_instrument(PAccount account) override {
         auto acc = std::dynamic_pointer_cast<SimAccount>(account);

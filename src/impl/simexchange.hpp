@@ -3,17 +3,14 @@
 
 #include "ifc/defs.hpp"
 #include "ifc/market_instrument.hpp"
-#include "ifc/stream_defs.hpp"
 #include "ifc/streaming.hpp"
-#include "ifc/stream/closedbar.hpp"
-#include "ifc/stream/tradestat.hpp"
+#include "ifc/stream/ticker.hpp"
 #include "ifc/types.hpp"
 #include "ifc/underlying.hpp"
 #include "ifc/abstract/iexchange.hpp"
+#include "impl/streaming/all_market_stream_manager.hpp"
 #include "simaccount.hpp"
 #include "simexecutor.hpp"
-#include "streaming/lock_free_publisher.hpp"
-#include "streaming/publisher_manager.hpp"
 #include <memory>
 #include <unordered_map>
 namespace quarkbot {
@@ -24,18 +21,13 @@ class SimTradableInstrument;
 class SimExchange final: public IExchange, public std::enable_shared_from_this<SimExchange> {
 public:
     
-    using QuotePublisher = LockFreePublisher<Quote, 1>;
-    using TradePublisher = LockFreePublisher<Trade, 1>;
-    using ClosedBarPublisher = LockFreePublisher<ClosedBar, 1>;
-    using TradeCounterPublisher = LockFreePublisher<TradeStatCounter, 1>;
-
     ///this function creates empty account, credentials are ignored
     virtual Account create_account(const std::string &name, const std::string &credentials)  override;
     virtual std::vector<MarketInstrument> get_market_instruments() override;
     virtual std::vector<UnderlyingCurrency> get_all_currencies()  override;
     virtual std::string_view get_name() const override;
 
-    std::unique_ptr<IEventStreamBase> subscribe_stream(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account, StreamTypeItem::Type type, const StreamParams *params);
+    std::unique_ptr<IEventStreamBase> subscribe_stream(std::shared_ptr<SimInstrument> instrument, std::size_t type, const void *params);
     PTradableInstrument create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account);
 
     PMarketInstrument create_instrument(IMarketInstrument::Info def);
@@ -65,16 +57,15 @@ protected:
     };
 
     std::unordered_map<std::string, InstrumentRef> _instrument_names;
- 
-    PublisherManager<> _streams;
+    AllMarketStreamManager<std::string> _streams;
+    
+    
     SimExecutor _executor;
     std::vector<std::weak_ptr<SimTradableInstrument> > _tradable_instruments;
 
     std::shared_ptr<SimInstrument> resolve_instrument(const std::string &instr);
 
 
-    template<typename T, typename Pub>
-    std::unique_ptr<IEventStreamBase> connect_to(std::shared_ptr<SimInstrument> instrument, const StreamParams *params);
 
 
 };

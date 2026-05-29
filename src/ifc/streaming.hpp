@@ -2,6 +2,7 @@
 
 #include "basic_coro/awaitable.hpp"
 #include "ifc/stream_defs.hpp"
+#include "utils/class_hash.hpp"
 #include <memory>
 #include <type_traits>
 namespace quarkbot {
@@ -142,14 +143,53 @@ protected:
 
 };
 
+template<typename T>
+concept StreamWithParams = requires{
+    typename T::Params;
+};
+
+template<typename T>
+concept StreamWithConstantParams = requires{
+    typename T::Params;
+    {T::params} -> std::convertible_to<typename T::Params>;
+};
+
+template<typename T>
+concept StreamWithoutParams = !StreamWithParams<T>;
+
 
 class IPublisher {
 
 public:
-    virtual std::unique_ptr<IEventStreamBase> subscribe_stream_internal(std::string_view type, const StreamParams *params) = 0;
+    virtual std::unique_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) = 0;
     virtual ~IPublisher() = default;
 
+    template<typename T>    
+    requires (StreamWithoutParams<T>)
+    EventStream<T> subscribe() {
+        auto x = this->subscribe_stream(class_hash<T>, nullptr);
+        if (x) return EventStream<T>::from_base(std::move(x));
+        else return EventStream<T>::create_null();
+    }
+
+    template<typename T>    
+    requires (StreamWithConstantParams<T>)
+    EventStream<T> subscribe() {
+        auto x = this->subscribe_stream(class_hash<T>, &T::params);
+        if (x) return EventStream<T>::from_base(std::move(x));
+        else return EventStream<T>::create_null();
+    }
+
+    template<typename T>
+    requires (StreamWithParams<T>)
+    EventStream<T> subscribe(const typename T::Params &params) {
+        auto x = this->subscribe_stream(class_hash<T>, &params);
+        if (x) return EventStream<T>::from_base(std::move(x));
+        else return EventStream<T>::create_null();
+    }
+
 };
+
 
 
 }

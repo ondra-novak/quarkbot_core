@@ -101,12 +101,18 @@ public:
     For example ExternalFill or FundingUpdate. These streams are private - related to the instrument and account.
     If you need to subscribe public streams (market streams), you can subscribe to them through MarketInstrument.    
     */
-    template<StreamType<TradableInstrumentStreamTypeItem> T>
+    template<std::derived_from<TradableInstrumentStreamTypeItem> T>
+    requires(StreamWithoutParams<T> || StreamWithConstantParams<T>)
     EventStream<T> subscribe() {
-        auto x =  _state->subscribe_stream_internal(T::type, stream_params<T>);
-        if (x) return EventStream<T>::from_base(std::move(x));
-        else return EventStream<T>::create_null();
+        return _state->subscribe<T>();
     }
+
+    template<std::derived_from<TradableInstrumentStreamTypeItem> T>
+    requires(StreamWithParams<T>)
+    EventStream<T> subscribe(typename T::Params params) {
+        return _state->subscribe<T>(params);
+    }
+
 
     ///Get handle to internal state.
     /**
