@@ -1,6 +1,7 @@
 #pragma once
 
 
+#include "ifc/abstract/orderdata.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/market_instrument.hpp"
 #include "ifc/streaming.hpp"
@@ -44,8 +45,8 @@ public:
     void on_event(const std::string &instrument, Trade tr);
 
     bool cancel_all_orders(PTradableInstrument instrument );
-    void cancel_order(Order ord);
-    void place_order(Order ord);
+    void cancel_order(POrderAData ord);
+    void place_order(POrderAData ord);
 
 
 protected:

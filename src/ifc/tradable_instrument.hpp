@@ -24,7 +24,7 @@ public:
      */   
     template<std::derived_from<OrderRequest> _Req = OrderRequest>
     Order place_order(const _Req &params, std::string_view name = {}){
-        return _state->place_order(params, {}, name, class_hash<_Req>);
+        return Order(_state->place_order(params, {}, name, class_hash<_Req>));
     }
 
     ///Replace order on this instrument
@@ -128,12 +128,8 @@ protected:
 
 
 
-///implementation of cancel_order for order
-inline void Order::cancel() {
-    _state->instrument->cancel_order(*this);
-}
 inline TradableInstrument Order::get_instrument() const{
-    return _state->instrument;
+    return _state->adapter_data->instrument;
 }
 
 
@@ -143,9 +139,7 @@ inline TradableInstrument MarketInstrument::create_tradable_instrument(const Acc
 
 ///implementation of get_turnover for order
 /** Because Order definition doesn't see ITradableInstrument, the implementation is done here */
-inline Decimal Order::get_turnover(Decimal price, Decimal filled) const {
-        const auto &params = get_parameters();
-        auto instr = get_instrument();
+inline Decimal calc_turnover(const OrderParameters params, const TradableInstrument &instr,  Decimal price, Decimal filled)  {
         const auto &info = instr.get_info();
         filled = std::min(filled, params.quantity);
         auto leaves = params.quantity - filled;

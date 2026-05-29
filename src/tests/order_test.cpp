@@ -1,4 +1,5 @@
 #include "ifc/abstract/order_internal.hpp"
+#include "ifc/abstract/orderdata.hpp"
 #include "ifc/execution_worker.hpp"
 #include "impl/simexchange.hpp"
 #include "impl/backtest_executor.hpp"
@@ -276,7 +277,7 @@ static void test_order_next_coroutine() {
         .fees       = Decimal(0),
         .fee_rate   = Decimal(1),
     };
-    order.update_order(OrderInternalState::Update{std::move(fill)});
+    order.get_handle()->adapter_data->update(std::move(fill));
 
     // Pump the executor so the coroutine resumes
     fx.executor->flush_queue();

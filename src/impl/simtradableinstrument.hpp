@@ -1,9 +1,11 @@
 #pragma once
 
+#include "ifc/abstract/orderdata.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
 #include "ifc/abstract/order_internal.hpp"
 #include "ifc/order_storage.hpp"
+#include "ifc/tradable_instrument.hpp"
 #include "impl/streaming/queue_event_stream.hpp"
 #include "siminstrument.hpp"
 #include "ifc/types.hpp"
@@ -40,18 +42,17 @@ public:
     virtual std::unique_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) override ;
     virtual PAccount get_account() const override ;
     virtual PMarketInstrument get_instrument() const override ;
-    virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderInternalState>replaced , std::string_view name, std::size_t) override;
-    virtual void cancel_order(Order order) override;
+    virtual std::shared_ptr<OrderStrategyData> place_order(const OrderRequest &params, std::shared_ptr<OrderStrategyData> replaced , std::string_view name, std::size_t) override;
     virtual bool cancel_all_orders() override;
     virtual awaitable<Position> get_position() const override {return _position;}
     virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) override;
 
-    void on_order_update(Order ord, OrderInternalState::Update &&status);
+    void on_order_update(POrderAData ord, OrderAdapterData::Update &&status);
 
 protected:
 
     struct RegOrder {
-        Order order;
+        POrderAData order;
         Decimal turnover;        
         Decimal filled = {};
     };
@@ -78,8 +79,8 @@ protected:
             Decimal sell_orders = {};
             Decimal position_turnover = _position.get_volume(info);
             for (auto &[o, t,f]: _active_orders) {
-                const auto &params = o.get_parameters();
-                auto to = o.get_turnover(_last_price, f);
+                const auto &params = o->parameters;
+                auto to = calc_turnover(params, o->instrument, _last_price, f);
                 if (params.side == _position.side) {
                     to = to - position_turnover;
                 }
@@ -98,9 +99,9 @@ protected:
             Decimal cur_blocked = {};
             Decimal pos_blocked = {};
             for (auto &[o, t,f]: _active_orders) {
-                const auto &params = o.get_parameters();
+                const auto &params = o->parameters;
                 if (params.side == Side::buy) {
-                    auto to = o.get_turnover(_last_price, f);
+                    auto to = calc_turnover(params, o->instrument,_last_price, f);
                     cur_blocked+=to;
                 } else {
                     pos_blocked += std::max<Decimal>(params.quantity - f,0);                    
@@ -122,7 +123,7 @@ protected:
 
 
     void liquidation();
-    std::optional<Order> liquidation_order; 
+    std::shared_ptr<OrderStrategyData> liquidation_order; 
 
     
     

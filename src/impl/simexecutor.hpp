@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ifc/abstract/orderdata.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/stream/trade.hpp"
 #include "ifc/stream/quote.hpp"
@@ -23,9 +24,9 @@ public:
     void on_event(PSimInstrument instrument, Trade &trade);
     void on_event(PSimInstrument instrument, Quote &quote);
 
-    void place_order(Order ord);
-    void replace_order(Order ord, Order prev_order);
-    void cancel_order(Order ord);
+    void place_order(POrderAData ord);
+    void replace_order(POrderAData ord, POrderAData prev_order);
+    void cancel_order(POrderAData ord);
     bool cancel_all(PTradableInstrument instrument);
     void set_slippage(double slippage) { _slippage = slippage; }
 
@@ -37,7 +38,7 @@ protected:
     double _taker_fees = 0.002;
 
     struct ActiveOrder {
-        Order ord;
+        POrderAData ord;
         PSimInstrument instrument;
         Decimal filled = {};
         bool trig = false;
@@ -56,10 +57,10 @@ protected:
 
     OrderType real_order_type(const ActiveOrder &order);
 
-    static PSimInstrument extract_instrument(const Order &ord);
+    static PSimInstrument extract_instrument(const POrderAData &ord);
 
-    void set_order_status(const Order &ord, OrderInternalState::Update &&st);
-    void accept_order(const Order &ord);
+    void set_order_status(const POrderAData &ord, OrderAdapterData::Update &&st);
+    void accept_order(const POrderAData &ord);
 
     //TODO implement reporting of order blocking
 };

@@ -1,10 +1,8 @@
 #include "order_trigger.hpp"
+#include "ifc/abstract/orderdata.hpp"
+#include "ifc/order.hpp"
 #include "ifc/order_defs.hpp"
-#include "ifc/streaming.hpp"
 #include "ifc/tradable_instrument.hpp"
-#include "ifc/market_instrument.hpp"
-#include "ifc/types.hpp"
-#include <exception>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -18,68 +16,60 @@ namespace quarkbot {
 
 
    template<typename Fn>
-    auto OrderTrigger::update_state(const Order &ord, Fn &&fn){
+    auto OrderTrigger::update_state(const POrderAData &ord, Fn &&fn){
         std::scoped_lock _(_mx);
         auto &st = _order_map[ord];
         return fn(st);
     }
 
+   Order OrderTrigger::place_order(PTradableInstrument instrument,            
+            const OrderParameters &params,
+            std::shared_ptr<OrderStrategyData> order_to_replace, 
+            std::string_view name, std::size_t ) 
+    {
+        auto strdata = OrderStrategyData::create();
+        auto adata = OrderAdapterData::create(strdata, params, instrument, 
+            std::string(name), order_to_replace,
+             _worker.now(),
+             [me = shared_from_this()](OrderStrategyData &what) {
+                    me->cancel_order(what.adapter_data);
+                },{});
 
-    void OrderTrigger::register_order(Order ord){
-        update_state(ord, [](auto &){/* empty, just initialize state*/});
-        _worker.run(monitor_order(shared_from_this(), std::move(ord)));
+        update_state(adata, [](auto &){/* empty, just initialize state*/});
+       _worker.run(monitor_order(shared_from_this(), std::move(adata)));
+        return Order(strdata);
+        
     }
+
  
-    void OrderTrigger::cancel_order(Order ord){
+    bool OrderTrigger::cancel_order(POrderAData ord){
         //lock internal state
         std::scoped_lock _(_mx);
         //find order
         auto iter = _order_map.find(ord);        
-        if (iter == _order_map.end()) return;//nothing to cancel
+        if (iter == _order_map.end()) return false;//nothing to cancel
         //determine state
         auto &st = iter->second;
-        if (st.canceled) return ; //already canceled
+        if (st.canceled) return false; //already canceled
         //if still on trigger (we have stream)
-        if (std::holds_alternative<Stream *>(st.phase)){
-            //close stream
-            auto &s = std::get<Stream*>(st.phase);        
-            s->close();
-        //if order has been already placed
-        } else if (std::holds_alternative<Order *>(st.phase)){
-            auto o = std::get<Order*>(st.phase);
-            //cancel order
-            o->cancel();
-        } 
-        //mark order canceled                
-        st.canceled = true;
-    }
-
-    bool OrderTrigger::cancel_order_for_replace(const Order &ord) {
-        std::scoped_lock _(_mx);
-        auto iter = _order_map.find(ord);
-        if (iter == _order_map.end()) return false;
-        auto &st = iter->second;
-        if (st.canceled) return false;
-        if (std::holds_alternative<Stream*>(st.phase)){            
-            auto &s = std::get<Stream *>(st.phase);
-            s->close();
-        } else {
-            return false;
+        if (st.stream) {
+            st.stream->close();
         }
         st.canceled = true;
         return true;
     }
 
 
-    void OrderTrigger::unreg_order(const Order &ord) {
+    void OrderTrigger::unreg_order(const POrderAData &ord) {
         std::scoped_lock _(_mx);
         _order_map.erase(ord);
     }
 
-    StrategyFragment OrderTrigger::monitor_order(std::shared_ptr<OrderTrigger> me, Order order){
+    StrategyFragment OrderTrigger::monitor_order(std::shared_ptr<OrderTrigger> me, POrderAData order){
         try {
+
             //get parameters
-            const auto &params = order.get_parameters();        
+            const auto &params = order->parameters;        
             //trigger price
             Decimal trigger_price;
             //triger side (-1 price must be below, 1 price must be above)
@@ -88,7 +78,7 @@ namespace quarkbot {
             //validate and prepare limit order
             if (params.type == OrderType::limit){
                 if (params.limit_price <= 0_dec) {
-                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
+                    order->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
                     me->unreg_order(order);
                     co_return;
                 }     
@@ -97,12 +87,12 @@ namespace quarkbot {
             //validate and prepare stop like orders
             } else if (params.type == OrderType::stop || params.type == OrderType::stoplimit || params.type == OrderType::alert) {
                 if (params.stop_price <= 0_dec) {
-                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_params, "missing stop price"});
+                    order->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "missing stop price"});
                     me->unreg_order(order);
                     co_return;
                 }     
                 if (params.type == OrderType::stoplimit && params.limit_price <= 0_dec){
-                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
+                    order->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "missing limit price"});
                     me->unreg_order(order);
                     co_return;
                 }
@@ -111,22 +101,22 @@ namespace quarkbot {
                 trigger_sign = static_cast<int>(params.side);
             } else {
                 //report error - not supported
-                order.update_order(OrderRejectionWithText{OrderRejectionReason::unsupported, "unsupported order for local trigger"});
+                order->update(OrderRejectionWithText{OrderRejectionReason::unsupported, "unsupported order for local trigger"});
                 me->unreg_order(order);
                 co_return ;
             }
 
             //handle replace now
-            auto repl = order.get_replaced_order();
+            auto repl = order->replaced_order.lock();            
             if (repl) {
-                auto replst = repl->get_status();
+                auto replst = repl->status;
                 if (replst == OrderStatus::sent){
-                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_replace, "not ready for replace"});
+                    order->update(OrderRejectionWithText{OrderRejectionReason::invalid_replace, "not ready for replace"});
                     me->unreg_order(order);
                     co_return ;
                 }
-                if (!me->cancel_order_for_replace(*repl)) {
-                    order.update_order(OrderRejectionWithText{OrderRejectionReason::order_not_found, "order cannot be replaced"});
+                if (!me->cancel_order(repl->adapter_data)) {
+                    order->update(OrderRejectionWithText{OrderRejectionReason::order_not_found, "order cannot be replaced"});
                     me->unreg_order(order);
                     co_return ;
                 }
@@ -135,24 +125,24 @@ namespace quarkbot {
             }
 
             //retrieve instrument for subscription
-            auto instr = order.get_instrument();
+            TradableInstrument instr( order->instrument);
 
             //subscribe trades
             Stream ev= instr.get_instrument().subscribe<Trade>();
             //create and update state with reference to event stream
             auto canceled = me->update_state(order, [&](State &st){
-                st.phase = &ev;           
+                st.stream = &ev;           
                 return st.canceled;
             });
 
             if (canceled) {
-                order.update_order(OrderStatus::canceled);          
+                order->update(OrderStatus::canceled);          
                 me->unreg_order(order);
                 co_return;
             }
 
             //update order status
-            order.update_order(OrderStatus::pending_trigger);
+            order->update(OrderStatus::pending_trigger);
 
             //monitor prices in cycle
             Trade tev;
@@ -162,7 +152,7 @@ namespace quarkbot {
                 //when stream is closed 
                 if (!r) {
                     //mark order canceled
-                    order.update_order(OrderStatus::canceled);
+                    order->update(OrderStatus::canceled);
                     //and exit
                     me->unreg_order(order);
                     co_return;
@@ -187,12 +177,12 @@ namespace quarkbot {
                 case OrderType::stoplimit: ordreq.type = OrderType::limit; ordreq.limit_price = params.limit_price; break;
                 //alert is market filled
                 case OrderType::alert:
-                    order.update_order(OrderStatus::filled);
+                    order->update(OrderStatus::filled);
                     me->unreg_order(order);
                     co_return;
                 default:
                     //report error
-                    order.update_order(OrderRejectionWithText{OrderRejectionReason::invalid_params, "Failed to convert parameters of the order"});
+                    order->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "Failed to convert parameters of the order"});
                     me->unreg_order(order);
                     co_return;
             }
@@ -206,50 +196,29 @@ namespace quarkbot {
             ordreq.reduce_only = params.reduce_only;        
             
             //place the order
-            Order new_order = instr.place_order(ordreq, order.get_name());
+            Order new_order = instr.place_order(ordreq, order->name);
 
             //mark original order sent
             OrderStatus prev_status = OrderStatus::sent;        
-            order.update_order(prev_status);
+            order->update(prev_status);
 
             //update state in order map, detect canceled state atomically
             canceled = me->update_state(order, [&](State &st){
-                st.phase = &new_order;
                 return st.canceled;
             });
 
             //if canceled, cancel the order
             if (canceled) new_order.cancel();
 
-            //process all events
-            while (co_await new_order.next()) {
-                auto f = new_order.read_fill();
-                //forward fills
-                if (f) order.update_order(std::move(f).value());
-                auto st = order.get_status();
-                //if status changed
-                if (st != prev_status) {
-                    //handle open status
-                    if (st == OrderStatus::open) {
-                        order.update_order(OrderOpenStatus{order.get_id(), order.get_record_key()});    
-                    //handle rejected status
-                    } else if (st == OrderStatus::rejected){
-                        order.update_order(OrderRejectionWithText{order.get_reject_reason(), order.get_rejection_message()});    
-                    } else {
-                        //forward any other status
-                        order.update_order(st);
-                    }
-                    prev_status = st;
-                }
-            }
-            //if done, unreg order
+            //redirect adapter state to old order - so it will receive fills and updates
+            order->update(new_order.get_handle()->adapter_data);
+            //new order is still attached to its adapter data
+            //we need to keep them alive 
+            new_order.keep_alive();
+            //new order will be destroyed and detaches itself from adapter data
+        } catch (std::exception &e) {
+            order->update(OrderRejectionWithText{OrderRejectionReason::internal_error, e.what()});
             me->unreg_order(order);
-            //exit
-            co_return;        
-        } catch (const std::exception &e) {
-            order.update_order(OrderRejectionWithText{OrderRejectionReason::internal_error, e.what()});
-            me->unreg_order(order);
-            co_return;
         }
 
     }

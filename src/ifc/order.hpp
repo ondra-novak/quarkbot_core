@@ -1,9 +1,15 @@
 #pragma once
 
+#include "basic_coro/prepared_coro.hpp"
 #include "hub.hpp"
+#include "ifc/abstract/order_internal.hpp"
+#include "ifc/abstract/orderdata.hpp"
+#include "ifc/order_defs.hpp"
 #include "strategy_fragment.hpp"
-#include "abstract/order_internal.hpp"
+#include "abstract/orderdata.hpp"
+#include <cassert>
 #include <chrono>
+#include <string_view>
 
 
 
@@ -14,7 +20,13 @@ class TradableInstrument;
 class Order {
 public:
 
-    Order(std::shared_ptr<OrderInternalState> st):_state(std::move(st)) {}
+    Order() = default;
+    Order(std::shared_ptr<OrderStrategyData> st):_state(std::move(st)) {
+        assert(st);
+        assert(st->adapter_data);
+        assert(st->adapter_data->cancel);
+        assert(st->adapter_data->instrument);        
+    }
 
 
     ///Wait for next event (awaitable)
@@ -32,7 +44,13 @@ public:
         
     */
     awaitable<bool> next() {
-        return OrderInternalState::next_event(_state);
+        if (!_state) return false;
+        if (_state->adapter_data->flush_updates()) return true;
+        if (is_done_status(_state->status)) return false;
+        return [state = _state](auto promise) -> coro::prepared_coro{
+            if (state->adapter_data->add_awaiter(promise)) return {};
+            return promise(true);
+        };        
     }
 
 
@@ -40,7 +58,7 @@ public:
     ///returns true if there is any unprocessed fill
     /** If you need also process fill, it is better to use read_fill() directly and test result optional */
     bool any_fill() const {
-        return !_state->fills.empty();
+        return _state && !_state->fills.empty();
     }
 
     ///reads next fill, 
@@ -49,22 +67,41 @@ public:
     */
     std::optional<Fill> read_fill() {
         std::optional<Fill> out;
-        if (!_state->fills.empty()) {
+        if (_state && !_state->fills.empty()) {
             out = _state->fills.front();
             _state->fills.pop_front();
         }
         return out;
     }
 
-    auto &get_all_fills() {return _state->fills;}
-    auto &get_all_fills() const {return _state->fills;}
+    ///return true, if order is valid
+    /**
+        return true order instance contains a valid order
+        return false order instance was not initialized
+     */
+    explicit operator bool() const {return static_cast<bool>(_state);}
+
+    ///return true, if order instance is valid, i.e. contains and order information
+    /**
+        return true order instance contains a valid order
+        return false order instance was not initialized
+     */
+    bool valid() const {return static_cast<bool>(_state);    }
+
+    void force_valid() const {
+        if (!_state) [[unlikely]] throw std::runtime_error("Working with order without a value [!valid()]");
+    }
 
     ///get order parameters
-    const OrderParametersGen<Decimal> &get_parameters() const {return _state->parameters;}
+    const OrderParameters &get_parameters() const {
+        if (!_state) [[unlikely]] return empty_order_parameters;
+        return _state->adapter_data->parameters;
+    }
     ///get instrument
     TradableInstrument get_instrument() const;
+
     ///get order name
-    const std::string &get_name() const {return _state->name;}    
+    std::string_view get_name() const {return _state?_state->adapter_data->name:std::string_view();}    
     ///retrieve order instance which has been replaced
     /**
         @return optional containing order instance. Note that to return
@@ -73,42 +110,63 @@ public:
             available and function returns nullopt
     */
     std::optional<Order> get_replaced_order() const {
-        auto lk = _state->replaced_order.lock();
         std::optional<Order> out;
+        if (!_state) [[unlikely]] return out;
+        auto lk = _state->adapter_data->replaced_order.lock();
         if (lk) out.emplace(lk);
         return out;
     }
     ///return internal id
-    const std::string &get_id() const {return _state->id;}
+    std::string_view get_id() const {return _state?_state->id:std::string_view();}
     ///return filled amount
-    Decimal get_filled() const {return _state->filled;}
+    Decimal get_filled() const {return _state?_state->filled:0;}
     ///return get order status
-    OrderStatus get_status() const {return _state->status;}
+    OrderStatus get_status() const {
+        if (_state) [[likely]] return _state->status;
+        return OrderStatus::lost;
+    }
     ///get reason for rejection
-    OrderRejectionReason get_reject_reason() const {return _state->reject_reason;}
+    OrderRejectionReason get_reject_reason() const {return _state?_state->reject_reason:OrderRejectionReason::none;}
     ///get rejection message
-    const std::string &get_rejection_message() const {return _state->rejection_message;}    
+    std::string_view get_rejection_message() const {return _state?_state->rejection_message:std::string_view();}    
     ///returns time when order has been created
-    std::chrono::system_clock::time_point get_create_time() const {return _state->create_time;}
+    std::chrono::system_clock::time_point get_create_time() const {return _state?_state->adapter_data->create_time:std::chrono::system_clock::time_point();}
 
-    ///update order status
+    ///cancel order
+    /** @note if order has done status, operation is no-op */
+    void cancel() {
+        force_valid();
+        _state->cancel();
+    }
+    ///Keep order alive even if instance is destroyed
     /**
+        By default, when order instance is destroyed (last reference is released), the cancel is automatically sent.
+        Call this function to keep order alive after instance destruction
     */
-    void update_order(OrderInternalState::Update &&update) {
-        _state->update(std::move(update));
+    void keep_alive(bool k = true) {
+        force_valid();
+        _state->keep_alive = k;
     }
 
+    Decimal get_turnover() const {
+        return _state?_state->turnover:0;
+    }
 
-    void cancel();
-    Decimal get_turnover(Decimal price, Decimal filled = {}) const;
-    bool done() const {return is_done_status(get_status());}
+    Decimal get_vwap() {
+        if (_state && _state->filled) [[likely]]  return _state->turnover/_state->filled;
+        else return 0;
+    }
+    
+
+    bool is_done() const {return is_done_status(get_status());}
 
     
     bool operator==(const Order &) const = default;
     
     ///create hash (for unordered map)
     std::uint64_t get_hash() const {
-        std::hash<std::shared_ptr<OrderInternalState> > hasher;
+        force_valid();
+        std::hash<std::shared_ptr<OrderStrategyData> > hasher;
         return hasher(_state);
     }
 
@@ -121,20 +179,17 @@ public:
         Orders pushed to hub are already prepared for data and fills retrieval, do not call next() again
     */    
     StrategyFragment feed_to(std::shared_ptr<Hub<Order> > hub) {
+        force_valid();
         Order ord = *this;
         while (co_await(ord.next()) && co_await hub->send(ord));
     }
-
-
-    ///Retrieve internal record key - for some advanced persistence
-    auto get_record_key() const {return _state->key;}
 
     ///Access internal state - reserved for adapters, the strategy should not use it
     auto get_handle() const {return _state;}
 
 protected:
 
-    std::shared_ptr<OrderInternalState> _state = {};
+    std::shared_ptr<OrderStrategyData> _state = {};
 };
 
 

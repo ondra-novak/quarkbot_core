@@ -22,6 +22,19 @@ namespace quarkbot {
             } 
         };
 
+        struct FilledState {
+            Decimal filled = {};
+            Decimal turnover = {};
+            auto field(this auto &self) {
+                return std::tie(self.filled, self.turnover);
+            }
+        };
+
+        struct OrderRestoredState {
+            OrderStoredState st;
+            FilledState fill_st;
+        };
+
         OrderStorage(PStorage storage, std::string fill_var)
             : _storage(std::move(storage)) 
             , _fill_var(fill_var)
@@ -45,8 +58,8 @@ namespace quarkbot {
         void store_fill(const PStorageTransaction &tx, const Fill &fill) {
             tx->store(_fill_var, fill.key, fill, UpdateLastRevision::disable);
         }
-        void store_filled(const PStorageTransaction &tx, const RecordKey &key, Decimal filled) {
-            tx->store(_order_fill_var, key, filled);
+        void store_filled(const PStorageTransaction &tx, const RecordKey &key,FilledState fst) {
+            tx->store(_order_fill_var, key, fst);
         }
 
         ///close order - called when order is done
@@ -62,12 +75,12 @@ namespace quarkbot {
         /**
         Returns necessery informations about orders which can be understand by adapter
          */
-        std::vector<std::pair<OrderStoredState, Decimal> > load_opened_orders() const {
-            std::vector<std::pair<OrderStoredState, Decimal>> out;
+        std::vector<OrderRestoredState> load_opened_orders() const {
+            std::vector<OrderRestoredState> out;
             for (auto val: _storage->select_range(_order_var, RecordKey::min(), RecordKey::max())) {
                 OrderStoredState st;
                 val.extract(st);
-                Decimal d = {};
+                FilledState d = {};
                 auto val2 = _storage->get(_order_fill_var, val.key);
                 val2.extract(d);
                 out.push_back({st, d});

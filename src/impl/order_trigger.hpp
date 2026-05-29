@@ -1,7 +1,9 @@
 #pragma once 
 
+#include "ifc/abstract/orderdata.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
+#include "ifc/order_defs.hpp"
 #include "ifc/strategy_fragment.hpp"
 #include "ifc/stream/trade.hpp"
 #include "ifc/streaming.hpp"
@@ -22,18 +24,12 @@ public:
     OrderTrigger(const OrderTrigger &) = delete;
     OrderTrigger &operator=(const OrderTrigger &) = delete;
 
-    ///register the order for local triggering
-    /**
-        @param ord Order instance, it should be already validated and prepared to be placed. If this is replace, the order must carry a replaced order
+    Order place_order(PTradableInstrument instrument, 
+                    const OrderParameters &params, 
+                    std::shared_ptr<OrderStrategyData> order_to_replace, 
+                    std::string_view name, std::size_t param_class_hash);
 
-        @note The function doesn't check for local_trigger flag, so it can be called to emulate alert and stop orders when exchange doesn't support such type
-
-        Errors are emited as order rejections
-    */
-    void register_order(Order ord);
-    ///request to cancel order
-    void cancel_order(Order ord);
-
+    bool cancel_order(POrderAData ord);
     
 
 protected:
@@ -41,22 +37,21 @@ protected:
     using Stream = EventStream<Trade>;
 
     struct State {
-        std::variant<std::monostate, Stream *, Order *> phase;
+        Stream *stream = nullptr;
         bool canceled = false;
     };
 
-    using OrderMap = std::unordered_map<Order, State, Hasher<Order>>;
+    using OrderMap = std::unordered_map<POrderAData, State, Hasher<POrderAData>>;
 
     std::mutex _mx;
     OrderMap _order_map;
     ExecutionWorker _worker;
 
-    static StrategyFragment monitor_order(std::shared_ptr<OrderTrigger> me, Order order);
+    static StrategyFragment monitor_order(std::shared_ptr<OrderTrigger> me, POrderAData order);
 
-    bool cancel_order_for_replace(const Order &ord);
     template<typename Fn>
-    auto update_state(const Order &ord, Fn &&fn);
-    void unreg_order(const Order &ord);
+    auto update_state(const POrderAData &ord, Fn &&fn);
+    void unreg_order(const POrderAData &ord);
 
 };
 

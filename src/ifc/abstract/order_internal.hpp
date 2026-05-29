@@ -1,5 +1,6 @@
-#pragma once
 
+#pragma once
+#if 0
 #include "basic_coro/awaitable_transform.hpp"
 #include "../defs.hpp"
 #include "../execution_worker.hpp"
@@ -13,7 +14,6 @@
 namespace quarkbot {
 
 class ITradableInstrument;
-
 
 
 ///internal state of order - implementation of Order
@@ -206,4 +206,5 @@ struct OrderInternalState{
 
 
 }
+#endif
     

@@ -1,12 +1,15 @@
 #pragma once
 
+#include "ifc/abstract/orderdata.hpp"
 #include "ifc/log.hpp"
+#include "ifc/order_defs.hpp"
 #include "order_internal.hpp"
 #include "../streaming.hpp"
 #include "imarket_instrument.hpp"
 namespace quarkbot {
 
 
+struct OrderStrategyData;
 class Order;
 
 class ITradableInstrument: public IPublisher {
@@ -14,10 +17,9 @@ public:
 
 
 virtual ~ITradableInstrument() = default;
-    virtual Order place_order(const OrderRequest &params, std::shared_ptr<OrderInternalState> order_to_replace, 
+    virtual std::shared_ptr<OrderStrategyData> place_order(const OrderRequest &params, std::shared_ptr<OrderStrategyData> order_to_replace, 
                 std::string_view name, std::size_t param_class_hash) = 0;
     virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) = 0;
-    virtual void cancel_order(Order order) = 0;
     virtual bool cancel_all_orders() = 0;
     virtual PAccount get_account() const = 0;
     virtual awaitable<Position> get_position() const = 0;
