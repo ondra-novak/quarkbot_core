@@ -2,6 +2,7 @@
 
 #include "ifc/types.hpp"
 #include "utils/round.hpp"
+#include <queue>
 
 namespace quarkbot {
 
@@ -100,6 +101,8 @@ using OrderRequest = OrderParametersGen<TargetValue>;
 
 
 enum class OrderStatus : uint8_t {
+    ///order status is unknown - this is default
+    unknown = 0,
     ///order sent, not confirmed yet
     sent,
     ///order is awaiting trigger, this state is used for locally managed triggers, should not be emited by exchanges. 
@@ -186,6 +189,50 @@ struct OrderOpenStatus {
     std::string id;
     RecordKey key;
 };
+
+struct OrderReport {
+    ///is set true if status changed while new report was generated
+    bool status_changed = false;
+    ///current status of the order
+    OrderStatus status = OrderStatus::unknown;
+    ///if order is rejected, contains rejection reason
+    OrderRejectionReason rejection_reason = OrderRejectionReason::none;
+    //can contain rejection message
+    std::string rejection_message = {};
+    //contains order id if known
+    std::string id = {};
+    //contains order name if defined
+    std::string name = {};
+    //the queue contains unprocessed fills
+    std::queue<Fill> fills = {};
+    //total filled amount (as reported from adapter)
+    Decimal filled = 0;
+    //total turnover (quantity * price accumulated)
+    Decimal turnover = 0;
+
+    //read next fill
+    std::optional<Fill> read_fill() {
+        std::optional<Fill> out;
+        if (!fills.empty()) {
+            out.emplace(std::move(fills.front()));
+            fills.pop();
+        }
+        return out;
+    }
+
+    //calc average fill price
+    Decimal calc_avg_fill_price() const {
+        if (filled) return turnover/filled;
+        return 0;
+    }
+
+    //report contains done status
+    bool is_done() const {
+        return is_done_status(status);
+    }
+
+};
+
 
 
 }

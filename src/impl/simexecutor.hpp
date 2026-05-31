@@ -27,6 +27,7 @@ public:
     void place_order(POrderAData ord);
     void replace_order(POrderAData ord, POrderAData prev_order);
     void cancel_order(POrderAData ord);
+    void cancel_order(OrderInternalData *ord);
     bool cancel_all(PTradableInstrument instrument);
     void set_slippage(double slippage) { _slippage = slippage; }
 
@@ -59,7 +60,7 @@ protected:
 
     static PSimInstrument extract_instrument(const POrderAData &ord);
 
-    void set_order_status(const POrderAData &ord, OrderAdapterData::Update &&st);
+    void set_order_status(const POrderAData &ord, OrderInternalData::Update &&st);
     void accept_order(const POrderAData &ord);
 
     //TODO implement reporting of order blocking

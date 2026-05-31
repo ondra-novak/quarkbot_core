@@ -46,6 +46,7 @@ public:
 
     bool cancel_all_orders(PTradableInstrument instrument );
     void cancel_order(POrderAData ord);
+    void cancel_order(OrderInternalData *ord);
     void place_order(POrderAData ord);
 
 

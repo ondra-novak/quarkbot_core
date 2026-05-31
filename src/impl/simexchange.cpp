@@ -87,10 +87,13 @@ bool SimExchange::cancel_all_orders(PTradableInstrument instrument ) {
 void SimExchange::cancel_order(POrderAData ord) {
     _executor.cancel_order(ord);
 }
+void SimExchange::cancel_order(OrderInternalData *ord) {
+    _executor.cancel_order(ord);
+}
 void SimExchange::place_order(POrderAData ord) {
-    auto rep_ord =ord->replaced_order.lock();
+    auto rep_ord =ord->get_replaced_order().lock();
     if (rep_ord) {
-        _executor.replace_order(ord, rep_ord->adapter_data);
+        _executor.replace_order(ord, rep_ord);
     } else {
         _executor.place_order(ord);
     }

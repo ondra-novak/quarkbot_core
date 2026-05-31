@@ -2,7 +2,6 @@
 #include "ifc/abstract/orderdata.hpp"
 #include "ifc/execution_worker.hpp"
 #include "ifc/order.hpp"
-#include "ifc/abstract/order_internal.hpp"
 #include "ifc/order_storage.hpp"
 #include "ifc/streaming.hpp"
 #include "ifc/tradable_instrument.hpp"
@@ -92,19 +91,18 @@ void SimTradableInstrument::liquidation() {
     }
 }
 
-std::shared_ptr<OrderStrategyData>  SimTradableInstrument::place_order(const OrderRequest &req, std::shared_ptr<OrderStrategyData> old_state, std::string_view name, std::size_t) {
+std::shared_ptr<OrderInternalData>  SimTradableInstrument::place_order(const OrderRequest &req, std::shared_ptr<OrderInternalData> old_state, std::string_view name, std::size_t) {
 
 
-    ExecutionWorker worker = ExecutionWorker::current();
-    auto strd = OrderStrategyData::create();
-    auto st = OrderAdapterData::create(strd,
+    ExecutionWorker worker = ExecutionWorker::current();    
+    auto st = OrderInternalData::create(
         convert_request_to_params(req, _position.side),
         shared_from_this(),
         std::string(name),
         old_state,
         worker.required().now(),
-        [me = shared_from_this()](OrderStrategyData &order){
-            me->_instrument->get_sim_exchange()->cancel_order(order.adapter_data);
+        [me = shared_from_this()](OrderInternalData *order){
+            me->_instrument->get_sim_exchange()->cancel_order(order);
         }, _order_storage
     );
 
@@ -112,34 +110,34 @@ std::shared_ptr<OrderStrategyData>  SimTradableInstrument::place_order(const Ord
     const auto &info = _instrument->get_info();    
 
 
-    const auto &params = st->parameters;
+    const auto &params = st->get_parameters();
     if (params.side != Side::buy && params.side != Side::sell) {
         st->update(OrderRejectionWithText{ OrderRejectionReason::invalid_params,"Invalid side"});
-        return strd;
+        return st;
     }
     if (params.quantity < info.min_quantity) {
         st->update(OrderRejectionReason::too_small);
-        return strd;
+        return st;
     }
     if (is_limit_order(params.type) || is_stop_order(params.type)) {
         if (is_limit_order(params.type)) {
             if (params.limit_price <= 0) {
                 st->update(OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Missing limit price"});
-                return strd;
+                return st;
             }
             if (info.min_turnover > info.calc_turnover_pnl_currency(params.limit_price, params.quantity)) {
                 st->update( OrderRejectionReason::too_small);
-                return strd;
+                return st;
             }
         }
         if (is_stop_order(params.type)) {
             if (params.stop_price <= 0) {
                 st->update(OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Missing limit price"});
-                return strd;
+                return st;
             }
             if (info.min_turnover > info.calc_turnover_pnl_currency(params.stop_price, params.quantity)) {
                 st->update(OrderRejectionReason::too_small);
-                return strd;
+                return st;
             }
         }
     }
@@ -149,16 +147,16 @@ std::shared_ptr<OrderStrategyData>  SimTradableInstrument::place_order(const Ord
         st->update( OrderRejectionReason::insufficient_funds);
         _active_orders.pop_back();    
         update_margin();
-        return strd;
+        return st;
     }
 
     _instrument->get_sim_exchange()->place_order(st);    
-    return strd;
+    return st;
             
 }
 
 
-void SimTradableInstrument::on_order_update(POrderAData ord, OrderAdapterData::Update &&status) {
+void SimTradableInstrument::on_order_update(POrderAData ord, OrderInternalData::Update &&status) {
    
     if (std::holds_alternative<Fill>(status)) {
         const Fill &f = std::get<Fill>(status);
@@ -167,7 +165,7 @@ void SimTradableInstrument::on_order_update(POrderAData ord, OrderAdapterData::U
         if ((std::holds_alternative<OrderStatus>(status) && is_done_status(std::get<OrderStatus>(status)))
             || std::holds_alternative<OrderRejectionReason>(status)
             || std::holds_alternative<OrderRejectionWithText>(status)) {
-                if (liquidation_order && ord == liquidation_order->adapter_data) {
+                if (liquidation_order && ord == liquidation_order) {
                     liquidation_order.reset();
                 }        
                 auto iter = std::find_if(_active_orders.begin(), _active_orders.end(), [&](const RegOrder &r){
@@ -189,23 +187,19 @@ std::vector<Order> SimTradableInstrument::attach_storage(PStorage storage, std::
 
     auto orders = _order_storage->load_opened_orders();
     for (auto &s: orders) {
-        auto orddata = OrderStrategyData::create();
-        auto adata = OrderAdapterData::create(
-            orddata,
+        auto adata = OrderInternalData::create(
             s.st.parameters,
             shared_from_this(),
             s.st.name,
-            std::weak_ptr<OrderStrategyData>(),
+            std::weak_ptr<OrderInternalData>(),
             worker.required().now(),
-                    [this](OrderStrategyData &order){
-                    _instrument->get_sim_exchange()->cancel_order(order.adapter_data);
+                    [this](OrderInternalData *order){
+                    _instrument->get_sim_exchange()->cancel_order(order);
                     },
             _order_storage
         );
-        orddata->id = adata->id = s.st.id;
-        orddata->filled = adata->fst.filled = s.fill_st.filled;
-        orddata->turnover = adata->fst.turnover = s.fill_st.turnover;
-        Order ord(std::move(orddata));
+        adata->set_restored_data(s.st.id,s.fill_st);
+        Order ord(std::move(adata));
         out.push_back(ord);
     }
 

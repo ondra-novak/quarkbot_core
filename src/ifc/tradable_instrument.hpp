@@ -129,7 +129,7 @@ protected:
 
 
 inline TradableInstrument Order::get_instrument() const{
-    return _state->adapter_data->instrument;
+    return TradableInstrument(_order_data->get_instrument());
 }
 
 

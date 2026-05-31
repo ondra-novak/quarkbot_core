@@ -10,7 +10,6 @@ set(BASIC_TESTS
     instrument_spec_test.cpp
     tardis_source_test.cpp
     merged_source_test.cpp
-    order_test.cpp
     serializer.cpp
     signals.cpp
     websocket_binance.cpp

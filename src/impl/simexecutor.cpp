@@ -1,7 +1,6 @@
 #include "simexecutor.hpp"
 #include "ifc/abstract/orderdata.hpp"
 #include "ifc/order_defs.hpp"
-#include "ifc/abstract/order_internal.hpp"
 #include "impl/simexchange.hpp"
 #include "siminstrument.hpp"    
 #include "ifc/defs.hpp"
@@ -19,7 +18,7 @@
 namespace quarkbot {
 
     SimExecutor::PSimInstrument SimExecutor::extract_instrument(const POrderAData &ord) {
-        TradableInstrument instr( ord->instrument);
+        TradableInstrument instr( ord->get_instrument());
         auto minstr = instr.get_instrument();
         return std::dynamic_pointer_cast<SimInstrument>(minstr.get_handle());        
     }
@@ -83,8 +82,11 @@ namespace quarkbot {
 
     }
     void SimExecutor::cancel_order(POrderAData ord) {
+        cancel_order(ord.get());
+    }
+    void SimExecutor::cancel_order(OrderInternalData *ord) {
         auto found = std::find_if(_active_orders.begin(), _active_orders.end(), [&](const ActiveOrder &a){
-            return a.ord == ord;
+            return a.ord.get() == ord;
         });
         if (found == _active_orders.end()) return;  
         auto aord = std::move(*found);
@@ -94,7 +96,7 @@ namespace quarkbot {
 
     bool SimExecutor::validate_order(ActiveOrder &order) {
         const POrderAData &ord = order.ord;
-        const OrderParametersGen<Decimal> &params = ord->parameters;
+        const OrderParametersGen<Decimal> &params = ord->get_parameters();
 
         if (params.quantity <= 0 && params.type != OrderType::alert) {
             set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Invalid quantity" });
@@ -116,8 +118,8 @@ namespace quarkbot {
         return true;
     }
     bool SimExecutor::validate_order_replace(ActiveOrder &order, const ActiveOrder &replacing_order) {
-        const OrderParametersGen<Decimal> &params = order.ord->parameters;
-        const OrderParametersGen<Decimal> &old_params = replacing_order.ord->parameters;
+        const OrderParametersGen<Decimal> &params = order.ord->get_parameters();
+        const OrderParametersGen<Decimal> &old_params = replacing_order.ord->get_parameters();
         if (params.side != old_params.side || params.type != old_params.type) {
             set_order_status(order.ord, OrderRejectionReason::invalid_replace);
             return false;
@@ -134,7 +136,7 @@ namespace quarkbot {
         }
     }
     bool SimExecutor::match_order(ActiveOrder &order, Quote &quote, bool taker) {
-        auto &params  = order.ord->parameters;
+        auto &params  = order.ord->get_parameters();
         {
             auto &p = params.side == Side::sell?quote.bid:quote.ask;
             int sid = static_cast<int>(params.side);
@@ -205,7 +207,7 @@ namespace quarkbot {
     }
 
     OrderType SimExecutor::real_order_type(const ActiveOrder &order) {
-        auto type = order.ord->parameters.type;
+        auto type = order.ord->get_parameters().type;
         if (order.trig) {
             switch (type) {
                 case OrderType::oco: type = OrderType::market;break;
@@ -220,7 +222,7 @@ namespace quarkbot {
     bool SimExecutor::match_order(ActiveOrder &order, Trade &trade) {
         auto type = real_order_type(order);
         if (is_limit_order(type)) {
-            auto &params = order.ord->parameters;
+            auto &params = order.ord->get_parameters();
             if ((params.side == Side::buy && trade.price <= params.limit_price)
                 || (params.side == Side::sell && trade.price >= params.limit_price))
             {                
@@ -232,7 +234,7 @@ namespace quarkbot {
             }
         }
         if (is_stop_order(type)) {
-            auto &params = order.ord->parameters;
+            auto &params = order.ord->get_parameters();
             if ((params.side == Side::buy && trade.price >= params.stop_price)
                 || (params.side == Side::sell && trade.price <= params.stop_price))
             {
@@ -262,7 +264,7 @@ namespace quarkbot {
                 bool b =  match_order(ord, quote, false);
                 if (b) return true;
                 if (is_limit_order(real_order_type(ord) )) {
-                    auto &p =ord.ord->parameters; 
+                    auto &p =ord.ord->get_parameters(); 
                     if (p.side == Side::sell) new_quote.ask = std::min(new_quote.ask, p.limit_price);
                     else if (p.side == Side::buy) new_quote.bid = std::max(new_quote.bid, p.limit_price);
                 }
@@ -283,24 +285,24 @@ namespace quarkbot {
         Fill f{
             {static_cast<std::uint64_t>(tp.time_since_epoch().count()),_random_key++},
             generate_random_string(),
-            order.ord->name,
+            order.ord->get_name(),
             tp,
-            order.ord->instrument->get_instrument()->get_info(),
-            order.ord->parameters.side,
-            order.ord->parameters.reason_override,
+            order.ord->get_instrument()->get_instrument()->get_info(),
+            order.ord->get_parameters().side,
+            order.ord->get_parameters().reason_override,
             quantity,
             price,
             fees,
             1.0
         };
         order.filled += quantity;
-        auto &simt = *static_cast<SimTradableInstrument *>(order.ord->instrument.get());
+        auto &simt = *static_cast<SimTradableInstrument *>(order.ord->get_instrument().get());
         simt.on_order_update(order.ord, f);
     }
 
 bool SimExecutor::cancel_all(PTradableInstrument instrument) {
     auto iter = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](const ActiveOrder &x) {
-        if (x.ord->instrument == instrument)    {
+        if (x.ord->get_instrument() == instrument)    {
             set_order_status(x.ord,{OrderStatus::canceled});
             return true;
         }
@@ -313,13 +315,13 @@ bool SimExecutor::cancel_all(PTradableInstrument instrument) {
     return false;
 }
 
-void SimExecutor::set_order_status(const POrderAData &ord, OrderAdapterData::Update &&st) {
-    auto &simt = *static_cast<SimTradableInstrument *>(ord->instrument.get());    
+void SimExecutor::set_order_status(const POrderAData &ord, OrderInternalData::Update &&st) {
+    auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());    
     simt.on_order_update(ord, std::move(st));
 }
 
 void  SimExecutor::accept_order(const POrderAData &ord) {
-    auto &simt = *static_cast<SimTradableInstrument *>(ord->instrument.get());
+    auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());
     std::string id = generate_random_string();
     std::hash<std::string> hasher;
     RecordKey rk({
