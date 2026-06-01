@@ -8,7 +8,6 @@
 #include <memory>
 #include <mutex>
 #include <utility>
-#include <variant>
 
 namespace quarkbot {
 
@@ -65,7 +64,7 @@ namespace quarkbot {
     }
 
 
-    Order OrderTrigger::place_order(PTradableInstrument instrument, 
+    std::shared_ptr<OrderInternalData> OrderTrigger::place_order(PTradableInstrument instrument, 
                     const OrderParameters &trig_params, //params reported by order while trigger phase
                     std::shared_ptr<OrderInternalData> order_to_replace, 
                     std::string_view name, std::function<Order()> place_request) {
@@ -77,10 +76,10 @@ namespace quarkbot {
                 }, std::shared_ptr<OrderStorage>{});
 
         _worker.run(TrigOrder::monitor_order(nword, place_request));
-        return Order(nword);
+        return nword;
     }
 
-    Order OrderTrigger::place_order(PTradableInstrument instrument, 
+    std::shared_ptr<OrderInternalData> OrderTrigger::place_order(PTradableInstrument instrument, 
                 const OrderParameters &trig_params, //params reported by order while trigger phase                    
                 std::shared_ptr<OrderInternalData> order_to_replace, 
                 std::string_view name) {
@@ -91,9 +90,9 @@ namespace quarkbot {
             std::string sname (name);
             bool b = convert_params_to_request(trig_params, req);
             if (!b) {
-                auto out =  Order(OrderInternalData::create(trig_params, instrument, std::move(sname), 
-                    order_to_replace, _worker.now(),[](OrderInternalData *){}, {}));
-                out.get_handle()->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "Not supported by local trigger"});
+                auto out =  OrderInternalData::create(trig_params, instrument, std::move(sname), 
+                    order_to_replace, _worker.now(),[](OrderInternalData *){}, {});
+                out->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "Not supported by local trigger"});
                 return out;
             } else {
                 return place_order(instrument, trig_params, order_to_replace, sname,[=]{
@@ -234,7 +233,8 @@ namespace quarkbot {
             ordreq.reason_override = params.reason_override;
             ordreq.side = params.side;
             ordreq.time_in_force = params.time_in_force;
-            ordreq.reduce_only = params.reduce_only;        
+            ordreq.reduce_only = params.reduce_only;    
+            ordreq.local_trigger = false;    
             return true;
 
     }

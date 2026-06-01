@@ -6,10 +6,8 @@
 #include "ifc/order_storage.hpp"
 #include "ifc/types.hpp"
 #include <atomic>
-#include <concepts>
 #include <memory>
 #include <mutex>
-#include <stdexcept>
 #include <variant>
 namespace quarkbot {
 
@@ -201,8 +199,13 @@ namespace quarkbot {
         bool is_keep_alive() const {return keep_alive.load(std::memory_order_relaxed);}
         void cancel() {cancel_fn(this);}
 
+        ///mark canceled
+        /**
+        @retval true canceled
+        @retval false already cancel before
+        */
         bool mark_canceled() {
-            return canceled.exchange(true, std::memory_order_relaxed);
+            return !canceled.exchange(true, std::memory_order_relaxed);
         }
         
         void set_restored_data(std::string id, OrderStorage::FilledState fst) {
@@ -210,6 +213,9 @@ namespace quarkbot {
             this->id = std::move(id);
             this->fst = fst;
         }
+
+        const std::string &get_id() const {return id;}
+        void set_id(std::string id) {this->id = std::move(id);}
 
     protected:
         ///current order parameters

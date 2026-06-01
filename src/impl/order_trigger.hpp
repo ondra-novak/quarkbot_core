@@ -4,12 +4,9 @@
 #include "ifc/defs.hpp"
 #include "ifc/order.hpp"
 #include "ifc/order_defs.hpp"
-#include "ifc/strategy_fragment.hpp"
 #include "ifc/stream/trade.hpp"
 #include "ifc/streaming.hpp"
-#include "utils/hashable.hpp"
 #include <memory>
-#include <unordered_map>
 namespace quarkbot {
 
 ///Object intended to be used by IExchange adapter to support local triggered orders
@@ -20,7 +17,7 @@ public:
 
 
     ///place triggered order with special place request
-    Order place_order(PTradableInstrument instrument, 
+    std::shared_ptr<OrderInternalData> place_order(PTradableInstrument instrument, 
                     const OrderParameters &trig_params, //params reported by order while trigger phase                    
                     std::shared_ptr<OrderInternalData> order_to_replace, 
                     std::string_view name, 
@@ -29,7 +26,7 @@ public:
 
 
     ///place ordinary localy triggered order
-    Order place_order(PTradableInstrument instrument, 
+    std::shared_ptr<OrderInternalData> place_order(PTradableInstrument instrument, 
                 const OrderParameters &trig_params,
                 std::shared_ptr<OrderInternalData> order_to_replace, 
                 std::string_view name);
