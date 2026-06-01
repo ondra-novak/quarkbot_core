@@ -7,9 +7,11 @@
 namespace quarkbot {
 
     enum class AuctionType : char{
+        unknown = 0,
         opening = 'O',
         closing = 'C',
         intraday = 'I',
+        unscheduled = 'U',
     };
 
     struct AuctionEvent: quarkbot::MarketInstrumentStreamTypeItem {
