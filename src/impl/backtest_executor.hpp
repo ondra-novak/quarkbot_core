@@ -7,7 +7,7 @@
 
 namespace quarkbot {
 
-class BacktestExecutor final: public IExecutionWorker, public std::enable_shared_from_this<BacktestExecutor> {
+class BacktestExecutor : public IExecutionWorker, public std::enable_shared_from_this<BacktestExecutor> {
 public:
 
     ///Create execution worker

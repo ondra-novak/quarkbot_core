@@ -8,7 +8,7 @@
 namespace quarkbot {
 
 
-    class ThreadExecutor final: public IExecutionWorker, public std::enable_shared_from_this<ThreadExecutor>{
+    class ThreadExecutor : public IExecutionWorker, public std::enable_shared_from_this<ThreadExecutor>{
     public:        
         virtual void resume(std::coroutine_handle<> h) noexcept override;
         virtual PExecutionWorker spawn() noexcept override;
