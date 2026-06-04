@@ -26,6 +26,7 @@ public:
 
     void unlock() {
         _locked.store(false, std::memory_order_release);
+        _locked.notify_all();
     }
 
     bool try_lock() {
