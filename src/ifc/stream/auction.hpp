@@ -14,7 +14,7 @@ namespace quarkbot {
         unscheduled = 'U',
     };
 
-    struct AuctionEvent: quarkbot::MarketInstrumentStreamTypeItem {
+    struct Auction: quarkbot::MarketInstrumentStreamTypeItem {
         ///total size
         Decimal quantity;
         ///total price

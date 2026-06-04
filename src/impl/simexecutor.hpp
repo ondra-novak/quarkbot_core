@@ -2,6 +2,8 @@
 
 #include "ifc/abstract/orderdata.hpp"
 #include "ifc/defs.hpp"
+#include "ifc/order_defs.hpp"
+#include "ifc/stream/auction.hpp"
 #include "ifc/stream/trade.hpp"
 #include "ifc/stream/quote.hpp"
 #include "ifc/order.hpp"
@@ -23,6 +25,7 @@ public:
 
     void on_event(PSimInstrument instrument, Trade &trade);
     void on_event(PSimInstrument instrument, Quote &quote);
+    void on_event(PSimInstrument instrument, Auction &quote);
 
     void place_order(POrderAData ord);
     void replace_order(POrderAData ord, POrderAData prev_order);
@@ -42,6 +45,7 @@ protected:
         POrderAData ord;
         PSimInstrument instrument;
         Decimal filled = {};
+        TimeInForce time_in_force;
         bool trig = false;
     };
 

@@ -34,7 +34,7 @@ namespace quarkbot {
 
         Decimal filled = ord->fst.filled;
         ActiveOrder aord{
-            std::move(ord),std::move( instrument), filled
+            std::move(ord),std::move( instrument), filled, ord->get_parameters().time_in_force
         };
         if (!validate_order(aord)) return;
 
@@ -55,7 +55,7 @@ namespace quarkbot {
         }
 
         ActiveOrder aord{
-            std::move(ord),std::move( instrument)
+            std::move(ord),std::move( instrument), 0,ord->get_parameters().time_in_force
         };
         if (!validate_order(aord)) return;
 
