@@ -1,4 +1,5 @@
 #include "thread_executor.hpp"
+#include "basic_coro/prepared_coro.hpp"
 #include "ifc/execution_worker.hpp"
 #include <chrono>
 #include <memory>
@@ -9,10 +10,12 @@
 namespace quarkbot {
 
     void ThreadExecutor::resume(std::coroutine_handle<> h) noexcept {
-        auto fin = std::unique_ptr<ThreadExecutor, Notify>(this, Notify{});
-        std::scoped_lock _(_mx);
-        _dispatch_queue.push(std::move(h));
-        manage_lock_me();
+        {
+            std::scoped_lock _(_mx);
+            _dispatch_queue.push(std::move(h));
+            manage_lock_me();
+        }
+        _cv.notify_one();
     }
 
     std::shared_ptr<ThreadExecutor> ThreadExecutor::create(){
@@ -27,31 +30,33 @@ namespace quarkbot {
         return std::chrono::system_clock::now();
     }
     awaitable<bool> ThreadExecutor::sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr) {
-        auto fin = std::unique_ptr<ThreadExecutor, Notify>(this, Notify{});
-        std::scoped_lock _(_mx);
-        auto r =  _scheduler.sleep_until(time_point, cancel_signal_ptr);
-        manage_lock_me();
-        return r;
+        return [=,this](auto promise) -> coro::prepared_coro{
+            std::scoped_lock _(_mx);
+            auto top = _scheduler.get_first_scheduled_time();
+            if (cancel_signal_ptr && cancel_signal_ptr->is_canceled())  return promise(false);
+            _scheduler.schedule_at(std::move(promise), time_point, cancel_signal_ptr);
+            manage_lock_me();
+            if (!top.has_value() || *top > time_point) {
+                _cv.notify_one();
+            }
+            return {};
+        };
     }
     awaitable<bool> ThreadExecutor::sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr) {
-        auto fin = std::unique_ptr<ThreadExecutor, Notify>(this, Notify{});
-        std::scoped_lock _(_mx);
-        auto r =  _scheduler.sleep_until(now()+duration, cancel_signal_ptr);
-        manage_lock_me();
-        return r;
+        return ThreadExecutor::sleep_until(ThreadExecutor::now()+duration, cancel_signal_ptr);
     }
+
     bool ThreadExecutor::cancel(coro::cancel_signal *cancel_signal) {
-        coro::prepared_coro out;
-        {
+        if (cancel_signal) {
             std::scoped_lock _(_mx);
-            out = _scheduler.cancel(cancel_signal);
-        } 
-        if (out) {
-            resume(out.release());
-            return true;
-        } else {
-            return false;
+            auto r = _scheduler.remove_by_ident(cancel_signal);
+            if (r) {
+                _dispatch_queue.push(r(false).symmetric_transfer());
+                _cv.notify_one();
+                return true;
+            }
         }
+        return false;
     }
 
     void ThreadExecutor::start() {

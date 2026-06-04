@@ -1,6 +1,8 @@
 #pragma once
 
 #include <basic_coro/scheduler.hpp>
+#include "basic_coro/awaitable.hpp"
+#include "basic_coro/cancel_signal.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/execution_worker.hpp"
 #include <condition_variable>
@@ -24,15 +26,10 @@ namespace quarkbot {
     protected:
         std::mutex _mx;
         std::condition_variable _cv;
-        coro::manual_scheduler<std::chrono::system_clock::time_point> _scheduler;
+        coro::generic_scheduler<coro::awaitable<bool>::result, std::chrono::system_clock::time_point, coro::cancel_signal *> _scheduler;
         std::queue<coro::prepared_coro> _dispatch_queue;
         std::jthread _thr;
         std::shared_ptr<ThreadExecutor> _lock_me;
-
-
-        struct Notify {
-            void operator()(ThreadExecutor *x) {x->_cv.notify_one();};
-        };
 
         void start();
         void manage_lock_me();
