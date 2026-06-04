@@ -16,9 +16,10 @@ namespace quarkbot {
     }
 
     std::shared_ptr<ThreadExecutor> ThreadExecutor::create(){
-          return create([](std::coroutine_handle<> h) {h.resume();});
-    }        
-    
+            auto x = std::make_shared<ThreadExecutor>();
+            x->start();
+            return x;
+        }
     PExecutionWorker ThreadExecutor::spawn() noexcept {
         return create();
     }
@@ -40,18 +41,26 @@ namespace quarkbot {
         return r;
     }
     bool ThreadExecutor::cancel(coro::cancel_signal *cancel_signal) {
-        std::scoped_lock _(_mx);
-        auto out = _scheduler.cancel(cancel_signal);
+        coro::prepared_coro out;
+        {
+            std::scoped_lock _(_mx);
+            out = _scheduler.cancel(cancel_signal);
+        } 
         if (out) {
-            _dispatch_queue.push(std::move(out));
-            _cv.notify_one();
+            resume(out.release());
             return true;
         } else {
             return false;
         }
     }
 
-  
+    void ThreadExecutor::start() {
+        _thr = std::jthread([this](std::stop_token tkn){
+            worker(tkn);
+        });
+
+    }
+
     ThreadExecutor::~ThreadExecutor() {
         if (_thr.joinable()) {
             _thr.request_stop();
@@ -70,6 +79,62 @@ namespace quarkbot {
         } else if (_lock_me && !keeplock) {
             _lock_me.reset();
         }
+    }
+
+    void ThreadExecutor::worker(std::stop_token tkn) {
+        _current_worker = shared_from_this();
+        std::stop_callback _(tkn, [&]{_cv.notify_one();});
+        //lock internals
+        std::unique_lock lk(_mx);
+        while (!tkn.stop_requested()) {            
+            //check for top time
+            auto top = _scheduler.get_first_scheduled_time();
+            //is top defined
+            if (top.has_value()) {
+                //check current time
+                auto tp = now();
+                //if due time
+                if (tp >= top.value()) {
+                    //remove top item, resolve it and schedule execution into queue
+                    auto r = _scheduler.remove_first();
+                    _dispatch_queue.push(r(true));                        
+                    //cycle
+                    continue;
+                }
+            }
+            //if dispatch queue is not empty
+            if (!_dispatch_queue.empty()) {
+                //pick front coroutine
+                auto p = std::move(_dispatch_queue.front());
+                //save _lock_me to keep locked during execution
+                auto lkme = _lock_me;
+                //remove from dispatch queue
+                _dispatch_queue.pop();
+                //manage lock me state (can be release, but we holding reference)
+                manage_lock_me();
+                //unlock internals
+                lk.unlock();
+                //resume coroutine outside lock
+                p.resume();
+                //destroy thread executor, if there are no references
+                lkme.reset();
+                //tkn can be signalized especially when this thread performed destruction - this is no longer valid
+                if (tkn.stop_requested()) return;//exit immediately
+                //lock back
+                lk.lock();
+                continue;
+            } 
+            //queue is empty, but there is top time
+            if (top.has_value()) {
+                //wait until top time is reached
+                _cv.wait_until(lk,top.value());
+                continue;
+            }
+            //wait with no timeout -  until notify
+            _cv.wait(lk);
+            
+        }
+        
     }
 
 }

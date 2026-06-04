@@ -4,7 +4,6 @@
 #include "ifc/defs.hpp"
 #include "ifc/execution_worker.hpp"
 #include <condition_variable>
-#include <coroutine>
 #include <memory>
 namespace quarkbot {
 
@@ -19,15 +18,6 @@ namespace quarkbot {
         virtual bool cancel(coro::cancel_signal *cancel_signal) override;
 
         static std::shared_ptr<ThreadExecutor> create();
-
-        template<std::invocable<std::coroutine_handle<> > CoroExecutor>
-        static std::shared_ptr<ThreadExecutor> create(CoroExecutor executor) {
-            auto x = std::make_shared<ThreadExecutor>();
-            x->start(std::move(executor));
-            return x;
-        }
-
-        
 
         virtual ~ThreadExecutor();
 
@@ -44,44 +34,8 @@ namespace quarkbot {
             void operator()(ThreadExecutor *x) {x->_cv.notify_one();};
         };
 
-        template<typename Fn>
-        void start(Fn fn) {
-            _thr = std::jthread([this, fn = std::move(fn)](std::stop_token tkn) mutable {
-                _current_worker = shared_from_this();
-                std::stop_callback _(tkn, [&]{_cv.notify_one();});
-                std::unique_lock lk(_mx);
-                while (!tkn.stop_requested()) {            
-                    auto top = _scheduler.get_first_scheduled_time();
-                    if (top.has_value()) {
-                        auto tp = now();
-                        if (tp >= top.value()) {
-                            auto r = _scheduler.remove_first();
-                            _dispatch_queue.push(r(true));
-                            continue;
-                        }
-                    }
-                    //if dispatch queue is not empty
-                    if (!_dispatch_queue.empty()) {
-                        auto p = std::move(_dispatch_queue.front());
-                        auto lkme = _lock_me;
-                        _dispatch_queue.pop();
-                        manage_lock_me();
-                        lk.unlock();
-                        fn(p.release());
-                        lkme.reset();
-                        if (tkn.stop_requested()) return;//exit immediately
-                        lk.lock();
-                        continue;
-                    } 
-                    if (top.has_value()) {
-                        _cv.wait_until(lk,top.value());
-                        continue;
-                    }
-                    _cv.wait(lk);                    
-                }                
-            });
-        }
-       void manage_lock_me();
+        void start();
+        void manage_lock_me();
         void worker(std::stop_token tkn);
 
     };
