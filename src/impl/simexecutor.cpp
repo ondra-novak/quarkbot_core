@@ -1,5 +1,6 @@
 #include "simexecutor.hpp"
 #include "ifc/abstract/orderdata.hpp"
+#include "ifc/execution_worker.hpp"
 #include "ifc/order_defs.hpp"
 #include "impl/simexchange.hpp"
 #include "siminstrument.hpp"    
@@ -14,6 +15,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 
 namespace quarkbot {
 
@@ -23,7 +25,7 @@ namespace quarkbot {
         return std::dynamic_pointer_cast<SimInstrument>(minstr.get_handle());        
     }
 
-    void SimExecutor::place_order(POrderAData ord) {
+    void SimExecutor::place_order_internal(POrderAData ord) {
 
 
         auto instrument = extract_instrument(ord);
@@ -45,7 +47,7 @@ namespace quarkbot {
         _active_orders.push_back(std::move(aord));
 
     }
-    void SimExecutor::replace_order(POrderAData ord, POrderAData prev_order) {
+    void SimExecutor::place_order_internal(POrderAData ord, POrderAData prev_order) {
 
 
         auto instrument = extract_instrument(ord);
@@ -81,10 +83,7 @@ namespace quarkbot {
         }
 
     }
-    void SimExecutor::cancel_order(POrderAData ord) {
-        cancel_order(ord.get());
-    }
-    void SimExecutor::cancel_order(OrderInternalData *ord) {
+    void SimExecutor::cancel_order_internal(OrderInternalData *ord) {
         auto found = std::find_if(_active_orders.begin(), _active_orders.end(), [&](const ActiveOrder &a){
             return a.ord.get() == ord;
         });
@@ -277,11 +276,16 @@ namespace quarkbot {
 
     }
 
+    void SimExecutor::on_event(PSimInstrument instrument, Auction &auction_data) {
+        
+    }
+
 
     void SimExecutor::create_fill(ActiveOrder &order, Decimal price, Decimal quantity, Timestamp tp, bool taker) {
         
-        double volume = price.to_double() * quantity.to_double();
-        double fees = (taker?_taker_fees:_maker_fees) * volume;
+        const auto &info = order.instrument->get_info();
+        Decimal volume = price * quantity;
+        Decimal fees = (taker?info.fee_rate_taker:info.fee_rate_maker) * volume;
         Fill f{
             {static_cast<std::uint64_t>(tp.time_since_epoch().count()),_random_key++},
             generate_random_string(),
@@ -301,18 +305,14 @@ namespace quarkbot {
     }
 
 bool SimExecutor::cancel_all(PTradableInstrument instrument) {
-    auto iter = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](const ActiveOrder &x) {
-        if (x.ord->get_instrument() == instrument)    {
-            set_order_status(x.ord,{OrderStatus::canceled});
-            return true;
-        }
-        return false;
-    });
-    if (iter != _active_orders.end()) {
-        _active_orders.erase(iter, _active_orders.end());
-        return true;
+    bool r = false;
+    for (auto &x: _active_orders) {
+        if (x.ord->get_instrument() == instrument) {
+            cancel_order(x.ord);
+            r = true;
+        }        
     }
-    return false;
+    return r;
 }
 
 void SimExecutor::set_order_status(const POrderAData &ord, OrderInternalData::Update &&st) {
@@ -331,6 +331,34 @@ void  SimExecutor::accept_order(const POrderAData &ord) {
     simt.on_order_update(ord, OrderOpenStatus{id, rk});
 }
 
+StrategyFragment SimExecutor::place_order(POrderAData ord) {
+    if (co_await _latency_timer.sleep_for(latency)){
+        place_order_internal(std::move(ord));
+    }
+}
+StrategyFragment SimExecutor::replace_order(POrderAData ord, POrderAData prev_order) {
+    if (co_await _latency_timer.sleep_for(latency)){
+        place_order_internal(std::move(ord), std::move(prev_order));
+    }
+    
+}
+StrategyFragment SimExecutor::cancel_order(POrderAData ord) {
+    return cancel_order(ord.get());
+}
+StrategyFragment SimExecutor::cancel_order(OrderInternalData *ord) {
+    if (co_await _latency_timer.sleep_for(latency)){
+        cancel_order_internal(ord);
+    }
+}
+
+void SimExecutor::stop_latency_queue() {
+    _latency_timer.cancel();
+    
+}
+
+SimExecutor::~SimExecutor() {
+    stop_latency_queue();
+}
 }
 
 

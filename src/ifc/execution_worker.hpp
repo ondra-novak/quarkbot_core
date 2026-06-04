@@ -77,6 +77,7 @@ public:
         identification and also helps to properly interrupt sleep. Use interrupt function
         to alert the flag. If this flag is set to true when function is called, the function
         returns immediately canceled awaitable.
+        It is allowed to have multiple sleeps on single flag. Note that cancel command will cancel all of them
         @return awaitable which completes when time point is reached or alert flag is set
      */
     awaitable<bool> sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr = nullptr) {
@@ -89,6 +90,7 @@ public:
         identification and also helps to properly interrupt sleep. Use interrupt function
         to alert the flag. If this flag is set to true when function is called, the function
         returns immediately canceled awaitable.
+        It is allowed to have multiple sleeps on single flag. Note that cancel command will cancel all of them
         @return awaitable which completes when duration elapses or alert flag is set
      */
     awaitable<bool> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr = nullptr) {
@@ -100,6 +102,8 @@ public:
        Atomically cancels sleeping coroutine and sets the flag to true. The flag prevents
        to reenter the sleep if the coroutine calls sleep function again with the same flag. 
        This also serves as a signal to the sleeping coroutine.
+
+       @note if there are multiple coroutines on same signal, they are canceled all of them
 
      * @param cancel_signal alert flag used to identify sleeping awaitables
      */

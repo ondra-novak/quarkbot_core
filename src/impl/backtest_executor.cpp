@@ -51,12 +51,16 @@ awaitable<bool> BacktestExecutor::sleep_for(std::chrono::system_clock::duration 
     return _scheduler.sleep_for(duration, cancel_signal_ptr);
 }
 bool BacktestExecutor::cancel(coro::cancel_signal *cancel_signal) {
-    auto r = _scheduler.cancel(cancel_signal);
-    if (r) {
-        resume(r.release());
-        return true;
-    } else {
-        return false;
+    if (!cancel_signal) return false;
+    bool ok = false;
+    while(true) {
+        auto r = _scheduler.cancel(cancel_signal);
+        if (r) {
+            resume(r.release());
+            ok = true;
+        } else {
+            return ok;
+        }
     }
 }
 

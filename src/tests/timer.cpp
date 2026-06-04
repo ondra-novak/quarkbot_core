@@ -1,7 +1,7 @@
 #include "check.h"
 #include "ifc/defs.hpp"
 #include "ifc/execution_worker.hpp"
-#include "ifc/minimutex.hpp"
+#include "ifc/scope_counter.hpp"
 #include "ifc/strategy_fragment.hpp"
 #include "impl/thread_executor.hpp"
 #include <chrono>
@@ -25,14 +25,13 @@ public:
 
     unsigned int stop_join_and_get_counter() {
         _timer.cancel();
-        _exit_notify.lock();    //wait until task is done
+        _exit_notify.join();    //wait until task is done
         return _counter;
     }
 
 protected:
     Timer _timer;
-    //we use minimutex as exit notify
-    Minimutex _exit_notify;
+    ScopeCounter _exit_notify;
     unsigned int _counter = 0;
 };
 

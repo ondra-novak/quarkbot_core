@@ -3,9 +3,11 @@
 #include "ifc/abstract/orderdata.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/order_defs.hpp"
+#include "ifc/strategy_fragment.hpp"
 #include "ifc/stream/auction.hpp"
 #include "ifc/stream/trade.hpp"
 #include "ifc/stream/quote.hpp"
+#include "ifc/scope_counter.hpp"
 #include "ifc/order.hpp"
 #include <chrono>
 #include <memory>
@@ -25,21 +27,22 @@ public:
 
     void on_event(PSimInstrument instrument, Trade &trade);
     void on_event(PSimInstrument instrument, Quote &quote);
-    void on_event(PSimInstrument instrument, Auction &quote);
+    void on_event(PSimInstrument instrument, Auction &auction);
 
-    void place_order(POrderAData ord);
-    void replace_order(POrderAData ord, POrderAData prev_order);
-    void cancel_order(POrderAData ord);
-    void cancel_order(OrderInternalData *ord);
+    StrategyFragment place_order(POrderAData ord);
+    StrategyFragment replace_order(POrderAData ord, POrderAData prev_order);
+    StrategyFragment cancel_order(POrderAData ord);
+    StrategyFragment cancel_order(OrderInternalData *ord);
     bool cancel_all(PTradableInstrument instrument);
     void set_slippage(double slippage) { _slippage = slippage; }
+    void set_latency(std::chrono::system_clock::duration dur) {latency = dur;}
 
+    ~SimExecutor();
 
 protected:
 
+    std::chrono::system_clock::duration latency = {};
     double _slippage = 0.001;
-    double _maker_fees = 0.001;
-    double _taker_fees = 0.002;
 
     struct ActiveOrder {
         POrderAData ord;
@@ -49,7 +52,7 @@ protected:
         bool trig = false;
     };
 
-    std::vector<ActiveOrder> _active_orders;
+    std::vector<ActiveOrder> _active_orders;    
     std::optional<Quote> _last_quote;
     std::uint64_t _random_key = 0;
 
@@ -66,7 +69,14 @@ protected:
 
     void set_order_status(const POrderAData &ord, OrderInternalData::Update &&st);
     void accept_order(const POrderAData &ord);
+    
+    Timer _latency_timer;
 
+
+    void place_order_internal(POrderAData ord);
+    void place_order_internal(POrderAData ord, POrderAData prev_order);
+    void cancel_order_internal(OrderInternalData *ord);
+    void stop_latency_queue();
     //TODO implement reporting of order blocking
 };
 
