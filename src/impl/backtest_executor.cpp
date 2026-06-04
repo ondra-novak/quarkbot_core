@@ -64,5 +64,8 @@ bool BacktestExecutor::cancel(coro::cancel_signal *cancel_signal) {
     }
 }
 
+void BacktestExecutor::join() {
+    flush_queue();
+}
 
 }

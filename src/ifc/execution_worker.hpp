@@ -111,13 +111,31 @@ public:
         return _worker->cancel(cancel_signal);
     }
 
+    ///Join all previously added tasks with current thread
+    /**
+      Blocks execution until all tasks enqueued before join is called are finished.
+      Tasks added after join are not included
+
+      @note it only garantees that tasks enqueued before join are finished, It doesn't
+      mean, that tasks enqueued after join will be still queued (as they can be finished
+      as well)
+      
+      @note also works correctly in backtest executor, which invokes flush of the queue
+
+     */
+    void join();
+
+
+    ///Ensures that worker is available - otherwise it throw exception
     ExecutionWorker &required() {
         if (!_worker) throw std::runtime_error("Requires execution worker");
         return *this;
     }
 
+    ///test validity
     explicit operator bool() const {return static_cast<bool>(_worker);}
 
+    ///get handle
     auto get_handle() const {return _worker;}
     
 protected:

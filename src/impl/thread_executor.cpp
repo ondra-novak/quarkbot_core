@@ -1,6 +1,7 @@
 #include "thread_executor.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "ifc/execution_worker.hpp"
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -121,6 +122,7 @@ namespace quarkbot {
                 //manage lock me state (can be release, but we holding reference)
                 manage_lock_me();
                 //unlock internals
+                _in_task = true;
                 lk.unlock();
                 //resume coroutine outside lock
                 p.resume();
@@ -130,6 +132,9 @@ namespace quarkbot {
                 if (tkn.stop_requested()) return;//exit immediately
                 //lock back
                 lk.lock();
+                _in_task = false;
+                _counter.fetch_add(1, std::memory_order_relaxed);
+                _counter.notify_all();
                 continue;
             } 
             //queue is empty, but there is top time
@@ -143,6 +148,19 @@ namespace quarkbot {
             
         }
         
+    }
+
+    void ThreadExecutor::join() {
+        std::size_t join_counter;
+        {
+            std::scoped_lock _(_mx);
+            join_counter = _in_task?1:0 + _dispatch_queue.size();
+        }
+        auto c = _counter.load(std::memory_order_relaxed);
+        while (c < join_counter) {
+            _counter.wait(c);
+             c = _counter.load(std::memory_order_relaxed);
+        }
     }
 
 }

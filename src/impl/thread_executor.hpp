@@ -18,6 +18,7 @@ namespace quarkbot {
         virtual awaitable<bool> sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr = nullptr) override;
         virtual awaitable<bool> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr = nullptr) override;
         virtual bool cancel(coro::cancel_signal *cancel_signal) override;
+        virtual void join() override;
 
         static std::shared_ptr<ThreadExecutor> create();
 
@@ -30,6 +31,8 @@ namespace quarkbot {
         std::queue<coro::prepared_coro> _dispatch_queue;
         std::jthread _thr;
         std::shared_ptr<ThreadExecutor> _lock_me;
+        std::atomic<std::size_t> _counter;
+        bool _in_task = false;
 
         void start();
         void manage_lock_me();

@@ -19,6 +19,7 @@ public:
     virtual awaitable<bool> sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr = nullptr) = 0;
     virtual awaitable<bool> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr = nullptr) = 0;
     virtual bool cancel(coro::cancel_signal *cancel_signal) = 0;
+    virtual void join() = 0;
    
 protected:
     static thread_local std::weak_ptr<IExecutionWorker> _current_worker;
