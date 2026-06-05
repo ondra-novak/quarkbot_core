@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <random>
 
 namespace quarkbot {
 
@@ -249,6 +250,8 @@ namespace quarkbot {
                 case OrderType::stoplimit: type = OrderType::limit;break;
                 default: break;                    
             };
+        } else {
+            if (type == OrderType::stoplimit) return OrderType::stop;
         }
         return type;
     }
@@ -281,6 +284,7 @@ namespace quarkbot {
     }
 
     void SimExecutor::on_event(PSimInstrument instrument, Trade &trade){
+        seed_random(trade.time);
         const auto &info = instrument->get_info();
         auto auction_iter = _auction_state.find(info.name);
         //first continuous-phase trade signals end of open auction (if one was started)
@@ -308,6 +312,7 @@ namespace quarkbot {
     }
 
     void SimExecutor::on_event(PSimInstrument instrument, Quote &quote){
+        seed_random(quote.time);
         _last_quote = quote;
         Quote new_quote = quote;
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
@@ -329,6 +334,7 @@ namespace quarkbot {
     }
 
     void SimExecutor::on_event(PSimInstrument instrument, Auction &auction_data) {
+        seed_random(auction_data.time);
 
         bool is_open_auction = auction_data.auction_type == AuctionType::opening;
         bool is_close_auction = auction_data.auction_type == AuctionType::closing;
@@ -409,7 +415,7 @@ namespace quarkbot {
         Decimal fees = (taker?info.fee_rate_taker:info.fee_rate_maker) * volume;
         Fill f{
             {static_cast<std::uint64_t>(tp.time_since_epoch().count()),_random_key++},
-            generate_random_string(),
+            generate_random_string(_rnd_gen),
             order.ord->get_name(),
             tp,
             order.ord->get_instrument()->get_instrument()->get_info(),
@@ -438,12 +444,13 @@ bool SimExecutor::cancel_all(PTradableInstrument instrument) {
 
 void SimExecutor::set_order_status(const POrderAData &ord, OrderInternalData::Update &&st) {
     auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());    
+    if (_report_sink) _report_sink(ord, st);
     simt.on_order_update(ord, std::move(st));
 }
 
 void  SimExecutor::accept_order(const POrderAData &ord) {
     auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());
-    std::string id = generate_random_string();
+    std::string id = generate_random_string(_rnd_gen);
     std::hash<std::string> hasher;
     RecordKey rk({
         static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count()),
@@ -490,6 +497,11 @@ StrategyFragment SimExecutor::expire_auction(PSimInstrument instrument, std::chr
 
 SimExecutor::~SimExecutor() {
     stop_latency_queue();
+}
+
+void SimExecutor::seed_random(std::chrono::system_clock::time_point tp) {
+    //seed generator with timestamp to make deterministict ID's
+    _rnd_gen.seed(static_cast<std::default_random_engine::result_type>(tp.time_since_epoch().count()));
 }
 }
 

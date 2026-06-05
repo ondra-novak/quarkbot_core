@@ -577,33 +577,12 @@ constexpr Decimal operator ""_dec(const char* k){
 
 template <>
 struct std::formatter<Decimal> {
-    // Zdola zdědíme nebo interně použijeme formatter pro řetězce
-    std::formatter<std::string_view> string_formatter;
-    
     char presentation = 'g';
     int precision = -1;
 
-    // 1. Parsování formátovacího řetězce
     constexpr auto parse(std::format_parse_context& ctx) {
         auto it = ctx.begin();
         auto end = ctx.end();
-
-        // Najdeme, kde končí specifikace pro Decimal (hledáme tečku nebo typ f/e/g)
-        auto dec_spec = it;
-        while (dec_spec != end && *dec_spec != '}' && *dec_spec != '.' && 
-               *dec_spec != 'f' && *dec_spec != 'e' && *dec_spec != 'g') {
-            ++dec_spec;
-        }
-
-        // 1a. Část PŘED tečkou/typem (šířka, zarovnání) předáme string_formatteru.
-        // Vytvoříme si pod-kontext, aby si string_formatter naparsoval své věci.
-        std::format_parse_context sub_ctx(std::string_view(it, end), ctx.next_arg_id());
-        string_formatter.parse(sub_ctx);
-        
-        // Posuneme náš iterátor na místo, kde string_formatter skončil nebo kde začíná Decimal specifikace
-        it = dec_spec;
-
-        // 1b. Naparsujeme přesnost (např. .2)
         if (it != end && *it == '.') {
             ++it;
             precision = 0;
@@ -612,39 +591,27 @@ struct std::formatter<Decimal> {
                 ++it;
             }
         }
-
-        // 1c. Naparsujeme typ prezentace (f, e, g)
         if (it != end && (*it == 'f' || *it == 'e' || *it == 'g')) {
             presentation = *it;
             ++it;
         }
-
-        // Kontrola správnosti ukončení
         if (it != end && *it != '}') {
-            throw std::format_error("Neplatná syntaxe formátu pro Decimal.");
+            throw std::format_error("Invalid format spec for Decimal");
         }
-
         return it;
     }
 
-    // 2. Formátování
     auto format(const Decimal& d, std::format_context& ctx) const {
         std::string res;
-
-        // Získání čistého textového řetězce z vašeho typu Decimal
         if (presentation == 'f') {
             res = d.to_string_fixed(precision == -1 ? 6 : precision);
         } else if (presentation == 'e') {
             res = d.to_string_sci(precision == -1 ? 6 : precision);
         } else {
-            if (precision != -1) {
-                res = d.to_string_fixed(precision);
-            } else {
-                res = d.to_string();
-            }
+            res = precision == -1 ? d.to_string() : d.to_string_fixed(precision);
         }
-
-        // Delegujeme finální formátování (zarovnání, šířku) na string_formatter
-        return string_formatter.format(res, ctx);
+        auto out = ctx.out();
+        for (char c : res) *out++ = c;
+        return out;
     }
 };

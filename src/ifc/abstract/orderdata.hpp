@@ -8,6 +8,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <type_traits>
 #include <variant>
 namespace quarkbot {
 
@@ -37,7 +38,10 @@ namespace quarkbot {
         };
     };
 
-    
+    constexpr OrderStatus rejection_reason_2_status(OrderRejectionReason rej) {    
+        return (rej == OrderRejectionReason::expired || rej == OrderRejectionReason::post_only_taker)
+            ?OrderStatus::canceled:OrderStatus::rejected;
+    }
 
 
     class OrderInternalData {
@@ -46,6 +50,28 @@ namespace quarkbot {
 
         using Update = std::variant<Fill, OrderStatus, OrderRejectionReason, OrderRejectionWithText,  OrderOpenStatus, POrderAData>;
         using CancelFn = std::function<void(OrderInternalData *)>;
+
+        
+
+        static OrderStatus update2status(const Update &up) {
+            return std::visit([]<typename T>(const T &x){
+                if constexpr(std::is_same_v<T, POrderAData>) {
+                    return OrderStatus::sent;
+                } else if constexpr(std::is_same_v<T, OrderStatus>) {
+                    return x;
+                } else if constexpr(std::is_same_v<T, OrderRejectionReason>) {
+                    return rejection_reason_2_status(x);
+                } else if constexpr(std::is_same_v<T, OrderRejectionWithText>) {
+                    return rejection_reason_2_status(x.reason);                    
+                } else if constexpr(std::is_same_v<T, OrderOpenStatus>) {
+                    return OrderStatus::open;
+                } else {
+                    static_assert(std::is_same_v<T,Fill>);
+                    return OrderStatus::open;
+                }
+            }, up);
+        }
+
         
         OrderStorage::FilledState fst = {};
         OrderInternalData(
@@ -216,6 +242,7 @@ namespace quarkbot {
 
         const std::string &get_id() const {return id;}
         void set_id(std::string id) {this->id = std::move(id);}
+        Decimal get_remaining_quantity() const {return parameters.quantity - fst.filled;}
 
     protected:
         ///current order parameters
@@ -262,13 +289,13 @@ namespace quarkbot {
                 report.status_changed = true;
             }
             void operator()(OrderRejectionReason  &rej) {
-                report.status = OrderStatus::rejected;
+                report.status = rejection_reason_2_status(rej);
                 report.rejection_reason = rej;
                 report.rejection_message.clear();
                 report.status_changed = true;
             }
             void operator()(OrderRejectionWithText  &rej) {
-                report.status = OrderStatus::rejected;
+                report.status = rejection_reason_2_status(rej.reason);
                 report.rejection_reason = rej.reason;
                 report.rejection_message = std::move(rej.text);                
                 report.status_changed = true;

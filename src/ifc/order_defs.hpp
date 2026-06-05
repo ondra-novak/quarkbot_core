@@ -43,8 +43,10 @@ enum class TimeInForce : char {
 inline constexpr bool is_limit_order(OrderType type) {
     return type == OrderType::limit
         || type == OrderType::limit_post_only
-        || type == OrderType::oco; 
+        || type == OrderType::oco
+        || type == OrderType::stoplimit;
 }
+
 
 inline constexpr bool is_stop_order(OrderType type) {
     return type == OrderType::stop

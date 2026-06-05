@@ -5,6 +5,11 @@
 
 namespace quarkbot {
 
+class BacktestExecutorFactory: public BacktestExecutor {
+public:
+    BacktestExecutorFactory() = default;
+};
+
 
 void BacktestExecutor::flush_queue() {
     while (!_dispatch_queue.empty()) {
@@ -15,12 +20,14 @@ void BacktestExecutor::flush_queue() {
 std::shared_ptr<BacktestExecutor> BacktestExecutor::create() {
     auto cur = IExecutionWorker::current();
     auto me = std::dynamic_pointer_cast<BacktestExecutor>(cur);
-    if (!me) {
+    if (me) {
         if (cur) throw std::runtime_error("Thread is alread execution worker of different type");
-        auto me = std::shared_ptr<BacktestExecutor>();
+        return me;        
+    } else {
+        me = std::make_shared<BacktestExecutorFactory>();
         _current_worker = me;
+        return me;
     }
-    return me;
 }
 
 

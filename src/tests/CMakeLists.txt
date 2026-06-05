@@ -16,6 +16,7 @@ set(BASIC_TESTS
     logger.cpp
     hub.cpp
     timer.cpp
+    csv_report.cpp
 )
 
 

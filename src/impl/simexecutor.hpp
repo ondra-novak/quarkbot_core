@@ -11,6 +11,7 @@
 #include "ifc/order.hpp"
 #include <chrono>
 #include <memory>
+#include <random>
 #include <unordered_map>
 namespace quarkbot {
 
@@ -40,10 +41,18 @@ public:
 
     ~SimExecutor();
 
+    using ReportSink = std::function<void(const POrderAData &, const OrderInternalData::Update &)>;
+
+    void set_report_sink(ReportSink rpt) {
+        _report_sink = std::move(rpt);
+    }
+
 protected:
 
     std::chrono::system_clock::duration latency = {};
     double _slippage = 0.001;
+
+    ReportSink _report_sink;
 
     struct ActiveOrder {
         POrderAData ord;
@@ -90,6 +99,7 @@ protected:
     void accept_order(const POrderAData &ord);
     
     Timer _timer;    
+    std::default_random_engine _rnd_gen;
 
 
     void place_order_internal(POrderAData ord);
@@ -97,9 +107,10 @@ protected:
     void cancel_order_internal(OrderInternalData *ord);
     void stop_latency_queue();
     void close_day(PSimInstrument instrument);
-    //TODO implement reporting of order blocking
+
 
     StrategyFragment expire_auction(PSimInstrument instrument, std::chrono::system_clock::time_point tp);
+    void seed_random(std::chrono::system_clock::time_point tp);
 };
 
 

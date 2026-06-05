@@ -32,6 +32,7 @@ target_sources(quarkbot_impl PUBLIC
             ./leveldb_storage.hpp
             ./simaccount.hpp
             ./order_trigger.hpp
+            ./simexec_report_csv.hpp
 )
 
 target_sources(  quarkbot_impl PRIVATE 
@@ -50,6 +51,7 @@ target_sources(  quarkbot_impl PRIVATE
         ./configured_data_source.cpp
         ./simexecutor.cpp
         ./simexchange.cpp
+        
 )
 
 target_link_libraries(quarkbot_impl
