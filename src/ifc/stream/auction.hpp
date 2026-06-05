@@ -2,6 +2,7 @@
 
 #include "../types.hpp"
 #include "../stream_defs.hpp"
+#include "ifc/order_defs.hpp"
 #include <chrono>
 
 namespace quarkbot {
@@ -30,5 +31,14 @@ namespace quarkbot {
         ///timestamp
         std::chrono::system_clock::time_point time;        
     };
+
+    constexpr bool is_valid_order_for_auction_type(TimeInForce tif, AuctionType at) {
+        switch (tif) {
+            case TimeInForce::atc: return at == AuctionType::closing;
+            case TimeInForce::ato:  return at == AuctionType::opening;
+            case TimeInForce::crossing: return true;
+            default: return false;
+        }
+    }
 
 }

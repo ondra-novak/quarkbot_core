@@ -2,6 +2,7 @@
 #include "ifc/abstract/orderdata.hpp"
 #include "ifc/execution_worker.hpp"
 #include "ifc/order_defs.hpp"
+#include "ifc/stream/auction.hpp"
 #include "impl/simexchange.hpp"
 #include "siminstrument.hpp"    
 #include "ifc/defs.hpp"
@@ -109,8 +110,8 @@ namespace quarkbot {
             set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::invalid_params , "Invalid or missing limit price"});
             return false;
         }
-        if (params.time_in_force != TimeInForce::gtc && params.time_in_force != TimeInForce::ioc) {
-            set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Unsupported time in force"});
+        if (is_auction_order(params.time_in_force) && !is_valid_auction_order(params.type))  {
+            set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Invalid time-in-force for order type"});
             return false;
         }
 
@@ -134,19 +135,53 @@ namespace quarkbot {
             return false;
         }
     }
+
+    
+
     bool SimExecutor::match_order(ActiveOrder &order, Quote &quote, bool taker) {
         auto &params  = order.ord->get_parameters();
-        {
+        //attempt to find auction information about this instrument
+        const auto &info  = order.ord->get_instrument()->get_instrument()->get_info();        
+        auto auction_state_iter = _auction_state.find(info.name);        
+
+        //if order is auction order
+        if (is_auction_order(params.time_in_force)) {            
+            //no auction information, nor open auction is not yet started
+            if (auction_state_iter == _auction_state.end() || !auction_state_iter->second.at_open_started) {
+                //reject
+                set_order_status(order.ord, OrderRejectionReason::not_tradable);
+                return true;
+            }
+            //close auction already finished (day closed)
+            if (auction_state_iter->second.at_close_finished) {
+                //reject
+                set_order_status(order.ord,OrderRejectionReason::too_late);
+                return true;
+            }            
+            const auto &params = order.ord->get_parameters();
+            //order is ato but open auction finished
+            if (params.time_in_force == TimeInForce::ato && auction_state_iter->second.at_open_finished) {
+                //reject
+                set_order_status(order.ord,OrderRejectionReason::too_late);
+                return true;
+            }
+            //keep order
+            return false;
+        }
+        if (params.time_in_force == TimeInForce::day  && auction_state_iter != _auction_state.end() 
+                    && auction_state_iter->second.at_close_finished) {
+            set_order_status(order.ord,OrderRejectionReason::too_late);
+            return true;
+        }        
+        if (real_order_type(order) == OrderType::alert) {        
             auto &p = params.side == Side::sell?quote.bid:quote.ask;
             int sid = static_cast<int>(params.side);
-            if (real_order_type(order) == OrderType::alert) {
-                Decimal dp = params.stop_price - p;
-                if (sgn(dp) * sid < 0) {
-                    set_order_status(order.ord, {OrderStatus::filled});
-                    return true;
-                }
-                return false;
+            Decimal dp = params.stop_price - p;
+            if (sgn(dp) * sid < 0) {
+                set_order_status(order.ord, {OrderStatus::filled});
+                return true;
             }
+            return false;
         }
         while (order.filled < params.quantity) {
 
@@ -246,6 +281,23 @@ namespace quarkbot {
     }
 
     void SimExecutor::on_event(PSimInstrument instrument, Trade &trade){
+        const auto &info = instrument->get_info();
+        auto auction_iter = _auction_state.find(info.name);
+        //first continuous-phase trade signals end of open auction (if one was started)
+        if (auction_iter != _auction_state.end() && !auction_iter->second.at_open_finished) {
+            auction_iter->second.at_open_finished = true;
+            auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord) {
+                if (ord.instrument == instrument) {
+                    const auto &params = ord.ord->get_parameters();
+                    if (params.time_in_force == TimeInForce::ato) {
+                        set_order_status(ord.ord, OrderRejectionReason::expired);
+                        return true;
+                    }
+                }
+                return false;
+            });
+            _active_orders.erase(e, _active_orders.end());
+        }
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
             if (ord.instrument == instrument) {
                 return match_order(ord, trade);
@@ -277,9 +329,78 @@ namespace quarkbot {
     }
 
     void SimExecutor::on_event(PSimInstrument instrument, Auction &auction_data) {
-        
+
+        bool is_open_auction = auction_data.auction_type == AuctionType::opening;
+        bool is_close_auction = auction_data.auction_type == AuctionType::closing;
+
+        auto &st = _auction_state[instrument->get_info().name];        
+        if (is_open_auction) {
+            st.at_open_started = true;
+            st.at_open_finished = false;
+            st.at_close_started = false;
+            st.at_close_finished = false;
+        } else if (is_close_auction) {
+            if (!st.at_close_started) {
+                st.at_close_started = true;
+                expire_auction(instrument, auction_data.time);
+            }
+            st.at_close_finished = false;
+        }
+
+        if (auction_data.final) {
+            //auction is done
+            auto iter = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord) {
+                if (ord.instrument == instrument) {
+                    const auto &params = ord.ord->get_parameters();
+                    if (is_valid_order_for_auction_type(params.time_in_force, auction_data.auction_type)) {
+
+                        if (params.type == OrderType::market
+                            //or type is limit
+                            || (params.type == OrderType::limit && 
+                                //and depend on side, check price
+                                ((params.side == Side::buy && params.limit_price >= auction_data.price)
+                                || (params.side == Side::sell && params.limit_price <= auction_data.price))
+                            )    
+                        ) {
+                                create_fill(ord, auction_data.price, std::min(auction_data.quantity, params.quantity), auction_data.time, true);
+                                //send status
+                                set_order_status(ord.ord, OrderStatus::filled);
+                                //remove order
+                                return true;
+                        } else {
+                            //order did not matched - send expired
+                            set_order_status(ord.ord, OrderRejectionReason::expired);
+                            //remove order
+                            return true;
+
+                        }
+                    }
+                }
+                //don't remove any other order (yet)
+                return false;
+            });
+            _active_orders.erase(iter, _active_orders.end());
+            if (is_open_auction) st.at_open_finished = true;
+            if (is_close_auction) {
+                st.at_close_finished = true;
+                close_day(instrument);
+            }
+        }
     }
 
+    void SimExecutor::close_day(PSimInstrument instrument) {
+        auto iter = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
+            if (ord.instrument == instrument) {
+                const auto &params = ord.ord->get_parameters();
+                if (params.time_in_force != TimeInForce::gtc) {
+                    set_order_status(ord.ord, OrderRejectionReason::expired);
+                    return true;
+                }
+            }
+            return false;
+        });
+         _active_orders.erase(iter, _active_orders.end());
+    }
 
     void SimExecutor::create_fill(ActiveOrder &order, Decimal price, Decimal quantity, Timestamp tp, bool taker) {
         
@@ -332,12 +453,12 @@ void  SimExecutor::accept_order(const POrderAData &ord) {
 }
 
 StrategyFragment SimExecutor::place_order(POrderAData ord) {
-    if (co_await _latency_timer.sleep_for(latency)){
+    if (co_await _timer.sleep_for(latency)){
         place_order_internal(std::move(ord));
     }
 }
 StrategyFragment SimExecutor::replace_order(POrderAData ord, POrderAData prev_order) {
-    if (co_await _latency_timer.sleep_for(latency)){
+    if (co_await _timer.sleep_for(latency)){
         place_order_internal(std::move(ord), std::move(prev_order));
     }
     
@@ -346,14 +467,25 @@ StrategyFragment SimExecutor::cancel_order(POrderAData ord) {
     return cancel_order(ord.get());
 }
 StrategyFragment SimExecutor::cancel_order(OrderInternalData *ord) {
-    if (co_await _latency_timer.sleep_for(latency)){
+    if (co_await _timer.sleep_for(latency)){
         cancel_order_internal(ord);
     }
 }
 
 void SimExecutor::stop_latency_queue() {
-    _latency_timer.cancel();
-    
+    _timer.cancel();
+    ExecutionWorker::current().join();    
+
+}
+
+StrategyFragment SimExecutor::expire_auction(PSimInstrument instrument, std::chrono::system_clock::time_point tp) {
+    if (co_await _timer.sleep_until(tp+std::chrono::minutes(30))) {
+        auto &st = _auction_state[instrument->get_info().name];
+        if (!st.at_close_finished) {
+            st.at_close_finished = true;
+            close_day(instrument);
+        }
+    }
 }
 
 SimExecutor::~SimExecutor() {

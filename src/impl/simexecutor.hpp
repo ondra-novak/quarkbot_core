@@ -11,6 +11,7 @@
 #include "ifc/order.hpp"
 #include <chrono>
 #include <memory>
+#include <unordered_map>
 namespace quarkbot {
 
 class SimInstrument;
@@ -52,6 +53,24 @@ protected:
         bool trig = false;
     };
 
+
+    struct AuctionState {
+        //at open auction started - found auction event in phase at open
+        //you can place any other you want
+        bool at_open_started = false;
+        //at open auction finished - either by final trade, or by first trade from continuous trading phase
+        //ato orders are rejected
+        bool at_open_finished = false;
+        //at close auction started - found auction event
+        //day orders are rejected
+        bool at_close_started = false;
+        //at close auction finished - either by final trade, or by expiration after certain period (day is closed)
+        //all orders except GTC are closed and rejected
+        bool at_close_finished = false;
+    };
+
+    std::unordered_map<std::string, AuctionState> _auction_state;
+
     std::vector<ActiveOrder> _active_orders;    
     std::optional<Quote> _last_quote;
     std::uint64_t _random_key = 0;
@@ -70,14 +89,17 @@ protected:
     void set_order_status(const POrderAData &ord, OrderInternalData::Update &&st);
     void accept_order(const POrderAData &ord);
     
-    Timer _latency_timer;
+    Timer _timer;    
 
 
     void place_order_internal(POrderAData ord);
     void place_order_internal(POrderAData ord, POrderAData prev_order);
     void cancel_order_internal(OrderInternalData *ord);
     void stop_latency_queue();
+    void close_day(PSimInstrument instrument);
     //TODO implement reporting of order blocking
+
+    StrategyFragment expire_auction(PSimInstrument instrument, std::chrono::system_clock::time_point tp);
 };
 
 

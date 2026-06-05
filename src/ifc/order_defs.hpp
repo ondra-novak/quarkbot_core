@@ -53,6 +53,16 @@ inline constexpr bool is_stop_order(OrderType type) {
         || type == OrderType::oco;
 }
 
+inline constexpr bool is_auction_order(TimeInForce type) {
+    return type == TimeInForce::atc || type == TimeInForce::ato || type == TimeInForce::crossing;
+}
+
+inline constexpr bool is_valid_auction_order(OrderType type) {
+    return type == OrderType::market || type == OrderType::limit;
+}
+
+
+
 template<typename NumberType>
 struct OrderParametersGen {
     ///order side
@@ -146,6 +156,8 @@ enum class OrderRejectionReason : uint8_t{
     post_only_taker,
     //minimum order volume
     min_volume,
+    //too late for this order (for example, auction order was too late, auction already resolved)
+    too_late,
     //exchange is overloaded
     overloaded,
     //exchange rate limit implemented
