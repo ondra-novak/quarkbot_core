@@ -123,7 +123,9 @@ public:
       @note also works correctly in backtest executor, which invokes flush of the queue
 
      */
-    void join();
+    void join() {
+        _worker->join();
+    }
 
 
     ///Ensures that worker is available - otherwise it throw exception
