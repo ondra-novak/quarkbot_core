@@ -36,7 +36,7 @@ namespace quarkbot {
         }
 
     void Backtest::add_instrument(IMarketInstrument::Info instrument_def) {
-        auto instr = _exchange->create_instrument(instrument_def);        
+        auto instr = _exchange->add_instrument(instrument_def);        
         auto tinstr = instr->create_tradable_instrument(_account);
         _context.instruments.push_back(std::static_pointer_cast<ITradableInstrument>(std::move(tinstr)));
     }

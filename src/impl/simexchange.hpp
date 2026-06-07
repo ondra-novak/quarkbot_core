@@ -31,7 +31,15 @@ public:
     std::unique_ptr<IEventStreamBase> subscribe_stream(std::shared_ptr<SimInstrument> instrument, std::size_t type, const void *params);
     PTradableInstrument create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account);
 
-    PMarketInstrument create_instrument(IMarketInstrument::Info def);
+    ///add simulated instrument to exchange, returns a handle to it. If the same name already exists, returns the existing one (and updates its definition)
+    /** This function is used to add a new simulated instrument to the exchange by a backtest controller
+        (don't be confused by function create_instrument which is intended for strategy)
+        It creates simulated instrument and links it to the exchange,
+        The info structure can contain unbound underlying currencies (will be bound to the exchange by this function),    
+    */
+    PMarketInstrument add_instrument(const IMarketInstrument::Info def);
+    
+    
     virtual MarketInstrument create_instrument(std::string_view id, InstrumentType type) override;
     UnderlyingCurrency create_currency(std::string_view name, bool is_unified = true);
     UnderlyingCurrency create_currency(std::string_view name) const;

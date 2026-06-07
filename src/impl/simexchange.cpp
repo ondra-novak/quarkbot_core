@@ -99,9 +99,17 @@ void SimExchange::place_order(POrderAData ord) {
     }
 }
 
-PMarketInstrument SimExchange::create_instrument(IMarketInstrument::Info def) {
+PMarketInstrument SimExchange::add_instrument(const IMarketInstrument::Info def) {
     auto &instr = _instrument_names[def.name];
     instr.info = def;
+    //link exchange to underlying currencies
+
+    if (instr.info.asset_wallet.has_value()) {
+        instr.info.asset_wallet->exchange = this;
+    }
+    instr.info.pnl_currency.exchange = this;
+    instr.info.quote_currency.exchange = this;
+
     auto ref = std::make_shared<SimInstrument>(instr.info, shared_from_this());;
     instr._ref = ref;
     return ref;;
