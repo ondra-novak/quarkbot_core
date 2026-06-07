@@ -81,7 +81,9 @@ public:
             _tickers.collect_active(refmap);
             _closed_bars.collect_active(refmap);
             _ranged_bars.collect_active(refmap);
-        } 
+        } else if constexpr(std::is_same_v<Auction, T> ) {
+            _auctions.collect_active(refmap);
+        }
     }
 
 
