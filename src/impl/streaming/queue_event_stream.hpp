@@ -1,6 +1,7 @@
 #pragma  once
 
 #include "basic_coro/prepared_coro.hpp"
+#include "ifc/abstract/ieventstream.hpp"
 #include "ifc/execution_worker.hpp"
 #include <algorithm>
 #include <memory>

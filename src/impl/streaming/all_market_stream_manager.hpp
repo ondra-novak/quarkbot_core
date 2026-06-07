@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ifc/stream/auction.hpp"
 #include "ifc/stream/closedbar.hpp"
 #include "ifc/stream/quote.hpp"
 #include "ifc/stream/rangedbar.hpp"
@@ -23,6 +24,7 @@ public:
     using TradeCounterPublisher = LockFreePublisher<TradeStatCounter, 1>;
     using TickerPublisher = LockFreePublisher<Ticker, 1>;
     using RangedBarPublisher = LockFreePublisher<RangedBar, 1>;
+    using AuctionPublisher = LockFreePublisher<Auction, 1>;
     
 
     using QuoteStreamMap = SingleStreamMap<InstrumentRef, QuotePublisher>;
@@ -31,6 +33,7 @@ public:
     using TickerStreamMap = SingleStreamMap<InstrumentRef, TickerPublisher>;
     using ClosedBarStreamMap = ParametrizedStreamMap<InstrumentRef, ClosedBarPublisher, ClosedBar::Param>;
     using RangedBarStreamMap = ParametrizedStreamMap<InstrumentRef, RangedBarPublisher, RangedBar::Param>;
+    using AuctionStreamMap  = SingleStreamMap<InstrumentRef, AuctionPublisher>;
 
     std::unique_ptr<IEventStreamBase> subscribe_stream(const InstrumentRef &instrument, std::size_t type, const void *param) {
         switch (type) {
@@ -40,18 +43,24 @@ public:
             case class_hash<Ticker>: return _tickers.create_subscriber(instrument);
             case class_hash<ClosedBar>: return _closed_bars.create_subscriber(instrument, *reinterpret_cast<const ClosedBar::Param *>(param));
             case class_hash<RangedBar>: return _ranged_bars.create_subscriber(instrument, *reinterpret_cast<const RangedBar::Param *>(param));
+            case class_hash<Auction>: return _auctions.create_subscriber(instrument);
             default: return {};
         }
     }
 
-    bool on_event(const InstrumentRef &instrument, Quote qt) {
+    bool on_event(const InstrumentRef &instrument, const Quote &qt) {
         bool b1 = _quotes.with_publisher(instrument, [&](auto &pub){pub.publish(qt);});
         bool b2 = _tickers.with_publisher(instrument,[&](auto &pub){pub.publish(pub.get_top_value_ref().add(qt));});
         bool b3 = _closed_bars.enum_publisher(instrument,calculate_closed_bar(qt));
         return b1||b2||b3;
     }
 
-    bool on_event(const InstrumentRef &instrument, Trade tr) {
+    bool on_event(const InstrumentRef &instrument, const Auction &au) {
+        bool b1 = _auctions.with_publisher(instrument, [&](auto &pub){pub.publish(au);});
+        return b1;
+    }
+
+    bool on_event(const InstrumentRef &instrument, const Trade &tr) {
         bool b1 = _trades.with_publisher(instrument, [&](auto &pub){pub.publish(tr);});
         bool b2 = _trade_stats.with_publisher(instrument, [&](auto &pub){pub.publish(pub.get_top_value_ref().add(tr));});
         bool b3 = _tickers.with_publisher(instrument, [&](auto &pub){pub.publish(pub.get_top_value_ref().add(tr));});
@@ -83,6 +92,7 @@ protected:
     TradeCounterStreamMap _trade_stats;
     ClosedBarStreamMap _closed_bars;
     RangedBarStreamMap _ranged_bars;
+    AuctionStreamMap _auctions;
  
 
 };

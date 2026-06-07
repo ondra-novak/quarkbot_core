@@ -29,6 +29,7 @@ public:
 
     void flush_queue();
     void set_time(std::chrono::system_clock::time_point tp);
+    bool empty() const ;
 
 
 

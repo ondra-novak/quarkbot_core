@@ -75,4 +75,8 @@ void BacktestExecutor::join() {
     flush_queue();
 }
 
+bool BacktestExecutor::empty() const  {
+    return _dispatch_queue.empty();
+}
+
 }

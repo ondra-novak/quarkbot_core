@@ -4,6 +4,7 @@
 #include "ifc/abstract/orderdata.hpp"
 #include "ifc/defs.hpp"
 #include "ifc/market_instrument.hpp"
+#include "ifc/stream/auction.hpp"
 #include "ifc/types.hpp"
 #include "ifc/underlying.hpp"
 #include "ifc/abstract/iexchange.hpp"
@@ -45,10 +46,11 @@ public:
     void set_slippage(double slippage) { _executor.set_slippage(slippage); }
 
     ///create account, set up initial wallet
-    PAccount create_account(std::string name, std::span<std::pair<std::string, Decimal> > wallet);
+    PAccount create_account(std::string name, std::span<const std::pair<std::string, Decimal> > wallet);
 
     void on_event(const std::string &instrument, Quote qt);
     void on_event(const std::string &instrument, Trade tr);
+    void on_event(const std::string &instrument, Auction au);
 
     bool cancel_all_orders(PTradableInstrument instrument );
     void cancel_order(POrderAData ord);

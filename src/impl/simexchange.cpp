@@ -20,7 +20,7 @@ namespace quarkbot {
 
 
 
-PAccount SimExchange::create_account(std::string name, std::span<std::pair<std::string, Decimal> > wallet) {
+PAccount SimExchange::create_account(std::string name, std::span<const std::pair<std::string, Decimal> > wallet) {
     std::vector<std::pair<UnderlyingCurrency, Decimal> > trn_wallet;
     std::transform(wallet.begin(),wallet.end(),std::back_inserter(trn_wallet), [&](const auto &x){
         return std::pair(create_currency(x.first), x.second);
@@ -70,10 +70,19 @@ void SimExchange::on_event(const std::string &instrument, Quote qt) {
 void SimExchange::on_event(const std::string &instrument, Trade tr) {
     auto mi = resolve_instrument(instrument);
     if (!mi) return;
-    _executor.on_event(mi, tr); //todo refere instrument by object
+    _executor.on_event(mi, tr); 
     _streams.on_event(instrument, tr);
     
 }
+
+void SimExchange::on_event(const std::string &instrument, Auction au) {
+    auto mi = resolve_instrument(instrument);
+    if (!mi) return;
+    _executor.on_event(mi, au); 
+    _streams.on_event(instrument, au);
+    
+}
+
 
 PTradableInstrument SimExchange::create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account) {
     auto r = std::make_shared<SimTradableInstrument>(instrument, account);
