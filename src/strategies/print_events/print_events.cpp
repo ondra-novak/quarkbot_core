@@ -3,6 +3,7 @@
 #include "ifc/stream/quote.hpp"
 #include "ifc/stream/trade.hpp"
 #include "ifc/stream/closedbar.hpp"
+#include "ifc/event_stream.hpp"
 #include "ifc/market_instrument.hpp"
 #include "ifc/tradable_instrument.hpp"
 #include <iostream>
@@ -10,6 +11,7 @@
 
 using namespace quarkbot;
 
+static_assert(StreamWithConstantParam<ClosedBarInterval<300> > );
 class PrintEventStrategy {
 public:
 
@@ -17,24 +19,22 @@ public:
 
     StrategyFragment start(StrategyContext context) {
         this->context = std::move(context);
-        std::stop_source src;
+        std::stop_source stop_sig;
+        std::vector<std::function<void()>> cleanup_actions;
 
         for (auto &x: this->context.instruments) {
             auto instr = x.get_instrument();
-            print_quotes(instr, instr.subscribe<Quote>(), src.get_token());
-            print_trades(instr, instr.subscribe<Trade>(), src.get_token());
-            print_bars(instr, instr.subscribe<ClosedBarInterval<300>>(), src.get_token());
+            print_quotes(instr, instr.subscribe<Quote>().stop_on(stop_sig));
+            print_trades(instr, instr.subscribe<Trade>().stop_on(stop_sig));
+            print_bars(instr, instr.subscribe<ClosedBarInterval<300>>().stop_on(stop_sig));
         }
         co_await this->context.stop_signal();
-        src.request_stop();
+        stop_sig.request_stop();
         co_return;
     }
 
 
-    StrategyFragment print_quotes(MarketInstrument instrument, EventStream<Quote> s, std::stop_token tkn) {
-        std::stop_callback __(tkn,[&]{
-            s.close();
-        });
+    StrategyFragment print_quotes(MarketInstrument instrument, EventStream<Quote> s) {
         Quote q;
         while(co_await s.receive(q)) {
             std::cout << q.time << " " <<  instrument.get_info().name << " bid:" << q.bid.to_double() << " ask:" << q.ask.to_double() << std::endl;
@@ -42,10 +42,7 @@ public:
         std::cout << "Quote stream closed: " << instrument.get_info().name << std::endl;
     }
 
-    StrategyFragment print_trades(MarketInstrument instrument, EventStream<Trade> s, std::stop_token tkn) {
-        std::stop_callback __(tkn,[&]{
-            s.close();
-        });
+    StrategyFragment print_trades(MarketInstrument instrument, EventStream<Trade> s) {
         Trade t;
         while(co_await s.receive(t)) {
             std::cout << t.time << " " << instrument.get_info().name << " trade:" << t.price.to_double() << std::endl;
@@ -53,10 +50,7 @@ public:
         std::cout << "Trade stream closed: " << instrument.get_info().name << std::endl;
     }
 
-    StrategyFragment print_bars(MarketInstrument instrument, EventStream<ClosedBarInterval<300>> s, std::stop_token tkn) {
-        std::stop_callback __(tkn,[&]{
-            s.close();
-        });
+    StrategyFragment print_bars(MarketInstrument instrument, EventStream<ClosedBarInterval<300>> s) {
         ClosedBarInterval<300> cb;
         while(co_await s.receive(cb)) {
             std::cout << cb.interval_begin() << " " << instrument.get_info().name << " ohlc:" 

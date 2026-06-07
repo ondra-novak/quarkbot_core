@@ -1,6 +1,6 @@
 #include "check.h"
 #include "ifc/defs.hpp"
-#include "ifc/execution_worker.hpp"
+#include "ifc/timer.hpp"
 #include "ifc/scope_counter.hpp"
 #include "ifc/strategy_fragment.hpp"
 #include "impl/thread_executor.hpp"
@@ -14,7 +14,6 @@ using namespace quarkbot;
 class TestTimerObject {
 public:
 
-    TestTimerObject(ExecutionWorker worker):_timer(worker) {};
 
     StrategyFragment run_in_cycle() {        
         std::lock_guard _(_exit_notify);
@@ -35,11 +34,9 @@ protected:
     unsigned int _counter = 0;
 };
 
-
-
 int main() {
     ExecutionWorker worker( ThreadExecutor::create());
-    TestTimerObject obj(worker);
+    TestTimerObject obj;
     worker.run(obj.run_in_cycle());
     std::this_thread::sleep_for(std::chrono::seconds(1));
     auto count = obj.stop_join_and_get_counter();

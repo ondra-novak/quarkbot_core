@@ -1,7 +1,8 @@
 #pragma once
 
 #include "abstract/imarket_instrument.hpp"
-#include "ifc/streaming.hpp"
+#include "abstract/ipublisher.hpp"
+#include "ifc/stream_defs.hpp"
 #include <concepts>
 namespace quarkbot {
 
@@ -28,13 +29,13 @@ public:
 
 
     template<std::derived_from<MarketInstrumentStreamTypeItem> T>
-    requires(StreamWithoutParams<T> || StreamWithConstantParams<T>)
+    requires(StreamWithoutParam<T> || StreamWithConstantParam<T>)
     EventStream<T> subscribe() {
         return _state->subscribe<T>();
     }
 
     template<std::derived_from<MarketInstrumentStreamTypeItem> T>
-    requires(StreamWithParams<T>)
+    requires(StreamWithParam<T>)
     EventStream<T> subscribe(typename T::Params params) {
         return _state->subscribe<T>(params);
     }

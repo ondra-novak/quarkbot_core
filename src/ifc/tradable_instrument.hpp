@@ -102,13 +102,13 @@ public:
     If you need to subscribe public streams (market streams), you can subscribe to them through MarketInstrument.    
     */
     template<std::derived_from<TradableInstrumentStreamTypeItem> T>
-    requires(StreamWithoutParams<T> || StreamWithConstantParams<T>)
+    requires(StreamWithoutParam<T> || StreamWithConstantParam<T>)
     EventStream<T> subscribe() {
         return _state->subscribe<T>();
     }
 
     template<std::derived_from<TradableInstrumentStreamTypeItem> T>
-    requires(StreamWithParams<T>)
+    requires(StreamWithParam<T>)
     EventStream<T> subscribe(typename T::Params params) {
         return _state->subscribe<T>(params);
     }

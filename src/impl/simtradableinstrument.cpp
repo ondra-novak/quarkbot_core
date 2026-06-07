@@ -3,7 +3,6 @@
 #include "ifc/execution_worker.hpp"
 #include "ifc/order.hpp"
 #include "ifc/order_storage.hpp"
-#include "ifc/streaming.hpp"
 #include "ifc/tradable_instrument.hpp"
 #include "ifc/types.hpp"
 #include "simaccount.hpp"

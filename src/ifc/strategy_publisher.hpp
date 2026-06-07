@@ -3,7 +3,7 @@
 #include "basic_coro/cancel_signal.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "ifc/execution_worker.hpp"
-#include "ifc/streaming.hpp"
+#include "ifc/event_stream.hpp"
 #include <atomic>
 #include <cstddef>
 #include <memory>

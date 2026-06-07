@@ -2,7 +2,6 @@
 #include "ifc/abstract/orderdata.hpp"
 #include "ifc/order.hpp"
 #include "ifc/order_defs.hpp"
-#include "ifc/streaming.hpp"
 #include "ifc/tradable_instrument.hpp"
 #include <atomic>
 #include <memory>

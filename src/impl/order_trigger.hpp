@@ -5,7 +5,7 @@
 #include "ifc/order.hpp"
 #include "ifc/order_defs.hpp"
 #include "ifc/stream/trade.hpp"
-#include "ifc/streaming.hpp"
+#include "ifc/event_stream.hpp"
 #include <memory>
 namespace quarkbot {
 

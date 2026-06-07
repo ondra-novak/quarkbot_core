@@ -10,6 +10,7 @@
 #include "impl/streaming/lock_free_publisher.hpp"
 #include "impl/streaming/ranged_bar_lambda.hpp"
 #include "impl/streaming/stream_maps.hpp"
+#include "utils/class_hash.hpp"
 namespace quarkbot {
 
 template<typename InstrumentRef>

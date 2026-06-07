@@ -1,7 +1,6 @@
 #include "ifc/hub.hpp"
 #include "../ifc/strategy_publisher.hpp"
 #include "ifc/strategy_fragment.hpp"
-#include "ifc/streaming.hpp"
 #include "check.h"
 
 

@@ -2,7 +2,6 @@
 
 #include "basic_coro/prepared_coro.hpp"
 #include "ifc/execution_worker.hpp"
-#include "ifc/streaming.hpp"
 #include <algorithm>
 #include <memory>
 #include <mutex>

@@ -3,9 +3,10 @@
 #include <atomic>
 #include <basic_coro/awaitable_transform.hpp>
 #include <basic_coro/cancel_signal.hpp>
+#include <memory>
 #include <mutex>
+#include "ifc/abstract/ieventstream.hpp"
 #include "ifc/execution_worker.hpp"
-#include "ifc/streaming.hpp"
 namespace quarkbot {
 
 class PublisherBase {

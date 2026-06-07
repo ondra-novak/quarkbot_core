@@ -84,7 +84,7 @@ namespace quarkbot {
         }
 
         template<std::invocable<> Factory>
-        std::unique_ptr<IEventStreamBase> connect_to(const InstrumentKey &instrument,
+        std::shared_ptr<IEventStreamBase> connect_to(const InstrumentKey &instrument,
                                                     const PAccount &account,
                                                     StreamTypeItem::Type type,
                                                     const StreamParams *params,

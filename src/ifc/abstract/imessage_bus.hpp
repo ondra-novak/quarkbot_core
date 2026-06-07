@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../stream_defs.hpp"
-#include "../streaming.hpp"
 #include "../schema.hpp"
+#include "ifc/abstract/ieventstream.hpp"
 #include "utils/serialize.hpp"
 #include <chrono>
 #include <cstdint>

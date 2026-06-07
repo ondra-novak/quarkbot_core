@@ -1,7 +1,7 @@
 #pragma once
 
 #include "abstract/imessage_bus.hpp"
-#include "ifc/streaming.hpp"
+#include "event_stream.hpp"
 #include <bit>
 #include <cstddef>
 namespace quarkbot {

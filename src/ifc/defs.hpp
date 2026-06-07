@@ -1,5 +1,6 @@
 #pragma  once
 
+#include <cassert>
 #include <concepts>
 #include <memory>
 #include <stdexcept>

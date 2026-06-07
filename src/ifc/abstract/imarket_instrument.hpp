@@ -2,7 +2,7 @@
 
 #include "../underlying.hpp"
 #include "../types.hpp"
-#include "../streaming.hpp"
+#include "../abstract/ipublisher.hpp"
 namespace quarkbot {
 
 

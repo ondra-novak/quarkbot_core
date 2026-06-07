@@ -9,13 +9,17 @@ public:
     Decimal last_price;
     PeriodicSnapshotView &view() {return *this;}
     using ParamType =  StreamSingleParam<unsigned int>;
+
+    using Param = unsigned int;
+
 };
 
 
-template<unsigned interval>
+template<unsigned int interval>
 requires(interval >= 1)
 struct PeriodicSnapshot : PeriodicSnapshotView{
-    constexpr static auto params =ParamType{{},interval};
+    constexpr static Param param = interval;
+
 };
 
 }

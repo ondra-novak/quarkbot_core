@@ -15,6 +15,8 @@ target_sources(quarkbot_ifc INTERFACE
             ./abstract/itradable_instrument.hpp
             ./abstract/imessage_bus.hpp
             ./abstract/iaccount.hpp
+            ./abstract/ipublisher.hpp
+            ./abstract/ieventstream.hpp
             ./types.hpp
             ./context.hpp
             ./schema.hpp
@@ -48,5 +50,5 @@ target_sources(quarkbot_ifc INTERFACE
             ./hub.hpp
             ./stream_defs.hpp
             ./market_instrument.hpp
-            ./streaming.hpp
+            ./event_stream.hpp
 )

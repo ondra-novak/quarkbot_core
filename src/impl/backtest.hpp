@@ -30,9 +30,9 @@ namespace quarkbot {
 
 
         StrategyContext _context;
+        std::shared_ptr<BacktestExecutor> _executor;
         std::shared_ptr<SimExchange> _exchange;
         std::shared_ptr<IBacktestDataSource> _data;
-        std::shared_ptr<BacktestExecutor> _executor;
         PAccount _account;
         std::vector<ResultAndExecWorker<coro::void_type> > _stop_awaiting;
         bool _stopped = false;

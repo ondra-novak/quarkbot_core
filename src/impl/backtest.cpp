@@ -16,7 +16,8 @@ namespace quarkbot {
     Backtest::Backtest(std::shared_ptr<IBacktestDataSource> data_source,
             std::string account_name, 
             std::span<std::pair<std::string, Decimal> > wallet)
-        :_exchange(std::make_shared<SimExchange>())
+        :_executor(BacktestExecutor::create())
+        ,_exchange(std::make_shared<SimExchange>())
         ,_data(std::move(data_source))
         ,_account(_exchange->create_account(std::move(account_name),wallet))
         {
@@ -42,7 +43,6 @@ namespace quarkbot {
     }
     
     void Backtest::run(StrategyFragment fragment) {        
-        _executor = BacktestExecutor::create();
         auto event = _data->next_event();
         if (!event) return;
         _executor->set_time(event->time);
