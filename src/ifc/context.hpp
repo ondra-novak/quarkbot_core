@@ -8,6 +8,7 @@
 #include <memory>
 #include <memory_resource>
 #include "tradable_instrument.hpp"
+#include "utils/json.hpp"
 #include <vector>
 namespace quarkbot {
 
@@ -21,7 +22,8 @@ namespace quarkbot {
 
     template<typename T>
     concept StrategyClass = requires(T val, StrategyContext ctx) {
-        {val.start(ctx)}->std::same_as<StrategyFragment>;
+        {T(ctx)};
+        {val.main()}->std::same_as<StrategyFragment>;
     };
 
 
@@ -37,6 +39,8 @@ namespace quarkbot {
         ExecutionWorker exec_worker{nullptr};
         ///current strategy mode
         StrategyMode mode;
+        ///Strategy configuration
+        Json config;
         
         ///co_await on this to wait on stop signal
         /**
@@ -74,7 +78,7 @@ namespace quarkbot {
             //retrieve awaitable for stop
             auto stop_awaitable = ctx.stop_signal();
             //create strategy instance
-            _S strategy;
+            _S strategy(ctx);
             co_await worker.schedule();
             //run strategy, wait until exit
             co_await strategy.start(std::move(ctx));            

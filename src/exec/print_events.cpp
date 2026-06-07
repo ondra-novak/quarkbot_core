@@ -38,7 +38,8 @@ int main() {
     auto usd = bt.get_exchange().create_currency("USD");
     bt.add_instrument({
         {},{0.00001_dec, Decimal::max(), 0.00001_dec,1, 10,10,0,0},usd,usd,{},"BTCUSD"        
-    });    
-    bt.run(print_events(bt.get_context()));
+    });
+    PrintEventStrategy s(bt.get_context());
+    bt.run(s.main());
 
 }
