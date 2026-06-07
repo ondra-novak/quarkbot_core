@@ -43,7 +43,10 @@ public:
     UnderlyingCurrency create_currency(std::string_view name, bool is_unified = true);
     UnderlyingCurrency create_currency(std::string_view name) const;
     
+    using ReportSink = SimExecutor::ReportSink;
+
     void set_slippage(double slippage) { _executor.set_slippage(slippage); }
+    void set_reporter(ReportSink sink) {_executor.set_report_sink(std::move(sink));}
 
     ///create account, set up initial wallet
     PAccount create_account(std::string name, std::span<const std::pair<std::string, Decimal> > wallet);
