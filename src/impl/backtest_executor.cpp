@@ -1,11 +1,57 @@
 #include "backtest_executor.hpp"
+#include "ifc/log.hpp"
+#include "ifc/strategy_fragment.hpp"
 #include "impl/logger.hpp"
 
 #include <chrono>
+#include <coroutine>
+#include <format>
+#include <iterator>
 #include <memory>
+#include <source_location>
 #include <stdexcept>
+#include <unordered_map>
 
 namespace quarkbot {
+
+class CoroRegister : public IAsyncDebugTrace {
+public:
+
+        virtual void add(std::coroutine_handle<> h, const std::source_location &loc) {
+            _loc[h.address()] = loc;
+        }
+        virtual void remove(std::coroutine_handle<> h) {
+            report("Finished", h);
+            _loc.erase(h.address());
+        }
+
+        void report(std::string_view operation, std::coroutine_handle<> h) {
+            auto iter = _loc.find(h.address());
+            if  (iter == _loc.end()) return;
+            auto &buff = Logger::instance.get_buffer();
+            std::format_to(std::back_inserter(buff), "{}: {}", operation, iter->second.function_name());
+            Logger::instance.log_sink(LogLevel::trace, nullptr, {buff.begin(), buff.end()});
+            buff.clear();
+
+        }
+
+        virtual void resumed(std::coroutine_handle<> h) {
+            report("Running", h);
+        }
+
+        const std::source_location *find(std::coroutine_handle<> h) const {
+            auto iter = _loc.find(h.address());
+            if  (iter == _loc.end()) return nullptr;
+            else return &iter->second;
+        }
+
+
+protected:
+    std::unordered_map<void *, std::source_location> _loc;
+};
+
+static CoroRegister coroRegister;
+
 
 class BacktestExecutorFactory: public BacktestExecutor {
 public:
@@ -33,6 +79,9 @@ std::shared_ptr<BacktestExecutor> BacktestExecutor::create() {
             else return std::chrono::system_clock::now();
         });
         _current_worker = me;
+        if (Logger::instance.cur_level <= LogLevel::trace) {
+            IAsyncDebugTrace::trace = &coroRegister;
+        }
         return me;
     }
 }
