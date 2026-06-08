@@ -81,7 +81,7 @@ namespace quarkbot {
             //retrieve awaitable for stop
             auto stop_awaitable = ctx.stop_signal();
             //create strategy instance
-            _S strategy(ctx);
+            _S strategy{ctx};
             co_await worker.schedule();
             //run strategy, wait until exit
             co_await strategy.start(std::move(ctx));            
