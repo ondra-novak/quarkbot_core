@@ -30,4 +30,5 @@ target_sources(quarkbot_utils INTERFACE
             dispatcher.hpp
             signals_async.hpp
             function_view.hpp
+            lookup.hpp
 )

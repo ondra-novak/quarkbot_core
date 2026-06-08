@@ -51,4 +51,5 @@ target_sources(quarkbot_ifc INTERFACE
             ./stream_defs.hpp
             ./market_instrument.hpp
             ./event_stream.hpp
+            ./config.hpp
 )

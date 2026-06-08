@@ -1,20 +1,45 @@
 #pragma once
 
 #include "utils/decimal.hpp"
+#include "utils/lookup.hpp"
 #include <chrono>
 #include <compare>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <tuple>
 namespace quarkbot {
 
+template<typename T> struct FromString;
 
+template<typename T>
+inline constexpr std::nullptr_t string_lookup = {};
+template<typename T>
+inline constexpr bool assert_false = false;
+
+template<typename T>
+concept HasFromStringMethod = requires(std::string_view v) {
+    {T::from_string(v)} -> std::same_as<T>;
+};
+
+template<typename T>
+concept HasStringLookup =  !std::same_as<std::remove_cvref_t<decltype(string_lookup<T>)>, std::nullptr_t> && requires(T val) {
+    {string_lookup<T>(val)} -> std::same_as<std::optional<std::string_view>  >;
+};
 
 enum class Side : int8_t{
     buy = 1,
     sell = -1,
     undetermined = 0
 };
+
+template<>
+inline constexpr auto string_lookup<Side> = makeLookupTable<Side,std::string_view>({
+    {Side::buy, "buy"},
+    {Side::sell, "sell"},        
+});
+
+static_assert(HasStringLookup<Side>);
 
 inline constexpr Side reverse(Side s) {
     return static_cast<Side>(-static_cast<int>(s));
@@ -30,6 +55,14 @@ enum class InstrumentType: int8_t {
     ///inverse contract - like contract, but pnl is calculated using inverse price formula
     inverse_contract
 };
+
+template<>
+inline constexpr auto string_lookup<InstrumentType> = makeLookupTable<InstrumentType,std::string_view>({
+    {InstrumentType::spot,"spot"},
+    {InstrumentType::margin,"margin"},
+    {InstrumentType::contract,"contract"},
+    {InstrumentType::inverse_contract,"inverse_contract"},
+    });
 
 struct ContractInfo {
     InstrumentType type = InstrumentType::contract;
@@ -102,6 +135,19 @@ enum class ExecutionReason : int8_t{
     ///automatic rollover, open position on new contract
     rollover_open
 };
+
+template<>
+inline constexpr auto string_lookup<ExecutionReason> = makeLookupTable<ExecutionReason,std::string_view>({
+    {ExecutionReason::strategy_order,"strategy_order"},
+    {ExecutionReason::manual_order,"manual_order"},
+    {ExecutionReason::liquidation,"liquidation"},
+    {ExecutionReason::adl,"adl"},
+    {ExecutionReason::settlement,"settlement"},
+    {ExecutionReason::rollover_close,"rollover_close"},
+    {ExecutionReason::rollover_open,"rollover_open"},
+});
+
+
 
 
 ///declaration of generic record key

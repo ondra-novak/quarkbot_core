@@ -1,6 +1,7 @@
 #pragma once
 
 #include "basic_coro/awaitable.hpp"
+#include "ifc/config.hpp"
 #include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
 #include "defs.hpp"
@@ -30,6 +31,8 @@ namespace quarkbot {
 
     class StrategyContext {
     public:
+        using Config = Config<std::function<std::optional<std::string_view>(std::string_view)> >;
+
         ///List of tradable instruments available to the strategy
         /** the strategy can query for accounts and exchanges through the instruments */
         std::vector<TradableInstrument> instruments;
@@ -40,7 +43,7 @@ namespace quarkbot {
         ///current strategy mode
         StrategyMode mode;
         ///Strategy configuration
-        Json config;
+        Config config;
         
         ///co_await on this to wait on stop signal
         /**

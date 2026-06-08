@@ -17,6 +17,7 @@ set(BASIC_TESTS
     hub.cpp
     timer.cpp
     csv_report.cpp
+    config.cpp
 )
 
 

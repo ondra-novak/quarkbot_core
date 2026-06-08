@@ -24,8 +24,9 @@ public:
     static EventStream from_base(std::unique_ptr<IEventStreamBase> base) {
         auto dpc = dynamic_cast<IEventStream<ViewType> *>(base.get());
         if (dpc == nullptr) {
+            const auto *ptr = base.get();
             throw std::invalid_argument(std::format("Cannot construct {} from stream of type {}",
-                typeid(EventStream<ViewType>).name(), typeid(*base).name()));
+                typeid(EventStream<ViewType>).name(), typeid(*ptr).name()));
         }                
         auto new_ptr = std::unique_ptr<IEventStream<ViewType> >(dpc);
         std::ignore=base.release();
