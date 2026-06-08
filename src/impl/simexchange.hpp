@@ -36,7 +36,7 @@ public:
         It creates simulated instrument and links it to the exchange,
         The info structure can contain unbound underlying currencies (will be bound to the exchange by this function),    
     */
-    PMarketInstrument add_instrument(const IMarketInstrument::Info def);
+    PMarketInstrument add_instrument(const IMarketInstrument::Info &def);
     
     
     virtual MarketInstrument create_instrument(std::string_view id, InstrumentType type) override;

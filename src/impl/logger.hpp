@@ -1,6 +1,8 @@
 #pragma  once
 #include "ifc/log.hpp"
+#include <chrono>
 #include <filesystem>
+#include <functional>
 
 namespace quarkbot {
 
@@ -26,4 +28,6 @@ namespace quarkbot {
     void log_set_level(LogLevel level);
     ///close any logging
     void log_close();
+
+    void log_set_time_source(std::function<std::chrono::system_clock::time_point()> time_source);
 }

@@ -17,6 +17,8 @@ class EventStream {
 public:
     ///Type of view returned by T::view() method
     using ViewType = typename StreamViewType<T>::type;
+    using ValueType = T;
+    using value_type = T;
 
     ///constructor from IEventStreamBase pointer, stream is open if pointer is not null
     EventStream(std::unique_ptr<IEventStream<ViewType> > stream):_stream(std::move(stream)) {}  

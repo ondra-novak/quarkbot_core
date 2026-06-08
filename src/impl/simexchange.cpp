@@ -108,7 +108,7 @@ void SimExchange::place_order(POrderAData ord) {
     }
 }
 
-PMarketInstrument SimExchange::add_instrument(const IMarketInstrument::Info def) {
+PMarketInstrument SimExchange::add_instrument(const IMarketInstrument::Info &def) {
     auto &instr = _instrument_names[def.name];
     instr.info = def;
     //link exchange to underlying currencies

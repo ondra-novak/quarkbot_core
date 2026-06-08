@@ -1,5 +1,7 @@
 #include "backtest_executor.hpp"
+#include "impl/logger.hpp"
 
+#include <chrono>
 #include <memory>
 #include <stdexcept>
 
@@ -25,19 +27,29 @@ std::shared_ptr<BacktestExecutor> BacktestExecutor::create() {
         return me;        
     } else {
         me = std::make_shared<BacktestExecutorFactory>();
+        log_set_time_source([melk = std::weak_ptr(me)]{
+            auto lk = melk.lock();
+            if (lk) return lk->now();
+            else return std::chrono::system_clock::now();
+        });
         _current_worker = me;
         return me;
     }
 }
 
 
-void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
-    flush_queue();
+void BacktestExecutor::set_initial_time(std::chrono::system_clock::time_point tp) {
     auto r = _scheduler.advance_time_until(tp);
     while (r) {
         r.lazy_resume();        
         r = _scheduler.advance_time_until(tp);
     }
+
+}
+
+void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
+    flush_queue();
+    set_initial_time(tp);
     flush_queue();
 }
 

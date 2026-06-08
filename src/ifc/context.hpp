@@ -84,13 +84,19 @@ namespace quarkbot {
             _S strategy{ctx};
             co_await worker.schedule();
             //run strategy, wait until exit
-            co_await strategy.start(std::move(ctx));            
+            co_await strategy.main();            
             //wait until context stop
             co_await stop_awaitable;
             //scheduler twice
             co_await worker.schedule();
             co_await worker.schedule();            
             //strategy is destroyed here
+        }
+
+        ///connect stop source with stop_signal
+        StrategyFragment set_stop_source(std::stop_source src) {
+            co_await stop_signal();
+            src.request_stop();
         }
 
 

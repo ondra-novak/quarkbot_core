@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <iterator>
 #include <mutex>
@@ -30,6 +31,7 @@ namespace {
     std::size_t _rotation_interval = 0;
     std::size_t _rotation_retention = 0;
     std::vector<char> _format_buffer;
+    std::function<std::chrono::system_clock::time_point()> _time_source = []{return std::chrono::system_clock::now();};
 
 
     void open_file_by_rotate_number(std::size_t rotnum) {
@@ -121,7 +123,7 @@ namespace {
 
     void std_error_sink(LogLevel level, const std::source_location &location, std::string_view content) {
         std::scoped_lock _(_mx);
-        file_sink_lk(std::chrono::system_clock::now(), std::cerr, level, location, content);
+        file_sink_lk(_time_source(), std::cerr, level, location, content);
     }
     void std_file_sink(LogLevel level, const std::source_location &location, std::string_view content) {
         std::scoped_lock _(_mx);
@@ -131,7 +133,7 @@ namespace {
             _rotate_signal.store(false, std::memory_order_relaxed);
             _cur_log_stream.open(_cur_log_file, std::ios::out|std::ios::app);
         }
-        file_sink_lk(std::chrono::system_clock::now(), _cur_log_stream, level, location, content);
+        file_sink_lk(_time_source(), _cur_log_stream, level, location, content);
     }
     void std_file_rotate_sink(LogLevel level, const std::source_location &location, std::string_view content) { 
         std::scoped_lock _(_mx);
@@ -141,7 +143,7 @@ namespace {
             _cur_log_stream.close();        
             open_file_by_rotate_number(rotnum);
         }
-        file_sink_lk(now, _cur_log_stream, level, location, content);
+        file_sink_lk(_time_source(), _cur_log_stream, level, location, content);
     }
 }
 
@@ -183,6 +185,10 @@ void log_close() {
     Logger::instance = df;
     _cur_log_stream.close();
     _cur_log_stream.clear();
+}
+
+void log_set_time_source(std::function<std::chrono::system_clock::time_point()> time_source) {
+    _time_source = time_source;
 }
 
 }
