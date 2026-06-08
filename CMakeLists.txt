@@ -10,11 +10,13 @@ else()
 endif()
 add_compile_options(-Wall -Wno-noexcept-type)
 
+option(quarkbot_DEVELOPMENT_MODE "(Quarkbot) Include development targets" ${PROJECT_IS_TOP_LEVEL})
+
 include(FetchContent)
 FetchContent_Declare(
     BasicCoro
     GIT_REPOSITORY https://www.github.com/ondra-novak/basic_coro.git
-    GIT_TAG 1e7b88f339de6cc7313f14108076c7ab49ee563e
+    GIT_TAG 1eabb280f3b1432a18dad1046433cb63af8a90c3
     EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(BasicCoro)
@@ -38,11 +40,13 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/)
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_INSTALL_PREFIX "/usr/local" CACHE PATH "Default path to install" FORCE)
 endif()
-enable_testing()
-include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/src)
+
 add_subdirectory("src")
-add_subdirectory("src/strategies/print_events")
-add_subdirectory("src/strategies/trending")
-add_subdirectory("src/exec")
-add_subdirectory("src/tests")
+if (basic_coro_DEVELOPMENT_MODE) 
+  enable_testing()
+  add_subdirectory("src/strategies/print_events")
+  add_subdirectory("src/strategies/trending")
+  add_subdirectory("src/exec")
+  add_subdirectory("src/tests")
+endif()
 

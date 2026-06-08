@@ -55,7 +55,7 @@ target_sources(  quarkbot_impl PRIVATE
 )
 
 target_link_libraries(quarkbot_impl
-    PRIVATE BasicCoro::basic_coro
+    PRIVATE basic_coro::basic_coro
     PRIVATE quarkbot_utils
     PRIVATE quarkbot_ifc
     PRIVATE ZLIB::ZLIB
