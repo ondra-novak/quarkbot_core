@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 template<typename Column1, typename Column2, std::size_t count>
@@ -58,6 +60,27 @@ protected:
 };
 
 template<typename A, typename B, std::size_t N>
-constexpr LookupTable<A, B, N> makeLookupTable(const std::pair<A, B> (&table)[N]) {
+constexpr LookupTable<A, B, N> make_lookup_table(const std::pair<A, B> (&table)[N]) {
     return {table};
+}
+template<typename A, std::size_t N>
+constexpr LookupTable<A, std::string_view, N> make_string_lookup_table(const std::pair<A, std::string_view> (&table)[N]) {
+    return {table};
+}
+
+template<typename A, std::size_t N>
+constexpr std::string lookup_available_options(const LookupTable<A, std::string_view, N> &src) {
+    std::string out;
+    auto b = src.begin();
+    auto e = src.end();
+    if (b != e) {
+        out.append(b->second);
+        ++b;
+        while (b != e) {
+            out.append(", ");
+            out.append(b->second);
+            ++b;
+        }
+    }
+    return out;
 }

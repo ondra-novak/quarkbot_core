@@ -34,7 +34,7 @@ enum class Side : int8_t{
 };
 
 template<>
-inline constexpr auto string_lookup<Side> = makeLookupTable<Side,std::string_view>({
+inline constexpr auto string_lookup<Side> = make_lookup_table<Side,std::string_view>({
     {Side::buy, "buy"},
     {Side::sell, "sell"},        
 });
@@ -57,7 +57,7 @@ enum class InstrumentType: int8_t {
 };
 
 template<>
-inline constexpr auto string_lookup<InstrumentType> = makeLookupTable<InstrumentType,std::string_view>({
+inline constexpr auto string_lookup<InstrumentType> = make_lookup_table<InstrumentType,std::string_view>({
     {InstrumentType::spot,"spot"},
     {InstrumentType::margin,"margin"},
     {InstrumentType::contract,"contract"},
@@ -137,7 +137,7 @@ enum class ExecutionReason : int8_t{
 };
 
 template<>
-inline constexpr auto string_lookup<ExecutionReason> = makeLookupTable<ExecutionReason,std::string_view>({
+inline constexpr auto string_lookup<ExecutionReason> = make_lookup_table<ExecutionReason,std::string_view>({
     {ExecutionReason::strategy_order,"strategy_order"},
     {ExecutionReason::manual_order,"manual_order"},
     {ExecutionReason::liquidation,"liquidation"},

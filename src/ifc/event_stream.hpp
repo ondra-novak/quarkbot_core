@@ -1,7 +1,10 @@
 #pragma once
 
 #include "abstract/ieventstream.hpp"
+#include "ifc/strategy_fragment.hpp"
+#include "ifc/types.hpp"
 #include "utils/class_hash.hpp"
+#include <concepts>
 #include <format>
 #include <memory>
 #include <stdexcept>
@@ -83,6 +86,12 @@ public:
     }
    
     auto get() const {return _stream.get();}
+
+    template<typename _Hub, std::derived_from<T> _ItemWithContext>
+    friend StrategyFragment feed_to(EventStream<T> stream, _Hub hub, _ItemWithContext context) {
+        while (co_await stream.receive(context) && co_await hub.send(context));
+    }
+
 
 protected:
     std::shared_ptr<IEventStream<ViewType> > _stream;

@@ -79,7 +79,7 @@ std::shared_ptr<BacktestExecutor> BacktestExecutor::create() {
             else return std::chrono::system_clock::now();
         });
         _current_worker = me;
-        if (Logger::instance.cur_level <= LogLevel::trace) {
+        if (Logger::instance.cur_level >= LogLevel::trace) {
             IAsyncDebugTrace::trace = &coroRegister;
         }
         return me;

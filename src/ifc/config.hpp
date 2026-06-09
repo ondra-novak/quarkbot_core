@@ -25,14 +25,14 @@ such as files, environment variables, command line arguments, or even dynamic co
 Expected underlying source is key-value store, where keys are strings and values are strings. The source should return std::nullopt for missing keys.
 */
 template<typename Source>
-requires (std::is_invocable_r_v<std::optional<std::string_view>, Source, std::string_view>)
+requires (std::is_invocable_r_v<std::optional<std::string_view>, Source, const std::string &>)
 class Config {
 public:
 
     ///default constructor, creates empty configuration
     constexpr Config() = default;
     ///constructor from source and separator character for sections
-    constexpr Config(Source source, char separator):_source(std::move(source)), _sepatator(separator) {}
+    constexpr Config(Source source, char separator = '/'):_source(std::move(source)), _sepatator(separator) {}
     ///constructor for creating sub-configurations with prefix
     constexpr Config(const Config &parent, std::string_view prefix)
         :_source(parent._source), _sepatator(parent._sepatator),_prefix(prefix) {}
@@ -47,7 +47,7 @@ public:
         requires(std::is_same_v<T, bool> || std::is_arithmetic_v<T> || HasFromStringMethod<T> || HasStringLookup<T> || std::is_constructible_v<T, std::string_view>)
         constexpr operator T() const {
             if (!value.has_value()) {
-                throw std::runtime_error(std::format("Key not found in configuration: {}", key));
+                 throw std::runtime_error(std::format("Key not found in configuration: {}", key));
             }
 
             std::string_view actual_str = *value;
@@ -117,7 +117,7 @@ public:
 
 protected:
 
-    Source _source = [](std::string_view)->std::optional<std::string_view>{return {};};
+    Source _source = [](const std::string &)->std::optional<std::string_view>{return {};};
     char _sepatator = '/';
     std::string _prefix = {};
 

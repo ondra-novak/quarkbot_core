@@ -31,7 +31,7 @@ namespace quarkbot {
 
     class StrategyContext {
     public:
-        using Config = Config<std::function<std::optional<std::string_view>(std::string_view)> >;
+        using Config = Config<std::function<std::optional<std::string_view>(const std::string &)> >;
 
         ///List of tradable instruments available to the strategy
         /** the strategy can query for accounts and exchanges through the instruments */
