@@ -34,8 +34,8 @@ namespace quarkbot {
         std::shared_ptr<SimExchange> _exchange;
         std::shared_ptr<IBacktestDataSource> _data;
         PAccount _account;
-        std::vector<ResultAndExecWorker<coro::void_type> > _stop_awaiting;
         bool _stopped = false;
+        std::stop_source stop_src;
 
     };
 

@@ -59,6 +59,7 @@ public:
 
 void BacktestExecutor::flush_queue() {
     while (!_dispatch_queue.empty()) {
+        _dispatch_queue.front().lazy_resume();
         _dispatch_queue.pop();
     }
 }

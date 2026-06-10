@@ -45,17 +45,19 @@ namespace quarkbot {
             
             void (*old_resume)(std::coroutine_handle<promise_type>) = nullptr;
 
+            static void debug_traced_resume(std::coroutine_handle<promise_type> h) {
+                IAsyncDebugTrace::trace->resumed(h);
+                auto &me = h.promise();
+                me.old_resume(h);
+            }
+
             std::suspend_always initial_suspend(std::source_location loc = std::source_location::current())  noexcept {
                 if (IAsyncDebugTrace::trace) {
                     auto h = std::coroutine_handle<promise_type>::from_promise(*this);
                     IAsyncDebugTrace::trace->add(h, loc);                
                     auto frame_ptr = reinterpret_cast<void (**)(std::coroutine_handle<promise_type>) >(h.address());
                     old_resume = *frame_ptr;
-                    *frame_ptr = [](std::coroutine_handle<promise_type> h){
-                        IAsyncDebugTrace::trace->resumed(h);
-                        auto &me = h.promise();
-                        me.old_resume(h);
-                    };
+                    *frame_ptr = &debug_traced_resume;
                 }
                 return {};
             }        

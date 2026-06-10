@@ -22,7 +22,7 @@ class TradableInstrument;
 class Order {
 public:
 
-    Order();
+    Order()=default;
     Order(POrderAData data):_order_data(std::move(data)) {}
 
     ///return true, if order is valid

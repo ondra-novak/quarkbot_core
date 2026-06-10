@@ -23,17 +23,7 @@ namespace quarkbot {
         {
             _context.exec_worker = ExecutionWorker(_executor);
             _context.mode = StrategyMode::backtest;            
-            _context.stop_signal = [this] -> awaitable<coro::void_type> {
-                if (_stopped) return {};
-                return [this](auto promise)->coro::prepared_coro{
-                    if (!_stopped) {
-                        _stop_awaiting.push_back(std::move(promise));
-                        return {};
-                    } else {
-                        return promise();
-                    }
-                };
-            };
+            _context.stop_signal  = stop_src.get_token();
         }
 
     void Backtest::add_instrument(IMarketInstrument::Info instrument_def) {
@@ -61,8 +51,7 @@ namespace quarkbot {
         }        
 
         _stopped = true;
-        for (auto &x: _stop_awaiting) {x();}
-        _stop_awaiting.clear();
+        stop_src.request_stop();
         
         while (!pending.await_ready()) {
             _executor->flush_queue();
