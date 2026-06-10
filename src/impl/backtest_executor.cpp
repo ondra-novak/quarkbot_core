@@ -19,24 +19,22 @@ public:
 
         virtual void add(std::coroutine_handle<> h, const std::source_location &loc) {
             _loc[h.address()] = loc;
+            report("Fragment created", h);
         }
         virtual void remove(std::coroutine_handle<> h) {
-            report("Finished", h);
+            report("Fragment finished", h);
             _loc.erase(h.address());
         }
 
         void report(std::string_view operation, std::coroutine_handle<> h) {
             auto iter = _loc.find(h.address());
             if  (iter == _loc.end()) return;
-            auto &buff = Logger::instance.get_buffer();
-            std::format_to(std::back_inserter(buff), "{}: {}", operation, iter->second.function_name());
-            Logger::instance.log_sink(LogLevel::trace, nullptr, {buff.begin(), buff.end()});
-            buff.clear();
+            Logger::instance.log_sink(LogLevel::trace, &iter->second, operation);
 
         }
 
         virtual void resumed(std::coroutine_handle<> h) {
-            report("Running", h);
+            report("Fragment running", h);
         }
 
         const std::source_location *find(std::coroutine_handle<> h) const {
@@ -87,19 +85,14 @@ std::shared_ptr<BacktestExecutor> BacktestExecutor::create() {
 }
 
 
-void BacktestExecutor::set_initial_time(std::chrono::system_clock::time_point tp) {
+
+void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
     auto r = _scheduler.advance_time_until(tp);
     while (r) {
         r.lazy_resume();        
+        flush_queue();
         r = _scheduler.advance_time_until(tp);
     }
-
-}
-
-void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
-    flush_queue();
-    set_initial_time(tp);
-    flush_queue();
 }
 
 void BacktestExecutor::resume(std::coroutine_handle<> h) noexcept {
@@ -132,8 +125,10 @@ bool BacktestExecutor::cancel(coro::cancel_signal *cancel_signal) {
     }
 }
 
-void BacktestExecutor::join() {
+bool BacktestExecutor::join() {
+    if (_dispatch_queue.empty()) return false;
     flush_queue();
+    return true;
 }
 
 bool BacktestExecutor::empty() const  {

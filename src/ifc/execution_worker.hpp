@@ -1,12 +1,19 @@
 #pragma once
 
+#include "basic_coro/await_proxy.hpp"
 #include "basic_coro/awaitable.hpp"
 #include "basic_coro/cancel_signal.hpp"
+#include "basic_coro/concepts.hpp"
+#include "basic_coro/coro_frame.hpp"
+#include "basic_coro/pending.hpp"
 #include "basic_coro/result_proxy.hpp"
 #include "abstract/iexecution_worker.hpp"
+#include "basic_coro/sync_await.hpp"
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <stdexcept>
+#include <type_traits>
 namespace quarkbot {
 
 class ExecutionWorker {
@@ -121,11 +128,31 @@ public:
       as well)
       
       @note also works correctly in backtest executor, which invokes flush of the queue
+      @retval true some tasks has been processed before join finished
+      @retval false no-op, nothing to be processed, queue is empty
 
      */
-    void join() {
-        if (_worker) _worker->join();
+    bool join() {
+        if (_worker) return _worker->join();
+        return false;
     }
+
+    template<typename T>
+    decltype(auto) join(coro::pending<T> &awaiting_op) {
+        while (join()) {
+            if (awaiting_op.await_ready()) break;
+        }
+        return coro::sync_await(awaiting_op);
+    }
+
+    template<typename T>
+    decltype(auto) join(coro::pending<T> &&awaiting_op) {
+        while (join()) {
+            if (awaiting_op.await_ready()) break;
+        }
+        return coro::sync_await(awaiting_op);
+    }
+
 
 
     ///Ensures that worker is available - otherwise it throw exception

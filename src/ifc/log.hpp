@@ -1,6 +1,8 @@
 #pragma once
 
 
+#include "ifc/types.hpp"
+#include "utils/lookup.hpp"
 #include <format>
 #include <source_location>
 #include <type_traits>
@@ -26,6 +28,17 @@ namespace quarkbot {
         ///cycle traces, more debug informations
         trace = 5,
     };
+
+    template<>
+    inline constexpr auto string_lookup<LogLevel> = make_string_lookup_table<LogLevel>({        
+            {LogLevel::disabled,"disabled"},
+            {LogLevel::fatal,"fatal"},
+            {LogLevel::error,"error"},
+            {LogLevel::warning,"warning"},
+            {LogLevel::info,"info"},
+            {LogLevel::debug,"debug"},
+            {LogLevel::trace,"trace"},        
+    });
 
     ///logger object (singleton)
     struct Logger {

@@ -36,15 +36,23 @@ public:
     ///constructor for creating sub-configurations with prefix
     constexpr Config(const Config &parent, std::string_view prefix)
         :_source(parent._source), _sepatator(parent._sepatator),_prefix(prefix) {}
-    
+
+
+    struct OptionalValue;
+
     ///Value wrapper for configuration values, provides automatic parsing to various types
     struct Value {
         std::string key;
         std::optional<std::string_view> value;
 
+
         ///automatic conversion operator to various types, enabled for bool, arithmetic types, enums with string lookup and types with from_string method
         template<typename T> 
-        requires(std::is_same_v<T, bool> || std::is_arithmetic_v<T> || HasFromStringMethod<T> || HasStringLookup<T> || std::is_constructible_v<T, std::string_view>)
+        requires(std::is_same_v<T, bool> 
+                || std::is_arithmetic_v<T> 
+                || HasFromStringMethod<T> 
+                || HasStringLookup<T> 
+                || std::is_constructible_v<T, std::string_view>)
         constexpr operator T() const {
             if (!value.has_value()) {
                  throw std::runtime_error(std::format("Key not found in configuration: {}", key));
@@ -97,7 +105,21 @@ public:
             if (value.has_value()) return *this;
             else return val;
         }    
+
+        ///specifies that default value is nullopt which expects result as std::optional<T> 
+        constexpr OptionalValue operator()(std::nullopt_t) const;
     };
+
+    struct OptionalValue {
+        const Value &val;
+
+        template<typename X>
+        constexpr operator std::optional<X>() const {
+            if (val.value.has_value()) return val.operator X();
+            else return std::nullopt;
+        }
+    };
+
 
     ///access configuration value by key, returns Value wrapper which can be automatically converted to desired type
     constexpr Value operator[](std::string_view key) const {
@@ -131,6 +153,12 @@ protected:
     }
 
 };
+
+template<typename Source>
+requires (std::is_invocable_r_v<std::optional<std::string_view>, Source, const std::string &>)
+inline constexpr typename Config<Source>::OptionalValue Config<Source>::Value::operator()(std::nullopt_t) const {
+            return {*this};
+}
 
 
 }
