@@ -1,6 +1,6 @@
 #pragma once
 
-#include "basic_coro/awaitable.hpp"
+#include "awaitable_stop.hpp"
 #include "ifc/config.hpp"
 #include "ifc/types.hpp"
 #include "strategy_fragment.hpp"
@@ -30,53 +30,6 @@ namespace quarkbot {
         {val.main()}->std::same_as<StrategyFragment>;
     };
 
-    
-
-    class AwaitableStopToken: public std::stop_token {
-    public:
-
-
-        template<typename _type>
-        struct Impl {
-            coro::awaitable_result<_type> res;
-            ExecutionWorker worker;
-            void operator()() {
-                //move worker because res() will destroy this
-                auto wrk = std::move(worker);
-                if (wrk) wrk.resume(res());
-                else res();
-            }
-        };
-
-        template<typename _type>
-        class State : public std::variant<std::stop_token, std::stop_callback<Impl<_type> > >{
-        public:
-            using std::variant<std::stop_token, std::stop_callback<Impl<_type> > >::variant;
-            State(State &&other): std::variant<std::stop_token, std::stop_callback<Impl<_type> > >(std::move(std::get<std::stop_token>(other))) {}
-        };
-
-        using nothing = std::array<char, sizeof(State<void>)>;
-
-
-        AwaitableStopToken() = default;
-        AwaitableStopToken(std::stop_token tkn):std::stop_token(std::move(tkn)) {}        
-
-        awaitable<nothing> operator ()() const;
-        awaitable<nothing> operator co_await() const;
-    };
-
-
-
-    inline awaitable<AwaitableStopToken::nothing> AwaitableStopToken::operator ()() const {
-            if (this->stop_requested()) return {nothing{}};
-            return [st = State<nothing>(std::in_place_type<std::stop_token>,*this)](auto promise) mutable  {
-                auto tkn =std::move( std::get<std::stop_token>(st));
-                st.emplace<std::stop_callback<Impl<nothing> > >(tkn, Impl{std::move(promise), ExecutionWorker::current()});
-            };
-        }   
-    inline awaitable<AwaitableStopToken::nothing> AwaitableStopToken::operator co_await() const {
-            return this->operator()();
-    }
 
     class StrategyContext {
     public:
