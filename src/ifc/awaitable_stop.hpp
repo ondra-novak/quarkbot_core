@@ -50,9 +50,11 @@ namespace quarkbot {
         using std::stop_token::stop_token;
         AwaitableStopToken(std::stop_token tkn):std::stop_token(std::move(tkn)) {}
         
+        ///co_await operator that returns an awaiter which will resume the awaiting coroutine when stop is requested
         stop_awaiter operator co_await() const {
             return stop_awaiter(*this); 
         }
+        ///create awaiter without co_await, useful for manual awaiting in custom await_suspend implementations
         stop_awaiter operator ()() const {
             return stop_awaiter(*this); 
         }

@@ -14,8 +14,8 @@ public:
         Number dev = {};
     };
 
-    Bollinger_Ema(Number mean_apha, Number dev_alpha, Result initial_value)
-        :_mean(mean_apha, initial_value.mean)
+    Bollinger_Ema(Number mean_alpha, Number dev_alpha, Result initial_value)
+        :_mean(mean_alpha, initial_value.mean)
         ,_var(dev_alpha, initial_value.dev) {}
 
     static Bollinger_Ema from_period(std::size_t period, double dev_adjust, Result initial_value) {

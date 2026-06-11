@@ -7,13 +7,17 @@ namespace quarkbot {
 
 //contains stats and last quote
 
-struct Ticker: TradeStatCounter, Quote {
+struct Ticker  {
+
+
+    TradeStatCounter stats;
+    Quote quote;
 
     Ticker add(const Trade &tr) const {
-        return {TradeCounter::add(tr), *this};
+        return {stats.add(tr), quote};
     }
     Ticker add(const Quote &qt) const {
-        return {*this, qt};
+        return {stats, qt};
     }
 
 };

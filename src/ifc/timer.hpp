@@ -1,8 +1,10 @@
 #pragma once
 
 #include "ifc/abstract/iexecution_worker.hpp"
+#include "ifc/strategy_fragment.hpp"
 #include <concepts>
 #include <stdexcept>
+#include <stop_token>
 namespace quarkbot {
 
 ///convenience class for managing single timer from coroutine. RAII object
@@ -97,10 +99,31 @@ public:
         _worker = worker.get_handle();
     }
 
+    Timer &stop_on(const std::stop_source &src) & {
+        return stop_on(src);
+    }
+    Timer &&stop_on(const std::stop_source &src) && {
+        return std::move(*this).stop_on(src);
+    }
+    Timer &stop_on( std::stop_token tkn) & {    
+        _callback.emplace(std::move(tkn), StopCB{this});
+        return *this;
+    }
+    Timer &&stop_on( std::stop_token tkn) && {
+        _callback.emplace(std::move(tkn), StopCB{this});
+        return std::move(*this);
+    }
 
-protected:
+
+protected:    
+    struct StopCB {
+        Timer *owner;
+        void operator()(){owner->cancel();}
+    };
+
     std::shared_ptr<IExecutionWorker> _worker;
     coro::cancel_signal _cancel_signal;
+    std::optional<std::stop_callback<StopCB> > _callback;
 };
 
 
