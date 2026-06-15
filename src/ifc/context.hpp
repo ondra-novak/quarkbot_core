@@ -1,6 +1,7 @@
 #pragma once
 
 #include "awaitable_stop.hpp"
+#include "basic_coro/pending.hpp"
 #include "ifc/config.hpp"
 #include "ifc/types.hpp"
 #include "strategy_fragment.hpp"
@@ -49,18 +50,14 @@ namespace quarkbot {
 
         AwaitableStopToken stop_signal;
 
-        //start strategy instance
-        /**
-            @param strategy_instance reference to strategy instance - lifetime is handled by caller
-             (can be allocated statically)
-            @param ctx r-value of context (std::move()) starts the strategy with given context
-        */
+        std::shared_ptr<StrategyFragmentGroup> active_group = {};
         
-        template<StrategyClass _S>
-        friend void start_strategy(_S &strategy_instance, StrategyContext &&ctx) {
-            auto worker = ctx.exec_worker;
-            worker.run(strategy_instance.start(std::move(ctx)));
+        ///start strategy fragment and add it to fragment group ensuring that strategy will not be destroyed until fragment is finished
+        /** Use for long time running fragments, not for short ones. The fragemnt stays registered even if it is already finished */
+        void launch(StrategyFragment fragment) {
+            active_group->add(std::move(fragment), exec_worker);
         }
+
 
         ///create and start the strategy
         /**
@@ -70,6 +67,8 @@ namespace quarkbot {
          */
         template<StrategyClass _S>
         friend StrategyFragment create_and_start_strategy(StrategyContext ctx) {
+
+            ctx.active_group  = std::make_shared<StrategyFragmentGroup>();
             //retrieve worker
             auto worker = ctx.exec_worker;
             //retrieve awaitable for stop
@@ -81,6 +80,8 @@ namespace quarkbot {
             co_await strategy.main();            
             //wait until context stop
             co_await stop_awaitable;
+            //join whole group
+            co_await ctx.active_group->join();
             //scheduler twice
             co_await worker.schedule();
             co_await worker.schedule();            

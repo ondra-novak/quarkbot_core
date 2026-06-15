@@ -100,10 +100,10 @@ public:
     }
 
     Timer &stop_on(const std::stop_source &src) & {
-        return stop_on(src);
+        return stop_on(src.get_token());
     }
     Timer &&stop_on(const std::stop_source &src) && {
-        return std::move(*this).stop_on(src);
+        return std::move(*this).stop_on(src.get_token());
     }
     Timer &stop_on( std::stop_token tkn) & {    
         _callback.emplace(std::move(tkn), StopCB{this});
@@ -114,6 +114,10 @@ public:
         return std::move(*this);
     }
 
+    auto now()  {
+        set_worker();
+        return _worker->now();
+    }
 
 protected:    
     struct StopCB {

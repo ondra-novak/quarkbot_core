@@ -37,8 +37,9 @@ namespace quarkbot {
         }
 
         Decimal filled = ord->fst.filled;
+        auto tif = ord->get_parameters().time_in_force;
         ActiveOrder aord{
-            std::move(ord),std::move( instrument), filled, ord->get_parameters().time_in_force
+            std::move(ord),std::move( instrument), filled, tif
         };
         if (!validate_order(aord)) return;
 
@@ -449,14 +450,13 @@ void SimExecutor::set_order_status(const POrderAData &ord, OrderInternalData::Up
 }
 
 void  SimExecutor::accept_order(const POrderAData &ord) {
-    auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());
     std::string id = generate_random_string(_rnd_gen);
     std::hash<std::string> hasher;
     RecordKey rk({
         static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count()),
         hasher(id)
     });
-    simt.on_order_update(ord, OrderOpenStatus{id, rk});
+    set_order_status(ord, OrderOpenStatus{id, rk});
 }
 
 StrategyFragment SimExecutor::place_order(POrderAData ord) {

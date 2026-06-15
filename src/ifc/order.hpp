@@ -9,6 +9,7 @@
 #include "abstract/orderdata.hpp"
 #include <cassert>
 #include <chrono>
+#include <concepts>
 #include <optional>
 #include <string_view>
 
@@ -57,7 +58,7 @@ public:
      */
     awaitable<bool> receive(OrderReport &report) {
         report.status_changed = false;
-        if (!report.fills.empty()) return true;
+        report.fills.clear();
         if (!_order_data) return false;
         if (_order_data->flush_updates(report, _order_data)) return true;
         return [this, &report](awaitable<bool>::result promise) -> coro::prepared_coro {
@@ -117,31 +118,13 @@ public:
 
     ///Feed reports to opened hup
     /**
-        Forwards all reports to given hub
-        @param hub a hub which accepts OrderReport. 
-        @return This is coroutine, it returns StartegyFragment, which should be discarded to start
-             the coroutine. 
-        @note The hub receives only reports, not order itself
+    @param hub an instance of hub
+    @param t_value template value which should extend OrderReport, but can contain additional informations
     */    
-    StrategyFragment feed_to(std::shared_ptr<Hub<OrderReport> > hub) {
-        OrderReport rep;
+    template<typename _Hub, std::derived_from<OrderReport> _Template = OrderReport>
+    StrategyFragment feed_to(_Hub hub, _Template t_value = OrderReport{}) {                
         Order me (*this);
-        while (co_await me.receive(rep) && co_await hub->send(std::move(rep)));
-    }
-
-    ///Feed orders and reports to opened hup
-    /**
-        Forwards all reports to given hub
-        @param hub a hub which accepts pair<Order and  OrderReport>
-        @return This is coroutine, it returns StartegyFragment, which should be discarded to start
-             the coroutine. 
-        @note the hub receives order instance as well. However the coroutine keeps itself 
-            registered and receiving events. You can use order instance to cancel or replace order.
-    */    
-    StrategyFragment feed_to(std::shared_ptr<Hub<std::pair<Order, OrderReport> > > hub) {
-        OrderReport rep;
-        Order me (*this);
-        while (co_await me.receive(rep) && co_await hub->send({me, std::move(rep)}));
+        while (co_await me.receive(t_value) && co_await hub.send(t_value));
     }
 
     ///Access internal state - reserved for adapters, the strategy should not use it
@@ -167,6 +150,11 @@ protected:
         return *_order_data;
     }
 
+};
+
+///useful to carry order itself with the report. The order field must be initialized before it is passed to the feed_to
+struct ReportWithOrder : OrderReport {
+    Order order;
 };
 
 #if 0

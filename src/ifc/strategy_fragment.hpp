@@ -1,8 +1,12 @@
 #pragma once
 #include "basic_coro/coro_frame.hpp"
 #include "basic_coro/coroutine.hpp"
+#include "basic_coro/pending.hpp"
+#include "ifc/execution_worker.hpp"
 #include "ifc/memory.hpp"
 #include <coroutine>
+#include <deque>
+#include <mutex>
 #include <source_location>
 #include <unordered_map>
 namespace quarkbot {
@@ -25,7 +29,7 @@ namespace quarkbot {
 
         virtual void add(std::coroutine_handle<> h, const std::source_location &loc) = 0;
         virtual void remove(std::coroutine_handle<> h) = 0;
-        virtual void resumed(std::coroutine_handle<> h) = 0;
+        virtual void resumed(std::coroutine_handle<> h) = 0;        
         virtual ~IAsyncDebugTrace() = default;
         static IAsyncDebugTrace *trace;
     };
@@ -87,5 +91,43 @@ namespace quarkbot {
     public:
         using Async<void>::Async;
     };
+
+    ///Creates execution group of multiple strategy fragments
+    class StrategyFragmentGroup {
+    public:
+
+        ///Add fragment o group, the fragment is started, and becomes part of the group
+        void add(StrategyFragment frag) {
+            std::lock_guard _(_mx);
+            add(std::move(frag), ExecutionWorker::current().required());
+        }
+
+
+        ///Add fragment o group, the fragment is started, and becomes part of the group
+        void add(StrategyFragment frag, ExecutionWorker &worker) {
+            std::lock_guard _(_mx);
+            _pending_list.emplace_back(std::move(frag), [&](auto p){
+                worker.resume(std::move(p));
+            });
+        }
+
+        ///join the group (synchronize with group completion)
+        awaitable<void> join() {
+            std::lock_guard _(_mx);
+            auto waiter = [](std::deque<coro::pending<StrategyFragment> > list) mutable -> StrategyFragment {
+                for (auto &x: list) {
+                    co_await x;
+                }
+            };
+            return waiter(std::move(_pending_list));
+        }
+
+    protected:
+         std::deque<coro::pending<StrategyFragment> >  _pending_list;
+        std::mutex _mx;
+
+    };
+
+    
 
 }

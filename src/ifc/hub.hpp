@@ -31,6 +31,7 @@ template<typename T>
 class Hub {
     struct State;
 public:
+    using value_type = T;
 
     ///explicit construction of uninitialized wrapper
     /**

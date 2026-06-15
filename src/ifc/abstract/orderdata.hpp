@@ -282,7 +282,7 @@ namespace quarkbot {
             POrderAData &redirect_ptr;
 
             void operator()(Fill &fill) {
-                report.fills.push(std::move(fill));
+                report.fills.push_back(std::move(fill));
             }
             void operator()(OrderStatus &st) {
                 report.status = st;
@@ -324,12 +324,10 @@ namespace quarkbot {
                 std::visit(visitor, x);                
             }
             updates.clear();
-            if (ok) {
-                report.filled = fst.filled;
-                report.turnover = fst.turnover;
-                report.id = id;
-                report.name = name;
-            }
+            report.filled = fst.filled;
+            report.turnover = fst.turnover;
+            report.id = id;
+            report.name = name;
             return ok;
         }
 
@@ -368,7 +366,7 @@ namespace quarkbot {
             //any awaiting
             if (awaiting.has_value()) {
                 //flush updates
-                if (flush_updates(awaiting->report, awaiting->ptr_to_redirect)) {
+                if (flush_updates_lk(awaiting->report, awaiting->ptr_to_redirect)) {
                     //in case success, resolve promise
                     awaiting->worker.resume(awaiting->result(true));
                     //reset internal state

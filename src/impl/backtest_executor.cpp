@@ -2,6 +2,7 @@
 #include "ifc/log.hpp"
 #include "ifc/strategy_fragment.hpp"
 #include "impl/logger.hpp"
+#include "libs/network/string_utils.hpp"
 
 #include <chrono>
 #include <coroutine>
@@ -19,18 +20,40 @@ public:
 
         virtual void add(std::coroutine_handle<> h, const std::source_location &loc) {
             _loc[h.address()] = loc;
-            report("Fragment created", h);
+            report("Fragment created:", h);
         }
         virtual void remove(std::coroutine_handle<> h) {
-            report("Fragment finished", h);
+            report("Fragment finished: ", h);
             _loc.erase(h.address());
         }
 
         void report(std::string_view operation, std::coroutine_handle<> h) {
             auto iter = _loc.find(h.address());
             if  (iter == _loc.end()) return;
-            Logger::instance.log_sink(LogLevel::trace, &iter->second, operation);
+            auto &buff = Logger::get_buffer();
+            std::string_view fnam(iter->second.function_name())            ;            
+            std::format_to(std::back_inserter(buff),"{} {}", operation, short_name(fnam));
+            Logger::instance.log_sink(LogLevel::trace, &iter->second, {buff.data(), buff.size()});
+            buff.clear();
 
+        }
+
+        static std::string_view short_name(std::string_view n){
+            auto sz = n.size();
+            int bc = 0;
+            for (auto i = sz-sz; i < sz; ++i) {
+                char c = n[i];
+                if (isspace(c) && bc == 0) {
+                    n = n.substr(i);
+                    break;
+                }
+                if (c == '<') bc++;
+                if (c == '>') bc--;                
+            }
+            auto rc = n.find('(');
+            if (rc != n.npos) n = n.substr(0,rc);
+            n = network::trim(n);
+            return n;
         }
 
         virtual void resumed(std::coroutine_handle<> h) {
@@ -44,7 +67,7 @@ public:
         }
 
 
-protected:
+protected:    
     std::unordered_map<void *, std::source_location> _loc;
 };
 

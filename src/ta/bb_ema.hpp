@@ -25,7 +25,7 @@ public:
     Result update(Number new_value) {
         auto mean = _mean.update(new_value);
         auto dist = new_value  - mean;
-        double r = _var.update(dist * dist);
+        auto r = _var.update(dist * dist);
         return {mean, Number(std::sqrt(r))};
     }
     Result value() const {
@@ -33,7 +33,7 @@ public:
     }   
 protected:
     Ema<Number> _mean;
-    Ema<double> _var;
+    Ema<Number> _var;
 
     static Bollinger_Ema calculate_params(std::size_t p, double dev_adjust, Result initial_value) {
         double adj_p = static_cast<double>(p) * std::exp(dev_adjust);
