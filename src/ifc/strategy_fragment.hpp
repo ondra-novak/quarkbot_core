@@ -43,8 +43,8 @@ namespace quarkbot {
 
     class promise_type: public coro::coroutine<T>::promise_type {
         public:            
-            void *operator new(std::size_t sz) {return mem_pool.allocate(sz);}
-            void operator delete(void *ptr, std::size_t sz) {return mem_pool.deallocate(ptr, sz);}
+            void *operator new(std::size_t sz) {return LockFreeFramePool::allocate(sz);}
+            void operator delete(void *ptr, std::size_t sz) {return LockFreeFramePool::deallocate(ptr, sz);}
             
             
             void (*old_resume)(std::coroutine_handle<promise_type>) = nullptr;

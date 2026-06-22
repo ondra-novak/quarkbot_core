@@ -28,8 +28,10 @@ class DecimalPrinter:
         # Používáme float pro zobrazení v debuggeru
         real_value = mant * (10**(exp-16))
         
+      #  output = f'"{real_value:.16g} ( {sci_mant: .16g}e{exp-1} )"'
+        
         # Formátování pro náhled v řádku (Summary)
-        return f"{real_value:.16g} ( {sci_mant: .16g}e{exp-1} )"
+        return real_value
 
     def children(self):
         # Rozbalovací položky pro okno "Variables"

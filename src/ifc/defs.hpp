@@ -1,10 +1,8 @@
 #pragma  once
 
+#include "basic_coro/concepts.hpp"
 #include <cassert>
-#include <concepts>
 #include <memory>
-#include <stdexcept>
-#include <type_traits>
 #include <basic_coro/awaitable.hpp>
 #include <basic_coro/coroutine.hpp>
 
@@ -36,5 +34,17 @@ using PExecutionWorker = std::shared_ptr<IExecutionWorker>;
 using coroutine = coro::coroutine<void>;
 using PBacktestDataSource = std::shared_ptr<IBacktestDataSource>;
 using PMessageBus = std::shared_ptr<IMessageBus>;
+
+
+template<typename _Hub, typename _Val>
+concept HubProducer = requires(_Hub hub, _Val val) {
+    {hub.send(std::move(val))} -> coro::is_awaitable;
+    {hub.send(val)} -> coro::is_awaitable;    
+};
+
+template<typename _Hub, typename _Val>
+concept HubReceiver = requires(_Hub hub, _Val &val) {
+    {hub.receiver(val)} -> coro::is_awaitable;    
+};
 
 }

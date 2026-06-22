@@ -59,8 +59,9 @@ namespace quarkbot {
             return;
         }
 
+        auto tif = ord->get_parameters().time_in_force;
         ActiveOrder aord{
-            std::move(ord),std::move( instrument), 0,ord->get_parameters().time_in_force
+            std::move(ord),std::move( instrument), 0,tif
         };
         if (!validate_order(aord)) return;
 
@@ -429,6 +430,7 @@ namespace quarkbot {
         };
         order.filled += quantity;
         auto &simt = *static_cast<SimTradableInstrument *>(order.ord->get_instrument().get());
+        if (_report_sink) _report_sink(order.ord, f);
         simt.on_order_update(order.ord, f);
     }
 

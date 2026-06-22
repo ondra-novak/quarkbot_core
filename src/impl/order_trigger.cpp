@@ -19,6 +19,7 @@ namespace quarkbot {
 
         EventStream<Trade> *ev = nullptr;
         std::shared_ptr<OrderInternalData> placed_order = {};
+
         bool cancel_for_replace();
         bool replaced = false;        
         bool set_event(EventStream<Trade> *ev);
@@ -27,7 +28,7 @@ namespace quarkbot {
     };
 
     void TrigOrder::cancel_request() {
-        std::scoped_lock _(mx);
+        std::scoped_lock _(mx);        
         canceled.store(true);
         if (ev) ev->close();
         if (placed_order) placed_order->cancel();
@@ -70,10 +71,11 @@ namespace quarkbot {
         
         auto nword = std::make_shared<TrigOrder>(trig_params,instrument,
                 std::string(name), order_to_replace, _worker.now(),                 
-                [](OrderInternalData *ptr) {
-                    static_cast<TrigOrder *>(ptr)->cancel_request();
-                }, std::shared_ptr<OrderStorage>{});
-
+                std::shared_ptr<OrderStorage>{});
+        nword->set_cancel_fn([](OrderInternalData *me){
+            static_cast<TrigOrder *>(me)->cancel_request();
+        });
+        
         _worker.run(TrigOrder::monitor_order(nword, place_request));
         return nword;
     }
@@ -90,7 +92,7 @@ namespace quarkbot {
             bool b = convert_params_to_request(trig_params, req);
             if (!b) {
                 auto out =  OrderInternalData::create(trig_params, instrument, std::move(sname), 
-                    order_to_replace, _worker.now(),[](OrderInternalData *){}, {});
+                    order_to_replace, _worker.now(), {});
                 out->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "Not supported by local trigger"});
                 return out;
             } else {
@@ -201,12 +203,9 @@ namespace quarkbot {
                 placed.cancel();                
             }
 
-            order->update(OrderStatus::sent);
-            order->update(placed.get_handle()); //redirect
-            //old order is redirected to new on next receive
-            //old order is marked as done, so when all updates are received, it returns false
-            //old order will not emit cancel 
-
+            order->update(OrderStatus::sent);            
+            //redirect all updates to triggered order
+            placed.get_handle()->redirect_updates(order.get());
             co_return;
 
         } catch (std::exception &e) {

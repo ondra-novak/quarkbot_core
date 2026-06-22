@@ -17,6 +17,7 @@ namespace quarkbot {
         constexpr Quote &view() {return *this;}
 
         constexpr Decimal mid() const {return (bid+ask)*0.5_dec;}
+        constexpr bool both_sides() const {return bid && ask;}
 
         bool operator==(const Quote &) const  = default;
     };

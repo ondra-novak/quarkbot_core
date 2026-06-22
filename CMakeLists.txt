@@ -16,7 +16,7 @@ include(FetchContent)
 FetchContent_Declare(
     BasicCoro
     GIT_REPOSITORY https://www.github.com/ondra-novak/basic_coro.git
-    GIT_TAG 0d1376ebb5041cb8963ea0a82ee12050816c25c3
+    GIT_TAG 749ffcc918f61d3a99e96d0b045dc1ac3379201a
     EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(BasicCoro)

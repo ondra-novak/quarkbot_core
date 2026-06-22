@@ -108,6 +108,11 @@ public:
 
         ///specifies that default value is nullopt which expects result as std::optional<T> 
         constexpr OptionalValue operator()(std::nullopt_t) const;
+        
+        template<std::size_t n>
+        constexpr std::string_view operator()(const char (&def)[n]) const {
+            return this->operator()(std::string_view(def, n));
+        }
     };
 
     struct OptionalValue {

@@ -138,7 +138,7 @@ auto open_report(LineOutput line_output, ExecutionWorker worker = ExecutionWorke
         if (is_stop_order(params.type)) {
             std::format_to(iter, "{}", params.stop_price);
         }
-        if (std::holds_alternative<Fill>(update)) {
+        if (is_fill) {
             const Fill &fill = std::get<Fill>(update);
             std::format_to(iter, ",{},{}", fill.price, fill.amount);
         } else {

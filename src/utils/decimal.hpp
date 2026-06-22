@@ -102,6 +102,32 @@ namespace _decimal_details {
         }
     }
 
+        ///enforces compiler to implement division as fixed with multiplication
+    inline constexpr std::int64_t module_pow10(int64_t a, unsigned int b) {
+        switch (b){
+            case 0: return  0;
+            case 1: return  a%10LL;
+            case 2: return  a%100LL;
+            case 3: return  a%1000LL;
+            case 4: return  a%10000LL;
+            case 5: return  a%100000LL;
+            case 6: return  a%1000000LL;
+            case 7: return  a%10000000LL;
+            case 8: return  a%100000000LL;
+            case 9: return  a%1000000000LL;
+            case 10: return a%10000000000LL;
+            case 11: return a%100000000000LL;
+            case 12: return a%1000000000000LL;
+            case 13: return a%10000000000000LL;
+            case 14: return a%100000000000000LL;
+            case 15: return a%1000000000000000LL;
+            case 16: return a%10000000000000000LL;
+            case 17: return a%100000000000000000LL;
+            case 18: return a%1000000000000000000LL;
+            default: throw "exponent out of range";
+        }
+    }
+
     inline constexpr std::int64_t multiply_pow10(int64_t a, unsigned int b) {
         switch (b){
             case 0: return  a;
@@ -302,6 +328,9 @@ public:
     }
 
     static constexpr std::int64_t round_mantissa(std::int64_t m, unsigned int shift) {
+        if (shift > 18) {
+            return 0;
+        }
         std::int64_t n = static_cast<std::int64_t>(_decimal_details::lowestNumberWithNDigitsTable[shift+1]);
         if (m < 0) {
             return _decimal_details::divide_pow10(m - n/2, shift);
@@ -312,8 +341,7 @@ public:
 
     static constexpr std::int64_t floor_mantisa(std::int64_t m, unsigned int shift) {
         if (m < 0) {
-            std::int64_t n = static_cast<std::int64_t>(_decimal_details::lowestNumberWithNDigitsTable[shift]);
-            auto md = m % n;            
+            auto md = _decimal_details::module_pow10(m, shift);            
             return _decimal_details::divide_pow10(m,shift) - (md?1:0);
         } else {
             return _decimal_details::divide_pow10(m,shift);
@@ -323,9 +351,8 @@ public:
     static constexpr std::int64_t ceil_mantisa(std::int64_t m, unsigned int shift) {
         if (m < 0) {
             return _decimal_details::divide_pow10(m,shift);
-        } else {
-            std::int64_t n = static_cast<std::int64_t>(_decimal_details::lowestNumberWithNDigitsTable[shift]);
-            auto md = m % n;            
+        } else {            
+            auto md = _decimal_details::module_pow10(m, shift);            
             return _decimal_details::divide_pow10(m,shift) + (md?1:0);
         }
     }
@@ -403,21 +430,22 @@ public:
     }
 
     friend constexpr Decimal round(const Decimal &other) {
-        auto e = other.exponent();
+        auto e = std::max(other.exponent(),Exponent(-1));
         if (e >= mantissa_digits) return other;
         auto r =round_mantissa(other.mantissa(), static_cast<unsigned int>(-e+mantissa_digits));
         return Decimal(r);
     }
 
     friend constexpr Decimal floor(const Decimal &other) {
-        auto e = other.exponent();
+        auto e = std::max(other.exponent(),Exponent(-1));
         if (e >= mantissa_digits) return other;
         auto r =floor_mantisa(other.mantissa(),  static_cast<unsigned int>(-e+mantissa_digits));
         return Decimal(r);
     }
 
     friend constexpr Decimal ceil(const Decimal &other) {
-        auto e = other.exponent();
+        if (other._packed == 0) return 0;        
+        auto e = std::max(other.exponent(),Exponent(-1));
         if (e >= mantissa_digits) return other;
         auto r =ceil_mantisa(other.mantissa(),  static_cast<unsigned int>(-e+mantissa_digits));
         return Decimal(r);

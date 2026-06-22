@@ -7,6 +7,7 @@
 #include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
 #include "defs.hpp"
+#include <concepts>
 #include <functional>
 #include <memory>
 #include <memory_resource>
@@ -25,9 +26,9 @@ namespace quarkbot {
 
     class StrategyContext;
 
-    template<typename T>
-    concept StrategyClass = requires(T val, StrategyContext ctx) {
-        {T(ctx)};
+    template<typename T, typename Context>
+    concept StrategyClass = requires(T val, Context ctx) {
+        {T(std::move(ctx))};
         {val.main()}->std::same_as<StrategyFragment>;
     };
 
@@ -65,8 +66,9 @@ namespace quarkbot {
         - strategy is kept alive until stop signal is activated
         - after this, it schedules self twice to proper cleanup, but then it destroys the strategy        
          */
-        template<StrategyClass _S>
-        friend StrategyFragment create_and_start_strategy(StrategyContext ctx) {
+        template<typename _S, std::derived_from<StrategyContext> _Context>
+        requires(StrategyClass<_S, _Context>)
+        static StrategyFragment create_and_start_strategy(_Context &&ctx) {
 
             ctx.active_group  = std::make_shared<StrategyFragmentGroup>();
             //retrieve worker

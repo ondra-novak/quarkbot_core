@@ -48,16 +48,14 @@ namespace quarkbot {
     public:
         //update definition
 
-        using Update = std::variant<Fill, OrderStatus, OrderRejectionReason, OrderRejectionWithText,  OrderOpenStatus, POrderAData>;
+        using Update = std::variant<Fill, OrderStatus, OrderRejectionReason, OrderRejectionWithText,  OrderOpenStatus>;
         using CancelFn = std::function<void(OrderInternalData *)>;
 
         
 
         static OrderStatus update2status(const Update &up) {
             return std::visit([]<typename T>(const T &x){
-                if constexpr(std::is_same_v<T, POrderAData>) {
-                    return OrderStatus::sent;
-                } else if constexpr(std::is_same_v<T, OrderStatus>) {
+                if constexpr(std::is_same_v<T, OrderStatus>) {
                     return x;
                 } else if constexpr(std::is_same_v<T, OrderRejectionReason>) {
                     return rejection_reason_2_status(x);
@@ -80,7 +78,6 @@ namespace quarkbot {
             std::string name,
             std::weak_ptr<OrderInternalData> replaced_order,            
             std::chrono::system_clock::time_point create_time,
-            CancelFn cancel_fn,
             std::shared_ptr<OrderStorage> storage)
                 :parameters(std::move(parameters))
                 ,instrument(std::move(instrument))
@@ -88,20 +85,23 @@ namespace quarkbot {
                 ,replaced_order(std::move(replaced_order))
                 ,create_time(std::move(create_time))
                 ,storage(std::move(storage))
-                ,cancel_fn(std::move(cancel_fn)) {}
+                 {
+                    updates_target = this;
+                }
 
         virtual ~OrderInternalData() {
             if (!done && !keep_alive.load(std::memory_order_relaxed)) {
                 cancel();
             }
         }
+        OrderInternalData(const OrderInternalData &) = delete;
+        OrderInternalData &operator=(const OrderInternalData &) = delete;
 
         static std::shared_ptr<OrderInternalData> create(OrderParameters parameters,
                                                 std::shared_ptr<ITradableInstrument> instrument,
                                                 std::string name,
                                                 std::weak_ptr<OrderInternalData> replaced_order,            
-                                                std::chrono::system_clock::time_point create_time,
-                                                CancelFn cancel_fn,
+                                                std::chrono::system_clock::time_point create_time,                
                                                 std::shared_ptr<OrderStorage> storage
                                             ) 
         {
@@ -110,14 +110,13 @@ namespace quarkbot {
                             std::move(instrument),
                             std::move(name),
                             std::move(replaced_order),
-                            std::move(create_time),
-                            std::move(cancel_fn),
+                            std::move(create_time),                
                             std::move(storage)
                         );
         }
 
 
-                void update(Fill &&up) {
+        void update(Fill &&up) {
             if (storage) {
                 if (storage->check_fill_exists(up)) return;
                 auto wr = storage->write();
@@ -127,8 +126,8 @@ namespace quarkbot {
                 storage->store_filled(wr,key, fst);
                 wr->commit();
             }
-            std::scoped_lock _(mx);
-            updates.push_back(std::move(up));
+            std::scoped_lock _(updates_target->mx);
+            updates_target->updates.push_back(std::move(up));
             notify_lk();
         }
 
@@ -137,10 +136,10 @@ namespace quarkbot {
                 auto wr = storage->write();
                 storage->close_order(wr, key);
             }
-            std::scoped_lock _(mx);
-            updates.push_back(st);
-            done = done || is_done_status(st);
-            notify_lk();
+            std::scoped_lock _(updates_target->mx);
+            updates_target->updates.push_back(st);
+            updates_target->done = updates_target->done || is_done_status(st);
+            updates_target->notify_lk();
         }
 
         void update(OrderRejectionReason st) {
@@ -148,20 +147,20 @@ namespace quarkbot {
                 auto wr = storage->write();
                 storage->close_order(wr, key);
             }
-            std::scoped_lock _(mx);
-            updates.push_back(st);
-            done = true;
-            notify_lk();
+            std::scoped_lock _(updates_target->mx);
+            updates_target->updates.push_back(st);
+            updates_target->done = true;
+            updates_target->notify_lk();
         }
         void update(OrderRejectionWithText &&st) {
             if (storage) {
                 auto wr = storage->write();
                 storage->close_order(wr, key);
             }
-            std::scoped_lock _(mx);
-            updates.push_back(st);
-            done = true;
-            notify_lk();
+            std::scoped_lock _(updates_target->mx);
+            updates.push_back(std::move(st));
+            updates_target->done = true;
+            updates_target->notify_lk();
         }
 
         void update(OrderOpenStatus &&st) {
@@ -169,18 +168,12 @@ namespace quarkbot {
                 auto wr = storage->write();
                 storage->open_order(wr, st.key, {st.id,name,parameters});
             }
-            std::scoped_lock _(mx);
-            id = st.id;
-            key = st.key;
-            updates.push_back(OrderStatus::open);
-            done = false;
-            notify_lk();
-        }
-        void update(POrderAData to) {
-            std::scoped_lock _(mx);            
-            updates.push_back(to);
-            done = true;    //this instance i done
-            notify_lk();
+            std::scoped_lock _(updates_target->mx);
+            id = updates_target->id = st.id;
+            key = updates_target->key = st.key;
+            updates_target->updates.push_back(OrderStatus::open);
+            updates_target->done = false;
+            updates_target->notify_lk();
         }
         void forward_update(Update &&up) {
             std::visit([&](auto &x){this->update(std::move(x));},up);
@@ -212,10 +205,15 @@ namespace quarkbot {
             return register_awaiter_lk(report, redirect_ptr, promise);
         }
 
-        bool is_done() const {
+        bool is_done_lk() const {
             return done;
         }
         
+        bool is_done() const {
+            std::scoped_lock _(mx);
+            return done && updates.empty();
+        }
+
         const OrderParameters &get_parameters() const {return parameters;}
         std::shared_ptr<ITradableInstrument> get_instrument() const {return instrument;}
         const std::string &get_name() const {return name;}
@@ -223,7 +221,24 @@ namespace quarkbot {
         std::chrono::system_clock::time_point get_create_time() const {return create_time;}
         void set_keep_alive(bool kp = true) {keep_alive.store(kp, std::memory_order_relaxed);}
         bool is_keep_alive() const {return keep_alive.load(std::memory_order_relaxed);}
-        void cancel() {cancel_fn(this);}
+        void cancel() {if (cancel_fn) [[likely]] cancel_fn(this);}
+
+        ///set cancel callback
+        /**
+            The provider must set cancel callback before the order is emited to the frontend, otherwise operation is not MT
+        */
+        void set_cancel_fn(CancelFn fn) {cancel_fn = std::move(fn);};
+        ///Redirects updates to other order data
+        /**
+            This used to implement triggered order. Original order defintion is held by trigger engine while
+            updates from created order after trigger are forwarded into original order.            
+         */
+        void redirect_updates(OrderInternalData *to) {
+            std::scoped_lock _(mx);
+            updates_target = to;
+            for (auto &x: updates) to->forward_update(std::move(x));
+            to->done = done;
+        }
 
         ///mark canceled
         /**
@@ -241,6 +256,16 @@ namespace quarkbot {
         }
 
         const std::string &get_id() const {return id;}
+
+        const std::string &get_id_unsafe() const {
+            static std::string empty_id;
+            std::scoped_lock _(mx);
+            //if id is empty - return empty id reference
+            if (id.empty()) return empty_id;
+            //otherwise we can return valid object as the object won't be changed
+            else return id;
+
+        }
         void set_id(std::string id) {this->id = std::move(id);}
         Decimal get_remaining_quantity() const {return parameters.quantity - fst.filled;}
 
@@ -263,6 +288,8 @@ namespace quarkbot {
         std::shared_ptr<OrderStorage> storage = {};
         ///cancel function - must be filled by adapter
         CancelFn cancel_fn = {};
+
+        OrderInternalData *updates_target;
 
         mutable std::mutex mx;
         ///queue of updates
@@ -326,8 +353,6 @@ namespace quarkbot {
             updates.clear();
             report.filled = fst.filled;
             report.turnover = fst.turnover;
-            report.id = id;
-            report.name = name;
             return ok;
         }
 

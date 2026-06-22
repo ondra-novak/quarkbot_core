@@ -53,6 +53,7 @@ public:
     using ReportSink = SimExecutor::ReportSink;
 
     void set_slippage(double slippage) { _executor.set_slippage(slippage); }
+    void set_latency(std::chrono::system_clock::duration dur) {_executor.set_latency(dur);}
     void set_reporter(ReportSink sink) {_executor.set_report_sink(std::move(sink));}
 
     ///create account, set up initial wallet
