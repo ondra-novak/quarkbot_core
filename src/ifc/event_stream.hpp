@@ -74,8 +74,8 @@ public:
     }
 
          
-    ///read next event, if available, and copy it to ref, also report count of missed events     
-    coro::awaitable<bool> next(T &val, std::size_t &missed) {return _stream->next(val.view(), missed);}
+    ///receive next event, if available, and copy it to ref, also report count of missed events     
+    coro::awaitable<bool> receive(T &val, std::size_t &missed) {return _stream->next(val.view(), missed);}
 
     bool current(T &val) {
           if constexpr (HasStreamView<T>) {

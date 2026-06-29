@@ -13,7 +13,7 @@ namespace quarkbot {
     ///rounding to a value that represents less risk
     defensive,
     ///rounding to a value that represents more risk
-    aggresive
+    aggressive
 };
 
 ///Represents rounded number with specified round strategy
@@ -50,7 +50,7 @@ public:
                 } else {
                     return round(v)*step;
                 }
-            case RoundStrategy::aggresive:
+            case RoundStrategy::aggressive:
                 if (aggresive_side > 0) {
                     return ceil(v)*step;
                 } else if (aggresive_side < 0) { 
