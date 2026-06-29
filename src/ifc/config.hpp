@@ -108,7 +108,7 @@ public:
     }
 
     ///create sub-configuration for a section, section name is added as prefix to keys in the sub-configuration
-    constexpr Config operator/(std::string_view section) {
+    constexpr Config operator   /(std::string_view section) {
         std::string sub;
         build_whole_key(sub, section);
         return Config(*this, sub);

@@ -53,3 +53,4 @@ target_sources(quarkbot_ifc INTERFACE
             ./event_stream.hpp
             ./config.hpp
 )
+add_library(quarkbot::ifc ALIAS quarkbot_ifc)

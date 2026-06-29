@@ -19,18 +19,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(BasicCoro)
 
-
-#Find LevelDB using pkg-config
-find_package(PkgConfig REQUIRED)
-#pkg_check_modules(LIBSSL REQUIRED openssl)
-#pkg_check_modules(LIBWEBSOCKETS REQUIRED libwebsockets)
-
-
-find_library(LEVELDB_LIBRARIES leveldb)
-#if(NOT LEVELDB_LIBRARIES)
-  #message(FATAL_ERROR "libleveldb missing (libleveldb-dev)?")
-#endif()
-
+OPTION(QUARKBOT_NETWORK "Compile network lib (requires openssl)" OFF)
+OPTION(QUARKBOT_LEVELDB "Compile leveldb storage (requires leveldb)" OFF)
+OPTION(QUARKBOT_TARDIS "Compile tardis importer (requires zlib)" OFF)
+if (CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    OPTION(QUARKBOT_TESTS "Compile tests (require everything)" ON)
+else()
+    OPTION(QUARKBOT_TESTS "Compile tests (require everything)" OFF)
+endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/)
@@ -38,11 +34,12 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/)
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_INSTALL_PREFIX "/usr/local" CACHE PATH "Default path to install" FORCE)
 endif()
-enable_testing()
-include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/src)
 add_subdirectory("src")
 add_subdirectory("src/strategies/print_events")
 add_subdirectory("src/strategies/trending")
 add_subdirectory("src/exec")
+if (QUARKBOT_TESTS)
+enable_testing()
 add_subdirectory("src/tests")
+endif()
 

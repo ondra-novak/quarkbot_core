@@ -1,4 +1,4 @@
-find_package(ZLIB REQUIRED)
+
 
 add_library(quarkbot_impl)
 target_sources(quarkbot_impl PUBLIC
@@ -18,8 +18,6 @@ target_sources(quarkbot_impl PUBLIC
             ./streaming/publisher_manager.hpp
             ./streaming/lock_free_publisher.hpp
             ./simtradableinstrument.hpp
-            ./tardis_data_source.hpp
-            ./configured_data_source.hpp
             ./mmbot_data_source.hpp
             ./merged_data_source.hpp
             ./thread_executor.hpp
@@ -29,7 +27,6 @@ target_sources(quarkbot_impl PUBLIC
             ./simexecutor.hpp
             ./siminstrument.hpp
             ./logger.hpp
-            ./leveldb_storage.hpp
             ./simaccount.hpp
             ./order_trigger.hpp
             ./simexec_report_csv.hpp
@@ -41,14 +38,11 @@ target_sources(  quarkbot_impl PRIVATE
         ./thread_executor.cpp
         ./siminstrument.cpp
         ./backtest.cpp
-        ./tardis_data_source.cpp
-        ./leveldb_storage.cpp
         ./backtest_executor.cpp
         ./mmbot_data_source.cpp
         ./simaccount.cpp
         ./order_trigger.cpp
         ./logger.cpp
-        ./configured_data_source.cpp
         ./simexecutor.cpp
         ./simexchange.cpp
         
@@ -58,9 +52,7 @@ target_link_libraries(quarkbot_impl
     PRIVATE BasicCoro::basic_coro
     PRIVATE quarkbot_utils
     PRIVATE quarkbot_ifc
-    PRIVATE ZLIB::ZLIB
-    PRIVATE leveldb
-    
+   
 )
 
-
+add_library(quarkbot::impl ALIAS quarkbot_impl)

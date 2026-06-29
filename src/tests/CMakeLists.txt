@@ -34,3 +34,5 @@ foreach (testFile ${BASIC_TESTS})
 endforeach()
 
 target_link_libraries(test_websocket_binance PRIVATE quarkbot_network)
+target_link_libraries(test_tardis_source_test PRIVATE quarkbot_tardis)
+target_link_libraries(test_instrument_spec_test PRIVATE quarkbot_tardis)

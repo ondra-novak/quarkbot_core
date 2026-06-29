@@ -1,4 +1,7 @@
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBSSL REQUIRED openssl)
+
 
 add_library(quarkbot_network)
 target_sources(  quarkbot_network PUBLIC
@@ -29,3 +32,5 @@ target_sources(quarkbot_network PRIVATE
 )
 
 target_link_libraries(quarkbot_network PRIVATE ssl crypto)
+
+add_library(quarkbot::network ALIAS quarkbot_network)

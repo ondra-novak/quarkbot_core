@@ -1,4 +1,5 @@
 add_library(quarkbot_utils INTERFACE)
+add_library(quarkbot::utils ALIAS quarkbot_utils)
 
 target_link_libraries(quarkbot_utils INTERFACE BasicCoro::basic_coro)
 target_sources(quarkbot_utils INTERFACE
