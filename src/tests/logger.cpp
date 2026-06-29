@@ -18,10 +18,10 @@ LogLevel prev_log_level =LogLevel::disabled;
 std::source_location prev_source_loc;
 
 
-void test_logger(LogLevel level, const std::source_location &location, std::string_view content){
+void test_logger(LogLevel level, const std::source_location *location, std::string_view content){
     prev_line = content;
     prev_log_level = level;
-    prev_source_loc = location;
+    prev_source_loc = *location;
 }
 
 

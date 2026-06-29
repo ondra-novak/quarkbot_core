@@ -38,12 +38,12 @@ void test_report() {
     auto ord = OrderInternalData::create({
         Side::buy,OrderType::limit,123,456
     }, std::static_pointer_cast<ITradableInstrument>(tinstr), "ord1", {}, tp,
-     [](auto){}, {});
+     {});
 
     auto ord2 = OrderInternalData::create({
         Side::sell,OrderType::stoplimit,111,687,689
     }, std::static_pointer_cast<ITradableInstrument>(tinstr), "ord2", ord, tp,
-     [](auto){}, {});
+     {});
      
     auto exec = BacktestExecutor::create();
     exec->set_time(tp);
