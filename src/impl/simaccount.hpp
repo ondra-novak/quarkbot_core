@@ -59,7 +59,7 @@ public:
     }
 
     bool check_bankruptcy(const WalletInfo &info) const {
-        return info.balance + info.unrealized_pnl > info.initial_margin + info.order_blocked;
+        return info.balance + info.unrealized_pnl >= info.initial_margin + info.order_blocked;
     }
 
 

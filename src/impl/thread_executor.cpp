@@ -150,17 +150,20 @@ namespace quarkbot {
         
     }
 
-    void ThreadExecutor::join() {
+    bool ThreadExecutor::join() {
         std::size_t join_counter;
         {
-            std::scoped_lock _(_mx);
-            join_counter = _in_task?1:0 + _dispatch_queue.size();
+            std::scoped_lock _(_mx);        
+            std::size_t sz =  _in_task?1:0 + _dispatch_queue.size();
+            if (sz == 0) return false;
+            join_counter = _counter.load(std::memory_order_relaxed) + sz;
         }
-        auto c = _counter.load(std::memory_order_relaxed);
+        auto c = _counter.load(std::memory_order_relaxed);        
         while (c < join_counter) {
             _counter.wait(c);
              c = _counter.load(std::memory_order_relaxed);
         }
+        return true;
     }
 
 }

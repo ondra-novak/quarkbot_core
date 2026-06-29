@@ -1,6 +1,6 @@
 add_library(quarkbot_ifc INTERFACE)
 
-target_link_libraries(quarkbot_ifc INTERFACE BasicCoro::basic_coro)
+target_link_libraries(quarkbot_ifc INTERFACE basic_coro::basic_coro)
 target_sources(quarkbot_ifc INTERFACE
          FILE_SET HEADERS  
          BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/.." FILES 

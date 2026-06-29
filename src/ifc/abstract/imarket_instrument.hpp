@@ -3,6 +3,9 @@
 #include "../underlying.hpp"
 #include "../types.hpp"
 #include "../abstract/ipublisher.hpp"
+#include "ifc/config.hpp"
+#include <functional>
+#include <type_traits>
 namespace quarkbot {
 
 
@@ -29,13 +32,17 @@ public:
     };
     struct Info : ContractInfo, Geometry{            
         ///underlying currency for quotes
-        UnderlyingCurrency quote_currency;
+        UnderlyingCurrency quote_currency = {};
         ///underlying currency for pnl, can be different - for example inverted futures 
-        UnderlyingCurrency pnl_currency;
+        UnderlyingCurrency pnl_currency = {};
         ///underlying currenct for asset if exists (nullopt for contracts, stocks and non currency assets)
-        std::optional<UnderlyingCurrency> asset_wallet;
+        std::optional<UnderlyingCurrency> asset_wallet = {};
         ///instrument name - not need to be unique (exchange related)
-        std::string name;
+        std::string name = {};
+
+        ///contains class hash of extension. It allows to check that structure contains correct extension. Default value is 0, no extension
+        std::size_t extension_hash = 0;
+       
 
         ///instrument is leveraged
         bool is_leveraged() const {return leverage > 0;}

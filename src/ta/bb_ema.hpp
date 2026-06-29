@@ -14,8 +14,8 @@ public:
         Number dev = {};
     };
 
-    Bollinger_Ema(Number mean_apha, Number dev_alpha, Result initial_value)
-        :_mean(mean_apha, initial_value.mean)
+    Bollinger_Ema(Number mean_alpha, Number dev_alpha, Result initial_value)
+        :_mean(mean_alpha, initial_value.mean)
         ,_var(dev_alpha, initial_value.dev) {}
 
     static Bollinger_Ema from_period(std::size_t period, double dev_adjust, Result initial_value) {
@@ -25,7 +25,7 @@ public:
     Result update(Number new_value) {
         auto mean = _mean.update(new_value);
         auto dist = new_value  - mean;
-        double r = _var.update(dist * dist);
+        auto r = _var.update(dist * dist);
         return {mean, Number(std::sqrt(r))};
     }
     Result value() const {
@@ -33,7 +33,7 @@ public:
     }   
 protected:
     Ema<Number> _mean;
-    Ema<double> _var;
+    Ema<Number> _var;
 
     static Bollinger_Ema calculate_params(std::size_t p, double dev_adjust, Result initial_value) {
         double adj_p = static_cast<double>(p) * std::exp(dev_adjust);

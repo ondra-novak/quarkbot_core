@@ -1,6 +1,14 @@
 #pragma once
+#include "basic_coro/coro_frame.hpp"
 #include "basic_coro/coroutine.hpp"
+#include "basic_coro/pending.hpp"
+#include "ifc/execution_worker.hpp"
 #include "ifc/memory.hpp"
+#include <coroutine>
+#include <deque>
+#include <mutex>
+#include <source_location>
+#include <unordered_map>
 namespace quarkbot {
 
 
@@ -16,19 +24,57 @@ namespace quarkbot {
 
     */
 
+    class IAsyncDebugTrace {
+    public:
+
+        virtual void add(std::coroutine_handle<> h, const std::source_location &loc) = 0;
+        virtual void remove(std::coroutine_handle<> h) = 0;
+        virtual void resumed(std::coroutine_handle<> h) = 0;        
+        virtual ~IAsyncDebugTrace() = default;
+        static IAsyncDebugTrace *trace;
+    };
+
+    inline IAsyncDebugTrace * IAsyncDebugTrace::trace = nullptr;
+
+
     template<typename T>
     class Async : public coro::coroutine<T> {
     public:
-        class promise_type: public coro::coroutine<T>::promise_type {
+
+    class promise_type: public coro::coroutine<T>::promise_type {
         public:            
-            void *operator new(std::size_t sz) {return mem_pool.allocate(sz);}
-            void operator delete(void *ptr, std::size_t sz) {return mem_pool.deallocate(ptr, sz);}
+            void *operator new(std::size_t sz) {return LockFreeFramePool::allocate(sz);}
+            void operator delete(void *ptr, std::size_t sz) {return LockFreeFramePool::deallocate(ptr, sz);}
+            
+            
+            void (*old_resume)(std::coroutine_handle<promise_type>) = nullptr;
+
+            static void debug_traced_resume(std::coroutine_handle<promise_type> h) {
+                IAsyncDebugTrace::trace->resumed(h);
+                auto &me = h.promise();
+                me.old_resume(h);
+            }
+
+            std::suspend_always initial_suspend(std::source_location loc = std::source_location::current())  noexcept {
+                if (IAsyncDebugTrace::trace) {
+                    auto h = std::coroutine_handle<promise_type>::from_promise(*this);
+                    IAsyncDebugTrace::trace->add(h, loc);                
+                    auto frame_ptr = reinterpret_cast<void (**)(std::coroutine_handle<promise_type>) >(h.address());
+                    old_resume = *frame_ptr;
+                    *frame_ptr = &debug_traced_resume;
+                }
+                return {};
+            }        
+
+            ~promise_type() {
+                if (IAsyncDebugTrace::trace) IAsyncDebugTrace::trace->remove(std::coroutine_handle<promise_type>::from_promise(*this));
+            }
+            
         };
 
         Async() = default;
         Async(coro::coroutine<T> x):coro::coroutine<T>(std::move(x)) {}
     };
-
 
     ///A fragment of a strategy running concurrently with other fragments
     /**
@@ -45,5 +91,43 @@ namespace quarkbot {
     public:
         using Async<void>::Async;
     };
+
+    ///Creates execution group of multiple strategy fragments
+    class StrategyFragmentGroup {
+    public:
+
+        ///Add fragment o group, the fragment is started, and becomes part of the group
+        void add(StrategyFragment frag) {
+            std::lock_guard _(_mx);
+            add(std::move(frag), ExecutionWorker::current().required());
+        }
+
+
+        ///Add fragment o group, the fragment is started, and becomes part of the group
+        void add(StrategyFragment frag, ExecutionWorker &worker) {
+            std::lock_guard _(_mx);
+            _pending_list.emplace_back(std::move(frag), [&](auto p){
+                worker.resume(std::move(p));
+            });
+        }
+
+        ///join the group (synchronize with group completion)
+        awaitable<void> join() {
+            std::lock_guard _(_mx);
+            auto waiter = [](std::deque<coro::pending<StrategyFragment> > list) mutable -> StrategyFragment {
+                for (auto &x: list) {
+                    co_await x;
+                }
+            };
+            return waiter(std::move(_pending_list));
+        }
+
+    protected:
+         std::deque<coro::pending<StrategyFragment> >  _pending_list;
+        std::mutex _mx;
+
+    };
+
+    
 
 }

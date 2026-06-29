@@ -1,6 +1,8 @@
 #pragma once
 
 
+#include "ifc/types.hpp"
+#include "utils/lookup.hpp"
 #include <format>
 #include <source_location>
 #include <type_traits>
@@ -27,6 +29,17 @@ namespace quarkbot {
         trace = 5,
     };
 
+    template<>
+    inline constexpr auto string_lookup<LogLevel> = make_string_lookup_table<LogLevel>({        
+            {LogLevel::disabled,"disabled"},
+            {LogLevel::fatal,"fatal"},
+            {LogLevel::error,"error"},
+            {LogLevel::warning,"warning"},
+            {LogLevel::info,"info"},
+            {LogLevel::debug,"debug"},
+            {LogLevel::trace,"trace"},        
+    });
+
     ///logger object (singleton)
     struct Logger {
         ///current log level
@@ -39,8 +52,8 @@ namespace quarkbot {
 
         @note default sink is empty, so no log is produced. See redirection functions
         */
-        void (*log_sink)(LogLevel level, const std::source_location &location, std::string_view content)
-             = [](LogLevel , const std::source_location &,  std::string_view ) {/*no logger by default*/};        
+        void (*log_sink)(LogLevel level, const std::source_location *location, std::string_view content)
+             = [](LogLevel , const std::source_location *,  std::string_view ) {/*no logger by default*/};        
     
 
         ///retrieves local buffer suitable to hold message during formation
@@ -95,7 +108,7 @@ namespace quarkbot {
         if (Logger::instance.cur_level < level) return;        
         std::format_to<std::back_insert_iterator<std::vector<char> >, typename LoggerTypeType<Args>::type...>(
                     std::back_inserter(buffer), format,  LoggerTypeType<Args>()(std::forward<Args>(args))...);
-        Logger::instance.log_sink(level, format._loc, {buffer.begin(), buffer.end()});
+        Logger::instance.log_sink(level, &format._loc, {buffer.begin(), buffer.end()});
         buffer.clear();
     }
 

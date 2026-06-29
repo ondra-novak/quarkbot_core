@@ -1,15 +1,20 @@
 #pragma once
 
-#include "basic_coro/awaitable.hpp"
+#include "awaitable_stop.hpp"
+#include "basic_coro/pending.hpp"
 #include "ifc/config.hpp"
+#include "ifc/types.hpp"
 #include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
 #include "defs.hpp"
+#include <concepts>
 #include <functional>
 #include <memory>
 #include <memory_resource>
 #include "tradable_instrument.hpp"
 #include "utils/json.hpp"
+#include <stop_token>
+#include <utility>
 #include <vector>
 namespace quarkbot {
 
@@ -21,17 +26,16 @@ namespace quarkbot {
 
     class StrategyContext;
 
-    template<typename T>
-    concept StrategyClass = requires(T val, StrategyContext ctx) {
-        {T(ctx)};
+    template<typename T, typename Context>
+    concept StrategyClass = requires(T val, Context ctx) {
+        {T(std::move(ctx))};
         {val.main()}->std::same_as<StrategyFragment>;
     };
 
 
-
     class StrategyContext {
     public:
-        using Config = Config<std::function<std::optional<std::string_view>(std::string_view)> >;
+        using Config = Config<std::function<std::optional<std::string_view>(const std::string &)> >;
 
         ///List of tradable instruments available to the strategy
         /** the strategy can query for accounts and exchanges through the instruments */
@@ -44,29 +48,17 @@ namespace quarkbot {
         StrategyMode mode;
         ///Strategy configuration
         Config config;
-        
-        ///co_await on this to wait on stop signal
-        /**
-        There can be multiple awaiting coroutines. All these coroutines are resumed on stop signal
 
-        @code
-            co_await context.stop_signal();     //pause and wakeup on exit
-        @endcode
-         */
-        std::function<awaitable<coro::void_type>()> stop_signal;
+        AwaitableStopToken stop_signal;
 
-        //start strategy instance
-        /**
-            @param strategy_instance reference to strategy instance - lifetime is handled by caller
-             (can be allocated statically)
-            @param ctx r-value of context (std::move()) starts the strategy with given context
-        */
+        std::shared_ptr<StrategyFragmentGroup> active_group = {};
         
-        template<StrategyClass _S>
-        friend void start_strategy(_S &strategy_instance, StrategyContext &&ctx) {
-            auto worker = ctx.exec_worker;
-            worker.run(strategy_instance.start(std::move(ctx)));
+        ///start strategy fragment and add it to fragment group ensuring that strategy will not be destroyed until fragment is finished
+        /** Use for long time running fragments, not for short ones. The fragemnt stays registered even if it is already finished */
+        void launch(StrategyFragment fragment) {
+            active_group->add(std::move(fragment), exec_worker);
         }
+
 
         ///create and start the strategy
         /**
@@ -74,8 +66,11 @@ namespace quarkbot {
         - strategy is kept alive until stop signal is activated
         - after this, it schedules self twice to proper cleanup, but then it destroys the strategy        
          */
-        template<StrategyClass _S>
-        friend StrategyFragment create_and_start_strategy(StrategyContext ctx) {
+        template<typename _S, std::derived_from<StrategyContext> _Context>
+        requires(StrategyClass<_S, _Context>)
+        static StrategyFragment create_and_start_strategy(_Context &&ctx) {
+
+            ctx.active_group  = std::make_shared<StrategyFragmentGroup>();
             //retrieve worker
             auto worker = ctx.exec_worker;
             //retrieve awaitable for stop
@@ -84,14 +79,17 @@ namespace quarkbot {
             _S strategy{ctx};
             co_await worker.schedule();
             //run strategy, wait until exit
-            co_await strategy.start(std::move(ctx));            
+            co_await strategy.main();            
             //wait until context stop
             co_await stop_awaitable;
+            //join whole group
+            co_await ctx.active_group->join();
             //scheduler twice
             co_await worker.schedule();
             co_await worker.schedule();            
             //strategy is destroyed here
         }
+
 
 
     };

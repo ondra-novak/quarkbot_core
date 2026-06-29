@@ -100,10 +100,11 @@ std::shared_ptr<OrderInternalData>  SimTradableInstrument::place_order(const Ord
         std::string(name),
         old_state,
         worker.required().now(),
-        [me = shared_from_this()](OrderInternalData *order){
-            me->_instrument->get_sim_exchange()->cancel_order(order);
-        }, _order_storage
+        _order_storage
     );
+    st->set_cancel_fn([me = shared_from_this()](OrderInternalData *order){
+            me->_instrument->get_sim_exchange()->cancel_order(order);
+    });
 
 
     const auto &info = _instrument->get_info();    
@@ -192,12 +193,12 @@ std::vector<Order> SimTradableInstrument::attach_storage(PStorage storage, std::
             s.st.name,
             std::weak_ptr<OrderInternalData>(),
             worker.required().now(),
-                    [this](OrderInternalData *order){
-                    _instrument->get_sim_exchange()->cancel_order(order);
-                    },
             _order_storage
         );
         adata->set_restored_data(s.st.id,s.fill_st);
+        adata->set_cancel_fn([this](OrderInternalData *order){
+                    _instrument->get_sim_exchange()->cancel_order(order);
+        });
         Order ord(std::move(adata));
         out.push_back(ord);
     }

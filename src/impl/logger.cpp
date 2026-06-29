@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <iterator>
 #include <mutex>
@@ -30,6 +31,7 @@ namespace {
     std::size_t _rotation_interval = 0;
     std::size_t _rotation_retention = 0;
     std::vector<char> _format_buffer;
+    std::function<std::chrono::system_clock::time_point()> _time_source = []{return std::chrono::system_clock::now();};
 
 
     void open_file_by_rotate_number(std::size_t rotnum) {
@@ -105,25 +107,32 @@ namespace {
         return part.substr(0,sep);       
     }
 
-    void file_sink_lk(std::chrono::system_clock::time_point tp, std::ostream &file, LogLevel level, const std::source_location &location, std::string_view content) {
+    void file_sink_lk(std::chrono::system_clock::time_point tp, std::ostream &file, LogLevel level, const std::source_location *location, std::string_view content) {
          auto now_mseconds = std::chrono::time_point_cast<std::chrono::milliseconds>(tp);
-        std::format_to(std::back_inserter(_format_buffer),
-        "{:%Y-%m-%d %H:%M:%S} T{} {} [{}] {} {{{}:{}}}",
-            now_mseconds,
-            thread_counter.cur_id , level_names[static_cast<std::size_t>(level)], 
-            class_name(location), content, location.file_name(), location.line()
-        );
-        for (auto &x: _format_buffer) if (x == '\n') x = '\x7F';
-        _format_buffer.push_back('\n');
+         auto ins = std::back_inserter(_format_buffer);
+         std::format_to(ins, "{:%Y-%m-%d %H:%M:%S} {}", now_mseconds, level_names[static_cast<std::size_t>(level)]);
+         if (thread_counter.cur_id) std::format_to(ins, " T{}", thread_counter.cur_id);         
+         if (location) std::format_to(ins, " [{}]", class_name(*location));
+         *ins++ = ' ';
+         ins = std::transform(content.begin(), content.end(), ins, [](char c){
+            return c == '\n'?'\x7F':c;
+         });
+         if (location) {
+            std::string_view filename = location->file_name();
+            auto sep = filename.find_last_of("\\/");
+            if (sep != filename.npos) filename.remove_prefix(sep+1);
+            std::format_to(ins, " {{{}:{}}}", filename, location->line());         
+         }
+         *ins++ = '\n';
         file.write(_format_buffer.data(),static_cast<int>( _format_buffer.size()));
         _format_buffer.clear();
     }
 
-    void std_error_sink(LogLevel level, const std::source_location &location, std::string_view content) {
+    void std_error_sink(LogLevel level, const std::source_location *location, std::string_view content) {
         std::scoped_lock _(_mx);
-        file_sink_lk(std::chrono::system_clock::now(), std::cerr, level, location, content);
+        file_sink_lk(_time_source(), std::cerr, level, location, content);
     }
-    void std_file_sink(LogLevel level, const std::source_location &location, std::string_view content) {
+    void std_file_sink(LogLevel level, const std::source_location *location, std::string_view content) {
         std::scoped_lock _(_mx);
         if (_rotate_signal) {
             _cur_log_stream.close();
@@ -131,9 +140,9 @@ namespace {
             _rotate_signal.store(false, std::memory_order_relaxed);
             _cur_log_stream.open(_cur_log_file, std::ios::out|std::ios::app);
         }
-        file_sink_lk(std::chrono::system_clock::now(), _cur_log_stream, level, location, content);
+        file_sink_lk(_time_source(), _cur_log_stream, level, location, content);
     }
-    void std_file_rotate_sink(LogLevel level, const std::source_location &location, std::string_view content) { 
+    void std_file_rotate_sink(LogLevel level, const std::source_location *location, std::string_view content) { 
         std::scoped_lock _(_mx);
         auto now =std::chrono::system_clock::now();        
         auto rotnum = static_cast<std::size_t>(std::chrono::system_clock::to_time_t(now))/_rotation_interval;
@@ -141,7 +150,7 @@ namespace {
             _cur_log_stream.close();        
             open_file_by_rotate_number(rotnum);
         }
-        file_sink_lk(now, _cur_log_stream, level, location, content);
+        file_sink_lk(_time_source(), _cur_log_stream, level, location, content);
     }
 }
 
@@ -183,6 +192,10 @@ void log_close() {
     Logger::instance = df;
     _cur_log_stream.close();
     _cur_log_stream.clear();
+}
+
+void log_set_time_source(std::function<std::chrono::system_clock::time_point()> time_source) {
+    _time_source = time_source;
 }
 
 }

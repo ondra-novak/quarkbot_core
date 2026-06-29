@@ -11,6 +11,7 @@
 #include "impl/streaming/all_market_stream_manager.hpp"
 #include "simaccount.hpp"
 #include "simexecutor.hpp"
+#include <concepts>
 #include <memory>
 #include <unordered_map>
 namespace quarkbot {
@@ -36,7 +37,13 @@ public:
         It creates simulated instrument and links it to the exchange,
         The info structure can contain unbound underlying currencies (will be bound to the exchange by this function),    
     */
-    PMarketInstrument add_instrument(const IMarketInstrument::Info def);
+    template<std::derived_from<IMarketInstrument::Info> _Info>
+    PMarketInstrument add_instrument(const _Info &def) {
+        std::unique_ptr<IMarketInstrument::Info> pinfo = std::make_unique<_Info>(def);
+        return add_instrument(std::move(pinfo));
+    }
+
+    PMarketInstrument add_instrument(std::unique_ptr<IMarketInstrument::Info> def);
     
     
     virtual MarketInstrument create_instrument(std::string_view id, InstrumentType type) override;
@@ -46,6 +53,7 @@ public:
     using ReportSink = SimExecutor::ReportSink;
 
     void set_slippage(double slippage) { _executor.set_slippage(slippage); }
+    void set_latency(std::chrono::system_clock::duration dur) {_executor.set_latency(dur);}
     void set_reporter(ReportSink sink) {_executor.set_report_sink(std::move(sink));}
 
     ///create account, set up initial wallet
@@ -65,7 +73,7 @@ protected:
 
     struct InstrumentRef {
         std::weak_ptr<SimInstrument> _ref;
-        IMarketInstrument::Info info;
+        std::unique_ptr<IMarketInstrument::Info> info;
         std::shared_ptr<SimInstrument> get(const std::shared_ptr<SimExchange> &owner);
     };
 

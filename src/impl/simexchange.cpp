@@ -43,7 +43,7 @@ std::shared_ptr<SimInstrument> SimExchange::resolve_instrument(const std::string
     if (iter == _instrument_names.end()) return {};
     auto lk = iter->second._ref.lock();
     if (!lk) {
-        lk = std::make_shared<SimInstrument>(iter->second.info, shared_from_this());
+        lk = std::make_shared<SimInstrument>(*iter->second.info, shared_from_this());
         iter->second._ref = lk;        
     }
     return lk;
@@ -108,18 +108,18 @@ void SimExchange::place_order(POrderAData ord) {
     }
 }
 
-PMarketInstrument SimExchange::add_instrument(const IMarketInstrument::Info def) {
-    auto &instr = _instrument_names[def.name];
-    instr.info = def;
+PMarketInstrument SimExchange::add_instrument(std::unique_ptr<IMarketInstrument::Info> def) {
+    auto &instr = _instrument_names[def->name];
+    instr.info = std::move(def);
     //link exchange to underlying currencies
 
-    if (instr.info.asset_wallet.has_value()) {
-        instr.info.asset_wallet->exchange = this;
+    if (instr.info->asset_wallet.has_value()) {
+        instr.info->asset_wallet->exchange = this;
     }
-    instr.info.pnl_currency.exchange = this;
-    instr.info.quote_currency.exchange = this;
+    instr.info->pnl_currency.exchange = this;
+    instr.info->quote_currency.exchange = this;
 
-    auto ref = std::make_shared<SimInstrument>(instr.info, shared_from_this());;
+    auto ref = std::make_shared<SimInstrument>(*instr.info, shared_from_this());;
     instr._ref = ref;
     return ref;;
 }
@@ -154,7 +154,7 @@ std::vector<UnderlyingCurrency> SimExchange::get_all_currencies()  {
     std::unordered_set<UnderlyingCurrency, Hasher<UnderlyingCurrency> > map;
     auto me = shared_from_this();
     for (auto &[k,v]:_instrument_names) {
-        const auto &info = v.info;
+        const auto &info = *v.info;
         map.insert(info.pnl_currency);
         map.insert(info.quote_currency);
         if (info.asset_has_wallet()) {
@@ -170,7 +170,7 @@ std::string_view SimExchange::get_name() const {
 
 std::shared_ptr<SimInstrument> SimExchange::InstrumentRef::get(const std::shared_ptr<SimExchange> &owner) {
     auto lk = _ref.lock();
-    if (!lk) lk = std::make_shared<SimInstrument>(info, owner);
+    if (!lk) lk = std::make_shared<SimInstrument>(*info, owner);
     return lk;
 }
 

@@ -80,6 +80,10 @@ static_assert(ceil(3.14153265_dec) == 4);
 static_assert(floor(3.14153265_dec) == 3);
 static_assert(ceil(-3.75812378_dec) == -3);
 static_assert(floor(-3.75812378_dec) == -4);
+static_assert(ceil(3_dec) == 3);
+static_assert(floor(3_dec) == 3);
+static_assert(ceil(0_dec) == 0);
+static_assert(floor(0_dec) == 0);
 static_assert(ceil(Decimal(2)) == 2);
 static_assert(ceil(Decimal(-2)) == -2);
 static_assert(floor(Decimal(2)) == 2);
@@ -106,6 +110,13 @@ static_assert(static_cast<int>(123e4_dec) == 1230000);
 static_assert(static_cast<int>(123e-1_dec) == 12);
 static_assert(static_cast<int>(-123e4_dec) == -1230000);
 static_assert(static_cast<int>(-123e-1_dec) == -12);
+
+static_assert(ceil(0.00000032_dec) == 1_dec);
+static_assert(ceil(-0.00000032_dec) == 0_dec);
+static_assert(floor(0.00000032_dec) == 0_dec);
+static_assert(floor(-0.00000032_dec) == -1_dec);
+static_assert(round(0.00000062_dec) == 0_dec);
+static_assert(round(-0.00000082_dec) == 0_dec);
 
 
 int main() {    

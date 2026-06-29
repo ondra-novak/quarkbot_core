@@ -13,7 +13,7 @@ namespace quarkbot {
     ///rounding to a value that represents less risk
     defensive,
     ///rounding to a value that represents more risk
-    aggresive
+    aggressive
 };
 
 ///Represents rounded number with specified round strategy
@@ -34,29 +34,29 @@ public:
     round is used in this case
      */
     Decimal get_rounded(Decimal step, int aggresive_side) const {
-        auto v = value * step;
+        auto v = value / step;
         switch (strategy) {
             case RoundStrategy::floor:
-                return floor(v)/step;
+                return floor(v)*step;
             case RoundStrategy::ceil:
-                return ceil(v)/step;
+                return ceil(v)*step;
             case RoundStrategy::nearest:
-                return round(v)/step;
+                return round(v)*step;
             case RoundStrategy::defensive:
                 if (aggresive_side > 0) {
-                    return floor(v)/step;
+                    return floor(v)*step;
                 } else if (aggresive_side < 0) { 
-                    return ceil(v)/step;
+                    return ceil(v)*step;
                 } else {
-                    return round(v)/step;
+                    return round(v)*step;
                 }
-            case RoundStrategy::aggresive:
+            case RoundStrategy::aggressive:
                 if (aggresive_side > 0) {
-                    return ceil(v)/step;
+                    return ceil(v)*step;
                 } else if (aggresive_side < 0) { 
-                    return floor(v)/step;
+                    return floor(v)*step;
                 } else {
-                    return round(v)/step;
+                    return round(v)*step;
                 }
         }
         return value;

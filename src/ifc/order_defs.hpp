@@ -205,34 +205,20 @@ struct OrderOpenStatus {
 };
 
 struct OrderReport {
+    //can contain rejection message
+    std::string rejection_message = {};
+    //the vector contains unprocessed fills
+    std::vector<Fill> fills = {};
+    //total filled amount (as reported from adapter)
+    Decimal filled = 0;
+    //total turnover (quantity * price accumulated)
+    Decimal turnover = 0;
     ///is set true if status changed while new report was generated
     bool status_changed = false;
     ///current status of the order
     OrderStatus status = OrderStatus::unknown;
     ///if order is rejected, contains rejection reason
     OrderRejectionReason rejection_reason = OrderRejectionReason::none;
-    //can contain rejection message
-    std::string rejection_message = {};
-    //contains order id if known
-    std::string id = {};
-    //contains order name if defined
-    std::string name = {};
-    //the queue contains unprocessed fills
-    std::queue<Fill> fills = {};
-    //total filled amount (as reported from adapter)
-    Decimal filled = 0;
-    //total turnover (quantity * price accumulated)
-    Decimal turnover = 0;
-
-    //read next fill
-    std::optional<Fill> read_fill() {
-        std::optional<Fill> out;
-        if (!fills.empty()) {
-            out.emplace(std::move(fills.front()));
-            fills.pop();
-        }
-        return out;
-    }
 
     //calc average fill price
     Decimal calc_avg_fill_price() const {

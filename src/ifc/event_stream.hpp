@@ -1,7 +1,10 @@
 #pragma once
 
 #include "abstract/ieventstream.hpp"
+#include "ifc/strategy_fragment.hpp"
+#include "ifc/types.hpp"
 #include "utils/class_hash.hpp"
+#include <concepts>
 #include <format>
 #include <memory>
 #include <stdexcept>
@@ -17,6 +20,8 @@ class EventStream {
 public:
     ///Type of view returned by T::view() method
     using ViewType = typename StreamViewType<T>::type;
+    using ValueType = T;
+    using value_type = T;
 
     ///constructor from IEventStreamBase pointer, stream is open if pointer is not null
     EventStream(std::unique_ptr<IEventStream<ViewType> > stream):_stream(std::move(stream)) {}  
@@ -69,8 +74,8 @@ public:
     }
 
          
-    ///read next event, if available, and copy it to ref, also report count of missed events     
-    coro::awaitable<bool> next(T &val, std::size_t &missed) {return _stream->next(val.view(), missed);}
+    ///receive next event, if available, and copy it to ref, also report count of missed events     
+    coro::awaitable<bool> receive(T &val, std::size_t &missed) {return _stream->next(val.view(), missed);}
 
     bool current(T &val) {
           if constexpr (HasStreamView<T>) {
@@ -81,6 +86,12 @@ public:
     }
    
     auto get() const {return _stream.get();}
+
+    template<typename _Hub, std::derived_from<T> _ItemWithContext>
+    friend StrategyFragment feed_to(EventStream<T> stream, _Hub hub, _ItemWithContext context) {
+        while (co_await stream.receive(context) && co_await hub.send(context));
+    }
+
 
 protected:
     std::shared_ptr<IEventStream<ViewType> > _stream;
