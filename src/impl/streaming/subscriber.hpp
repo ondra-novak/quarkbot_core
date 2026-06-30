@@ -20,7 +20,7 @@ public:
     }
 
 
-    virtual coro::awaitable<bool> receive(ViewType &ref) {
+    virtual coro::awaitable<bool> receive(ViewType &ref) override {
         if (_sig.is_canceled()) return false;
         if (_publisher->read(ref, _seq)) return true;
         return AutoReceivePromise(this, ref);
