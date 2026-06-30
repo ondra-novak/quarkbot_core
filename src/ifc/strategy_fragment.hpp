@@ -7,6 +7,8 @@
 #include "ifc/memory.hpp"
 #include <coroutine>
 #include <deque>
+#include <forward_list>
+#include <list>
 #include <mutex>
 #include <source_location>
 #include <unordered_map>
@@ -103,6 +105,11 @@ namespace quarkbot {
     };
 
     ///Creates execution group of multiple strategy fragments
+    /**
+        Join is awaitable, so you can co_await on whole group
+        The group have own garbage collector, which allows to remove finished
+        fragments
+    */
     class StrategyFragmentGroup {
     public:
 
@@ -116,15 +123,26 @@ namespace quarkbot {
         ///Add fragment o group, the fragment is started, and becomes part of the group
         void add(StrategyFragment frag, ExecutionWorker &worker) {
             std::lock_guard _(_mx);
-            _pending_list.emplace_back(std::move(frag), [&](auto p){
+            if (--next_gc == 0) {
+                for (auto iter = _pending_list.begin(); iter != _pending_list.end();) {
+                    if (iter->await_ready()) {
+                        iter->await_resume();
+                        iter = _pending_list.erase(iter);
+                    } else {
+                        ++iter;
+                    }
+                }
+            }
+            _pending_list.emplace_front(std::move(frag), [&](auto p){
                 worker.resume(std::move(p));
             });
+            next_gc = _pending_list.size();
         }
 
         ///join the group (synchronize with group completion)
         awaitable<void> join() {
             std::lock_guard _(_mx);
-            auto waiter = [](std::deque<coro::pending<StrategyFragment> > list) mutable -> StrategyFragment {
+            auto waiter = [](std::list<coro::pending<StrategyFragment> > list) mutable -> StrategyFragment {
                 for (auto &x: list) {
                     co_await x;
                 }
@@ -133,8 +151,9 @@ namespace quarkbot {
         }
 
     protected:
-         std::deque<coro::pending<StrategyFragment> >  _pending_list;
         std::mutex _mx;
+         std::list<coro::pending<StrategyFragment> >  _pending_list;
+        std::size_t next_gc = 1;
 
     };
 
