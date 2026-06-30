@@ -60,16 +60,15 @@ public:
         return false; //queue doesn't support this function
     }
 
-    virtual coro::awaitable<bool> read_internal(T &ref, std::size_t &missed) override {
+    virtual coro::awaitable<bool> receive(T &ref) override {
         std::scoped_lock _(_mx);
         if (!_q.empty()) {
             ref = std::move(_q.front());
             _q.pop();
-            missed = 0;
             return true;
         }
         if (_closed) return false;
-        return [&ref, &missed, this](auto promise) {
+        return [&ref, this](auto promise) {
             coro::prepared_coro out;
             std::scoped_lock _(_mx);
             if (_closed) {
@@ -77,15 +76,19 @@ public:
             } else if (!_q.empty()) {
                 ref = std::move(_q.front());
                 _q.pop();
-                missed = 0;
                 out = promise(true);
             } else {
-                missed = 0;
                 _awaiting_value = &ref;
                 _awaiting = std::move(promise);                
             }
             return out;
         };
+        
+    }
+
+    virtual coro::awaitable<bool> receive(T &ref, std::size_t &missed) override {
+        missed = 0;
+        return receive(ref);
     }
   
 protected:

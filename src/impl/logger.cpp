@@ -15,6 +15,7 @@
 #include <mutex>
 #include <ranges>
 #include <source_location>
+#include <string_view>
 #include <system_error>
 
 namespace quarkbot {
@@ -89,7 +90,7 @@ namespace {
     std::string_view class_name(const std::source_location &loc) {
         std::string_view fn = loc.function_name();
         unsigned int br = 0;
-        std::size_t last_spc;
+        std::size_t last_spc = std::string_view::npos;
         std::size_t idx =0;
         for (auto &x: fn) {
             if (x == '<') br++;

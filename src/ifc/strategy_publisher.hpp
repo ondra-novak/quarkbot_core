@@ -207,8 +207,18 @@ protected:
            return _publisher->read(ref, _rev);
         }
 
-        coro::awaitable<bool> read_internal(T &ref, std::size_t &missed) override {
-            Revision cur_rev = 0;
+        coro::awaitable<bool> receive(T &ref) override {
+            if (_publisher->read(ref, _rev)) {
+                return true;
+            }
+            return [this,&ref](auto promise) {
+                return  _publisher->await(ref, _rev, std::move(promise), &_csig);                
+
+            };
+
+        }
+        coro::awaitable<bool> receive(T &ref, std::size_t &missed) override {
+            Revision cur_rev = _rev;
             if (_publisher->read(ref, _rev)) {
                 missed = _rev - cur_rev - 1;
                 return true;
@@ -222,6 +232,7 @@ protected:
                 return p;
             };
         }
+
         void close() override {
             _publisher->cancel(&_csig);
         }

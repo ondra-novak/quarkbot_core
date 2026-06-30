@@ -44,16 +44,20 @@ namespace quarkbot {
             return _queue.read(target, seq);
         }
 
+        coro::prepared_coro next(Seq seq, awaitable<bool>::result promise, coro::cancel_signal *sig) {
+            std::lock_guard _(_mx);
+            if (sig && sig->is_canceled()) return promise(false);
+            if (seq<_queue.get_top_seq()) return promise(true);
+            if (_closed) return promise(false);
+            _awaiters.push_back({std::move(promise), sig});
+            return coro::prepared_coro{};
+        }
+
         coro::awaitable<bool> next(Seq seq, coro::cancel_signal *sig) {
             if (sig && sig->is_canceled()) return false;
             if (seq < _queue.get_top_seq()) return true;
             return [seq, this, sig](auto promise) -> coro::prepared_coro {
-                std::lock_guard _(_mx);
-                if (sig && sig->is_canceled()) return promise(false);
-                if (seq<_queue.get_top_seq()) return promise(true);
-                if (_closed) return promise(false);
-                _awaiters.push_back({std::move(promise), sig});
-                return coro::prepared_coro{};
+                return next(seq, std::move(promise), sig);
             };
         }
 

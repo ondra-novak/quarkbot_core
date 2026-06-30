@@ -14,6 +14,10 @@ namespace quarkbot {
 ///Event stream for specific type of events - wrapper over IEventStreamBase, which provides typed access to event data
 /**
 @tparam T type of events, must satisfy StreamType concept. The stream provides access to event data through T::view() method
+
+@note EventStream can be copied, which causes sharing of the stream. However keep in mind, this creates single
+stream group. When the EventStream is canceled, it cancels whole group, not single instance. If you
+need separate groups, subscribe separate streams
 */
 template<typename T>
 class EventStream {
@@ -44,6 +48,10 @@ public:
     ///check if stream is open
     bool is_open() const {return _stream->is_open();}
     ///close the stream
+    /**
+    @note if the stream is shared (created instances from single source), this function
+    cancels whole group, not only this instance. 
+    */
     void close() {_stream->close();}
     ///conversion to bool - true if stream is open, false if closed
     operator bool() const {return is_open();}

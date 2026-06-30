@@ -1,6 +1,7 @@
 #pragma once
 #include "basic_coro/coro_frame.hpp"
 #include "basic_coro/coroutine.hpp"
+#include "basic_coro/exceptions.hpp"
 #include "basic_coro/pending.hpp"
 #include "ifc/execution_worker.hpp"
 #include "ifc/memory.hpp"
@@ -90,6 +91,15 @@ namespace quarkbot {
     class StrategyFragment: public Async<void> {
     public:
         using Async<void>::Async;
+        struct promise_type : Async<void>::promise_type {
+            void unhandled_exception() {
+                //unhandled exception in strategy fragment cannot be received on target awaiter
+                //so report that fragment is done
+                this->return_void();
+                //report exception
+                coro::async_unhandled_exception();
+            }
+        };
     };
 
     ///Creates execution group of multiple strategy fragments

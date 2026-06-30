@@ -38,19 +38,24 @@ public:
         bool cancel(coro::cancel_signal *sig) {            
             if (!sig || sig->is_canceled()) return false; //ignore if already canceled
             std::lock_guard _(_mx);
-            //try to find awaiter
-            auto found =  std::find_if(_awaiters.begin(), _awaiters.end(), [&](const Consumer &c){
-                return c._cancel == sig;
-            });
-            //request cancel on signal
+
+            //request to cancel
             sig->request_cancel();
-            //if found, remove it and report true
-            if (found != _awaiters.end()) {
-                found->_result(false);  //close the stream for this consumer only
-                _awaiters.erase(found); 
+            //find all awaiters in the single cancel group and cancel them
+            auto end = std::remove_if(_awaiters.begin(), _awaiters.end(), [&](Consumer &c)->bool{
+                if (c._cancel == sig) {
+                    c._result(false);
+                    return true;
+                }
+                return false;
+            });
+            //cleanup array if anything canceled
+            if (end != _awaiters.end()) {
+                _awaiters.erase(end, _awaiters.end());
+                //report success
                 return true;
             }
-            //otherwise report false
+            //report failue,
             return false;
         }
 
@@ -70,14 +75,18 @@ public:
         }
 
         void close() {
-            std::lock_guard _(_mx);
-            _closed = true;
-            flush_consumers_lk(false);
+            std::vector<Consumer> tmp;
+            {
+                std::lock_guard _(_mx);
+                _closed = true;
+                tmp = std::move(_awaiters);
+            }
+            for (auto &x: tmp) x._result(false);
         }
 
 protected:
 
-        mutable std::mutex _mx;
+        mutable std::recursive_mutex _mx;
         std::vector<Consumer> _awaiters;
 
         void flush_consumers_lk(bool st) {

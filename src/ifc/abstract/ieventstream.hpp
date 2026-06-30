@@ -37,10 +37,8 @@ public:
     @retval true new event is available and copied to ref
     @retval false stream is closed or no new event is available
     */
-    awaitable<bool> receive(ViewType &ref) {
-        static thread_local std::size_t dummy;   
-        return read_internal(ref, dummy);
-    }
+    virtual awaitable<bool> receive(ViewType &ref) = 0;
+
     ///read next event, if available, and copy it to ref, also report count of missed events
     /**
     @param ref reference to object where event data will be copied.
@@ -48,9 +46,7 @@ public:
     @retval true new event is available and copied to ref
     @retval false stream is closed or no new event is available
     */
-    coro::awaitable<bool> receive(ViewType &ref, std::size_t &missed) {
-        return read_internal(ref, missed);
-    }    
+    virtual coro::awaitable<bool> receive(ViewType &ref, std::size_t &missed) = 0;
 
     ///read current value regardless on whether it was updated or not
     /**
@@ -82,19 +78,17 @@ protected:
 
     std::optional<StopCB> _stop_callback;
 
-
-    virtual coro::awaitable<bool> read_internal(ViewType &ref, std::size_t &missed)  = 0;
-
     
 
 };
 
 template<typename ViewType>
 class IEventStream<ViewType>::Null: public IEventStream<ViewType> {
-    virtual bool is_open() const {return false;}
-    virtual void close() {}
-    virtual bool current(ViewType &) {return false;}
-    virtual coro::awaitable<bool> read_internal(ViewType &, std::size_t &) {return false;};
+    virtual bool is_open() const override {return false;}
+    virtual void close()  override {}
+    virtual bool current(ViewType &) override  {return false;}
+    virtual coro::awaitable<bool> receive(ViewType &, std::size_t &) override  {return false;};
+    virtual coro::awaitable<bool> receive(ViewType &) override {return false;};
 };
 
 
