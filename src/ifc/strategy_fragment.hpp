@@ -1,17 +1,13 @@
 #pragma once
-#include "basic_coro/coro_frame.hpp"
 #include "basic_coro/coroutine.hpp"
 #include "basic_coro/exceptions.hpp"
 #include "basic_coro/pending.hpp"
 #include "ifc/execution_worker.hpp"
 #include "ifc/memory.hpp"
 #include <coroutine>
-#include <deque>
-#include <forward_list>
 #include <list>
 #include <mutex>
 #include <source_location>
-#include <unordered_map>
 namespace quarkbot {
 
 
