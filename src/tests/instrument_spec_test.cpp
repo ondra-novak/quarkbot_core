@@ -1,5 +1,5 @@
-#include "impl/simexchange.hpp"
-#include "ifc/backtest_data_source.hpp"
+#include "../quarkbot/backtest/simexchange.hpp"
+#include <quarkbot/backtest_data_source.hpp>
 #include "tests/check.h"
 
 int main() {

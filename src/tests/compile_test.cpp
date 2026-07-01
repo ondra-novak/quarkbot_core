@@ -8,23 +8,23 @@ template class quarkbot::Scheduler<void (*)() >;
 template class quarkbot::SchedulerRealTime<void (*)() >;
 
 */
-#include "../ifc/exchange.hpp"
-#include "../ifc/underlying.hpp"
-#include "../ifc/account.hpp"
-#include "../ifc/defs.hpp"
-#include "../ifc/execution_worker.hpp"
-#include "../ifc/context.hpp"
-#include "../ifc/order.hpp"
-#include "../ifc/memory.hpp"
-#include "../ifc/tradable_instrument.hpp"
-#include "../impl/streaming/lock_free_publisher.hpp"
-#include "../impl/streaming/publisher_manager.hpp"
-#include "../impl/streaming/orderbook_state.hpp"
-#include "../utils/signals.hpp"
-#include "../ifc/message_bus.hpp"
-#include "../ifc/hub.hpp"
-#include "../ifc/shared_lockable.hpp"
-#include "../ifc/strategy_publisher.hpp"
+#include <quarkbot/exchange.hpp>
+#include <quarkbot/underlying.hpp>
+#include <quarkbot/account.hpp>
+#include <quarkbot/defs.hpp>
+#include <quarkbot/execution_worker.hpp>
+#include <quarkbot/context.hpp>
+#include <quarkbot/order.hpp>
+#include <quarkbot/memory.hpp>
+#include <quarkbot/tradable_instrument.hpp>
+#include <quarkbot/message_bus.hpp>
+#include <quarkbot/hub.hpp>
+#include <quarkbot/shared_lockable.hpp>
+#include <quarkbot/strategy_publisher.hpp>
+#include "../quarkbot/streaming/lock_free_publisher.hpp"
+#include "../quarkbot/streaming/publisher_manager.hpp"
+#include "../quarkbot/streaming/orderbook_state.hpp"
+#include <quarkbot/utils/signals.hpp>
 
 template class quarkbot::Hub<int>;
 

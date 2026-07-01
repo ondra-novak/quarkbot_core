@@ -1,6 +1,6 @@
-#include "impl/mem_storage.hpp"
-#include "ifc/storage_namespace.hpp"
 #include "tests/check.h"
+#include "../quarkbot/common/mem_storage.hpp"
+#include <quarkbot/storage_namespace.hpp>
 #include <memory>
 
 using namespace quarkbot;

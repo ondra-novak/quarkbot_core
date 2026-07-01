@@ -26,13 +26,10 @@ foreach (testFile ${BASIC_TESTS})
     string(REGEX MATCH "([^\/]+$)" filename ${testFile})
     string(REGEX MATCH "[^.]*" executable_name test_${filename})
     add_executable(${executable_name} ${testFile})
-    target_link_libraries(${executable_name} PRIVATE basic_coro::basic_coro quarkbot_impl)
+    target_link_libraries(${executable_name} PRIVATE quarkbot::sdk quarkbot::impl)
     target_compile_definitions(${executable_name} PRIVATE
         MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
     )
     add_test(NAME "tests/${filename}" COMMAND ${executable_name})
 endforeach()
 
-target_link_libraries(test_websocket_binance PRIVATE quarkbot_network)
-target_link_libraries(test_tardis_source_test PRIVATE quarkbot_tardis)
-target_link_libraries(test_instrument_spec_test PRIVATE quarkbot_tardis)

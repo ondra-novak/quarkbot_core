@@ -1,9 +1,8 @@
-#include "../utils/serialize.hpp"
-#include "../utils/serialize_schema_to_json.hpp"
-#include "ifc/types.hpp"
 #include "check.h"
-#include "utils/flatmap.hpp"
-#include "utils/json.hpp"
+#include "quarkbot/serializer/serialize.hpp"
+#include "quarkbot/serializer/serialize_schema_to_json.hpp"
+#include "quarkbot/json/json.hpp"
+#include "quarkbot/types.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -15,7 +14,7 @@ using namespace srl;
 
 template<typename T>
 void test_schema(Json result) {
-    BinarySchemaGenerator gen;
+    srl::BinarySchemaGenerator gen;
     gen.build_schema<T>();
     Json schema = serialize_schema_to_json(gen.get_schema());
     CHECK_EQUAL(schema.to_string(), result.to_string());

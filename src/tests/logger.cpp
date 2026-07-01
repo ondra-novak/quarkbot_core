@@ -1,7 +1,6 @@
-#include "impl/logger.hpp"
-#include "ifc/log.hpp"
+#include "../quarkbot/common/logger.hpp"
 #include "check.h"
-#include "utils/json.hpp"
+#include "quarkbot/json/json.hpp"
 #include <filesystem>
 #include <fstream>
 #include <regex>

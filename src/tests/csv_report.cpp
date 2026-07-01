@@ -1,12 +1,8 @@
 #include "check.h"
-#include "ifc/abstract/itradable_instrument.hpp"
-#include "ifc/abstract/orderdata.hpp"
-#include "ifc/execution_worker.hpp"
-#include "ifc/order_defs.hpp"
-#include "impl/backtest_executor.hpp"
-#include "impl/simexec_report_csv.hpp"
-#include "impl/siminstrument.hpp"
-#include "impl/simtradableinstrument.hpp"
+#include "quarkbot/backtest/backtest_executor.hpp"
+#include "quarkbot/backtest/siminstrument.hpp"
+#include "quarkbot/backtest/simtradableinstrument.hpp"
+#include "../quarkbot/backtest/simexec_report_csv.hpp"
 #include <chrono>
 #include <memory>
 

@@ -1,17 +1,14 @@
 #pragma once
-#include "ifc/context.hpp"
-#include "ifc/stream/quote.hpp"
-#include "ifc/stream/trade.hpp"
-#include "ifc/stream/closedbar.hpp"
-#include "ifc/event_stream.hpp"
-#include "ifc/market_instrument.hpp"
-#include "ifc/tradable_instrument.hpp"
+#include "quarkbot/context.hpp"
+#include "quarkbot/event_stream.hpp"
+#include "quarkbot/stream/closedbar.hpp"
+#include "quarkbot/stream/quote.hpp"
+#include "quarkbot/stream/trade.hpp"
 #include <iostream>
 #include <stop_token>
 
 using namespace quarkbot;
 
-static_assert(StreamWithConstantParam<ClosedBarInterval<300> > );
 class PrintEventStrategy {
 public:
 

@@ -1,8 +1,8 @@
-#include "ifc/config.hpp"
+#include "quarkbot/config.hpp"
 #include <algorithm>
 #include <stdexcept>
+#include <string_view>
 #include "check.h"
-#include "ifc/types.hpp"
 
 
 constexpr std::pair<std::string_view, std::string_view> data[] = {

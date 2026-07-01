@@ -1,0 +1,92 @@
+#pragma once
+
+#include "awaitable_stop.hpp"
+#include "config.hpp"
+#include "strategy_fragment.hpp"
+#include "execution_worker.hpp"
+#include "defs.hpp"
+#include <concepts>
+#include <functional>
+#include <memory>
+#include "tradable_instrument.hpp"
+#include <utility>
+#include <vector>
+namespace quarkbot {
+
+    enum StrategyMode {
+        live_trading,
+        backtest,
+        paper_trading
+    };
+
+    class StrategyContext;
+
+    template<typename T, typename Context>
+    concept StrategyClass = requires(T val, Context ctx) {
+        {T(std::move(ctx))};
+        {val.main()}->std::same_as<StrategyFragment>;
+    };
+
+
+    class StrategyContext {
+    public:
+        using Config = ::quarkbot::Config<std::function<std::optional<std::string_view>(const std::string &)> >;
+
+        ///List of tradable instruments available to the strategy
+        /** the strategy can query for accounts and exchanges through the instruments */
+        std::vector<TradableInstrument> instruments;
+        ///Storage associated with the strategy
+        PStorage storage;
+        ///Reference to strategy execute worker
+        ExecutionWorker exec_worker{nullptr};
+        ///current strategy mode
+        StrategyMode mode;
+        ///Strategy configuration
+        Config config;
+
+        AwaitableStopToken stop_signal;
+
+        std::shared_ptr<StrategyFragmentGroup> active_group = {};
+        
+        ///start strategy fragment and add it to fragment group ensuring that strategy will not be destroyed until fragment is finished
+        /** Use for long time running fragments, not for short ones. The fragemnt stays registered even if it is already finished */
+        void launch(StrategyFragment fragment) {
+            active_group->add(std::move(fragment), exec_worker);
+        }
+
+
+        ///create and start the strategy
+        /**
+        Lifetime is managed by following way 
+        - strategy is kept alive until stop signal is activated
+        - after this, it schedules self twice to proper cleanup, but then it destroys the strategy        
+         */
+        template<typename _S, std::derived_from<StrategyContext> _Context>
+        requires(StrategyClass<_S, _Context>)
+        static StrategyFragment create_and_start_strategy(_Context &&ctx) {
+
+            ctx.active_group  = std::make_shared<StrategyFragmentGroup>();
+            //retrieve worker
+            auto worker = ctx.exec_worker;
+            //retrieve awaitable for stop
+            auto stop_awaitable = ctx.stop_signal();
+            //create strategy instance
+            _S strategy{ctx};
+            co_await worker.schedule();
+            //run strategy, wait until exit
+            co_await strategy.main();            
+            //wait until context stop
+            co_await stop_awaitable;
+            //join whole group
+            co_await ctx.active_group->join();
+            //scheduler twice
+            co_await worker.schedule();
+            co_await worker.schedule();            
+            //strategy is destroyed here
+        }
+
+
+
+    };
+
+}

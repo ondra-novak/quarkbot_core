@@ -1,4 +1,4 @@
-#include "../utils/signals.hpp"
+#include <quarkbot/utils/signals.hpp>
 #include "check.h"
 #include <future>
 

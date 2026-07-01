@@ -18,6 +18,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://www.github.com/ondra-novak/basic_coro.git
     GIT_TAG 749ffcc918f61d3a99e96d0b045dc1ac3379201a
     EXCLUDE_FROM_ALL
+    SOURCE_SUBDIR nocompile
 )
 FetchContent_MakeAvailable(BasicCoro)
 
@@ -29,10 +30,11 @@ OPTION(QUARKBOT_TESTS "Compile tests (require everything)" ${quarkbot_DEVELOPMEN
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/)
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-	set(CMAKE_INSTALL_PREFIX "/usr/local" CACHE PATH "Default path to install" FORCE)
-endif()
-add_subdirectory("src")
+
+add_subdirectory("include")
+add_subdirectory("src/quarkbot")
+
+
 if (quarkbot_DEVELOPMENT_MODE)
 add_subdirectory("src/strategies/print_events")
 add_subdirectory("src/strategies/trending")

@@ -1,4 +1,4 @@
-#include "utils/decimal.hpp"
+#include <quarkbot/decimal.hpp>
 #include <iostream>
 #include <iterator>
 #include <vector>

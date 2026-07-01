@@ -1,5 +1,4 @@
 #include "trending_core.hpp"
-#include "ta/bb_ema.hpp"
 #include <iostream>
 #include <limits>
 

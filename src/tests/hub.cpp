@@ -1,6 +1,5 @@
-#include "ifc/hub.hpp"
-#include "../ifc/strategy_publisher.hpp"
-#include "ifc/strategy_fragment.hpp"
+#include <quarkbot/hub.hpp>
+#include "quarkbot/strategy_fragment.hpp"
 #include "check.h"
 
 

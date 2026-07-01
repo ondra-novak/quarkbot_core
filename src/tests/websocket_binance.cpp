@@ -1,11 +1,9 @@
 
 #include "check.h"
+#include "quarkbot/json/json.hpp"
+#include "quarkbot/network/sslobjects.hpp"
+#include "quarkbot/network/ws.hpp"
 
-#include "libs/network/sslobjects.hpp"
-#include "libs/network/ws.hpp"
-#include "libs/network/ws_parser.hpp"
-#include "libs/network/ws_stream.hpp"
-#include "utils/json.hpp"
 #include <iostream>
 
 static network::PSSL_CTX ctx;

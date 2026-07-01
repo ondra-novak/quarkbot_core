@@ -1,8 +1,7 @@
 #pragma once
-#include "ta/bb_ema.hpp"
-#include "ta/ema.hpp"
+#include <quarkbot/ta/bb_ema.hpp>
+#include <quarkbot/ta/ema.hpp>
 #include <optional>
-#include <queue>
 #include <vector>
 
 class TrendingStrategyCore {

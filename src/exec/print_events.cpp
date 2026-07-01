@@ -1,10 +1,8 @@
 
-#include "ifc/types.hpp"
-#include "strategies/print_events/print_events.hpp"
-#include "impl/backtest.hpp"
-#include "impl/mmbot_data_source.hpp"
-#include <chrono>
-#include <memory>
+#include "quarkbot/backtest/backtest.hpp"
+#include "quarkbot/tardis/mmbot_data_source.hpp"
+#include "../strategies/print_events/print_events.hpp"
+#include <string_view>
 using namespace quarkbot;
 
 constexpr std::string_view source_data = "83421\n"

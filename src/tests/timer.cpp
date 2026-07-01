@@ -1,9 +1,9 @@
+#include "quarkbot/timer.hpp"
 #include "check.h"
-#include "ifc/defs.hpp"
-#include "ifc/timer.hpp"
-#include "ifc/scope_counter.hpp"
-#include "ifc/strategy_fragment.hpp"
-#include "impl/thread_executor.hpp"
+#include "quarkbot/common/thread_executor.hpp"
+#include "quarkbot/execution_worker.hpp"
+#include "quarkbot/strategy_fragment.hpp"
+#include "quarkbot/scope_counter.hpp"
 #include <chrono>
 #include <mutex>
 
