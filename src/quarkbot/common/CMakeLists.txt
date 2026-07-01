@@ -6,4 +6,5 @@ target_sources(quarkbot_impl PRIVATE
     order_trigger.hpp 
     thread_executor.cpp 
     thread_executor.hpp
+    somodule.cpp
 )
