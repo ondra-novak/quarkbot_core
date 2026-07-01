@@ -75,7 +75,13 @@ extern "C" {
     ///Entry point for shared object module plugin
     /**
      * @return Pointer to the ISoModulePlugin interface implemented by the plugin
+     *
+     * Marked as used because nothing in the plugin's own translation units calls or
+     * references this function - it is found solely via dlsym() from the host process.
+     * Without the attribute, an unreferenced inline function can be dropped entirely,
+     * which would make it invisible to dlsym().
      */
+    __attribute__((used))
     inline const quarkbot::ISoModulePlugin* quarkbot_so_module_entry_point(){
         return &quarkbot::SoModulePluginRegistry::instance();
     }

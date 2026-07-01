@@ -30,7 +30,11 @@ public:
     }
 
     template<std::derived_from<StrategyContext> _Context>
-    StrategyFragment get_strategy(std::size_t idx, _Context &&context) const;
+    StrategyFragment start_strategy(std::size_t idx, _Context &&context) const {
+        std::size_t context_type = class_hash<_Context>;
+        return start_strategy_with_hash(idx, static_cast<StrategyContext &&>(context), context_type);
+    }
+
 
 
 protected:
@@ -39,6 +43,8 @@ protected:
     bool _version_compatible = false;
 
     SoModuleStrategyList(const ISoModulePlugin *plugin);
+
+    StrategyFragment start_strategy_with_hash(std::size_t idx, StrategyContext &&context, std::size_t context_type) const;
 };
 
 }

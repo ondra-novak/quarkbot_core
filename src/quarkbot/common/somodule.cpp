@@ -4,15 +4,23 @@
 
 namespace quarkbot {
 
+    namespace {
+        ///dlerror() can return nullptr (e.g. when no error is recorded), which operator+ cannot handle
+        const char *safe_dlerror() {
+            const char *msg = dlerror();
+            return msg ? msg : "unknown error";
+        }
+    }
+
    SoModuleStrategyList SoModuleStrategyList::load_module(const std::filesystem::path path) {
         void *handle = dlopen(path.c_str(), RTLD_NOW);
         if (!handle) {
-            throw std::runtime_error(std::string("Failed to load shared object module: ") + dlerror());
+            throw std::runtime_error(std::string("Failed to load shared object module: ") + safe_dlerror());
         }
-        auto entry_point = reinterpret_cast<EntryPoint>(dlsym(handle, "quarkbot_get_plugin"));
+        auto entry_point = reinterpret_cast<EntryPoint>(dlsym(handle, "quarkbot_so_module_entry_point"));
         if (!entry_point) {
             dlclose(handle);
-            throw std::runtime_error(std::string("Failed to find entry point in shared object module: ") + dlerror());
+            throw std::runtime_error(std::string("Failed to find entry point in shared object module: ") + safe_dlerror());
         }
         auto plugin = entry_point();
         return SoModuleStrategyList(plugin);
@@ -29,12 +37,11 @@ namespace quarkbot {
         }
    }
 
-    template<std::derived_from<StrategyContext> _Context>
-    StrategyFragment SoModuleStrategyList::get_strategy(std::size_t idx, _Context &&context) const {
+    StrategyFragment SoModuleStrategyList::start_strategy_with_hash(std::size_t idx, StrategyContext &&context, std::size_t context_type) const {
         if (idx >= _strategies.size()) {
             throw std::out_of_range("Strategy index out of range");
         }
-        if (!_strategies[idx].context_type_matches<_Context>()) {
+        if (_strategies[idx].context_type != context_type) {
             throw std::runtime_error("Strategy context type mismatch");
         }
         return _plugin->start_strategy(idx, static_cast<StrategyContext &&>(context));

@@ -70,15 +70,18 @@ namespace quarkbot {
             auto worker = ctx.exec_worker;
             //retrieve awaitable for stop
             auto stop_awaitable = ctx.stop_signal();
+            //retrieve active group before ctx is moved into the strategy - it must
+            //keep the fragment group alive even after the strategy itself is destroyed
+            auto active_group = ctx.active_group;
             //create strategy instance
-            _S strategy{ctx};
+            _S strategy{std::move(ctx)};
             co_await worker.schedule();
             //run strategy, wait until exit
-            co_await strategy.main();            
+            co_await strategy.main();
             //wait until context stop
             co_await stop_awaitable;
             //join whole group
-            co_await ctx.active_group->join();
+            co_await active_group->join();
             //scheduler twice
             co_await worker.schedule();
             co_await worker.schedule();            

@@ -33,3 +33,16 @@ foreach (testFile ${BASIC_TESTS})
     add_test(NAME "tests/${filename}" COMMAND ${executable_name})
 endforeach()
 
+# --- fixture plugin + test for the shared object module loader (somodule.hpp) ---
+
+add_library(test_somodule_plugin SHARED plugins/test_plugin.cpp plugins/plugin_common.hpp)
+target_link_libraries(test_somodule_plugin PRIVATE quarkbot::sdk)
+
+add_executable(test_somodule_test somodule_test.cpp)
+target_link_libraries(test_somodule_test PRIVATE quarkbot::sdk quarkbot::impl)
+target_compile_definitions(test_somodule_test PRIVATE
+    TEST_PLUGIN_PATH="$<TARGET_FILE:test_somodule_plugin>"
+)
+add_dependencies(test_somodule_test test_somodule_plugin)
+add_test(NAME "tests/somodule_test" COMMAND test_somodule_test)
+
