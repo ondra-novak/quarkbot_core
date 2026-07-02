@@ -1,5 +1,9 @@
 
 #include "quarkbot/backtest/backtest.hpp"
+#include "quarkbot/backtest/simexchange.hpp"
+#include "quarkbot/context.hpp"
+#include "quarkbot/instrument_description.hpp"
+#include "quarkbot/log.hpp"
 #include "quarkbot/tardis/mmbot_data_source.hpp"
 #include "../strategies/print_events/print_events.hpp"
 #include <string_view>
@@ -31,13 +35,18 @@ int main() {
         std::chrono::system_clock::now()-std::chrono::days(365));
         */
 
+    
     std::array<std::pair<std::string, Decimal>,1 > wallet{std::pair<std::string, Decimal>("USD",1000_dec)};
-    Backtest bt(source, "backtest", wallet);
-    auto usd = bt.get_exchange().create_currency("USD");
-    bt.add_instrument({
-        {},{0.00001_dec, Decimal::max(), 0.00001_dec,1, 10,10,0,0},usd,usd,{},"BTCUSD"        
-    });
-    PrintEventStrategy s(bt.get_context());
-    bt.run(s.main());
+    std::array<InstrumentDescription,1> instruments = {InstrumentDescription{
+        {},
+        {0.00001_dec, Decimal::max(), 0.00001_dec,1, 10,10,0,0},
+        {"USD"},
+        {"USD"},{},"BTCUSD",InstrumentCategory::Crypto}
+    };
+
+    BacktestEnv bt("backtest",wallet,instruments,{});
+    auto datasource = [](BacktestEvent &ev){return false;};
+    bt.add_strategy<PrintEventStrategy>();
+    bt.run(datasource);
 
 }
