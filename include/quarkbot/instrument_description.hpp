@@ -52,9 +52,9 @@ struct InstrumentDescription : ContractInfo, InstrumentGeometry{
     ///instrument name - not need to be unique (exchange related)
     std::string name = {};
     ///Instrument category (optional description)
-    InstrumentCategory _category = {};
+    InstrumentCategory category = {};
     ///various tags (optional)
-    TagSet _tags = {};
+    TagSet tags = {};
     ///instrument unique ID related to given exchange - not always used (optional)
     std::size_t uid = 0;
 
