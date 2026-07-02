@@ -18,6 +18,7 @@ set(BASIC_TESTS
     timer.cpp
     csv_report.cpp
     config.cpp
+    tagset.cpp
 )
 
 

@@ -3,6 +3,7 @@
 #include "abstract/somodule_def.hpp"
 #include "quarkbot/context.hpp"
 #include "quarkbot/hash/class_hash.hpp"
+#include "quarkbot/strategy_fragment.hpp"
 #include "version.hpp"
 namespace quarkbot {
 
@@ -26,7 +27,7 @@ namespace quarkbot {
 
         template<typename Strategy, std::derived_from<StrategyContext> _Context = StrategyContext>
         void register_strategy(std::string_view name) {
-            _strategies.push_back({std::string(name), class_hash<_Context>, [name](StrategyContext &&ctx) {
+            _strategies.push_back({std::string(name), class_hash<_Context>, [](StrategyContext &&ctx) {
                 return StrategyContext::create_and_start_strategy<Strategy, _Context>(static_cast<_Context &&>(ctx));
             }});
         }
@@ -47,7 +48,7 @@ namespace quarkbot {
         struct StrategyInfo {
             std::string name;
             std::size_t context_type; //class_hash of used context type - strategy is rejected if hash mismatches
-            std::function<StrategyFragment(StrategyContext &&)> start_func;
+            StrategyFragment (*start_func)(StrategyContext &&);            
         };
         std::vector<StrategyInfo> _strategies;  
     };

@@ -2,6 +2,7 @@
 
 #include "abstract/imarket_instrument.hpp"
 #include "abstract/ipublisher.hpp"
+#include "quarkbot/instrument_description.hpp"
 #include "stream_defs.hpp"
 #include <concepts>
 namespace quarkbot {
@@ -52,7 +53,7 @@ protected:
 
 
 ///Stream is updated when some informations about instrument changed
-struct InstrumentInfo : public MarketInstrumentStreamTypeItem, public IMarketInstrument::Geometry  {
+struct InstrumentInfo : public MarketInstrumentStreamTypeItem, public InstrumentGeometry  {
 
 };
 
