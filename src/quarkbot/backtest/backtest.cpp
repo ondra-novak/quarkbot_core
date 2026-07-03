@@ -24,6 +24,8 @@ namespace quarkbot {
                   std::shared_ptr<SimAccount> account,
                   BacktestDataSource source,std::stop_source stop_source) {
 
+        auto token = stop_source.get_token();
+
             
         BacktestEvent event;
         if (!source(event)) return false;
@@ -38,7 +40,8 @@ namespace quarkbot {
             }, [&](const auto &ev){
                 exchange->on_event(event.symbol, ev);
             });
-        } while (source(event));
+            executor->flush_queue();
+        } while (source(event) && !token.stop_requested());
 
         stop_source.request_stop();    
         executor->flush_queue();    

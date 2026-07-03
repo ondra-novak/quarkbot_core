@@ -31,13 +31,13 @@ public:
 
     template<std::derived_from<MarketInstrumentStreamTypeItem> T>
     requires(StreamWithoutParam<T> || StreamWithConstantParam<T>)
-    EventStream<T> subscribe() {
+    EventStream<T> subscribe() const {
         return _state->subscribe<T>();
     }
 
     template<std::derived_from<MarketInstrumentStreamTypeItem> T>
     requires(StreamWithParam<T>)
-    EventStream<T> subscribe(typename T::Params params) {
+    EventStream<T> subscribe(typename T::Params params) const {
         return _state->subscribe<T>(params);
     }
 

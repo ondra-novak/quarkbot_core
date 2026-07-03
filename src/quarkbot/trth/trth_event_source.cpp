@@ -105,14 +105,14 @@ bool TRTHEventSource::operator()(BacktestEvent &ev) {
             a.time = ev.time;
         } else if (_data.Type == "Quote") {
             Quote &q = ev.data.emplace<Quote>();
-            if (_data.Ask_Price.empty() && _data.Bid_Price.empty()) return false;
+            if (_data.Ask_Price.empty() && _data.Bid_Price.empty()) continue;
             q.ask = _data.Ask_Price.empty()?0_dec:Decimal::from_string(_data.Ask_Price);
             q.bid = _data.Bid_Price.empty()?0_dec:Decimal::from_string(_data.Bid_Price);
             q.ask_size = _data.Ask_Size.empty()?0_dec:Decimal::from_string(_data.Ask_Size);
             q.bid_size = _data.Bid_Size.empty()?0_dec:Decimal::from_string(_data.Bid_Size);
             q.time =  ev.time;
         } else if (_data.Type == "Trade") {
-            if (_data.Price.empty()) return false;
+            if (_data.Price.empty()) continue;
             std::string_view mmt_class;
             parse_qualifiers(_data.Qualifiers, [&](auto key, auto val){
                 if (key == "MMT_CLASS") mmt_class = val;
@@ -120,7 +120,7 @@ bool TRTHEventSource::operator()(BacktestEvent &ev) {
             quarkbot::AuctionType atype = {};
             if (!mmt_class.empty()) {
                 char tm = get_mmt_level(mmt_class, 0);
-                if (tm != '1') return false;                
+                if (tm != '1') continue;
                 char l2 = get_mmt_level(mmt_class, 1);
                 switch (l2) {
                     case '2': ;break;
@@ -128,7 +128,7 @@ bool TRTHEventSource::operator()(BacktestEvent &ev) {
                     case 'C': atype = quarkbot::AuctionType::closing;break;
                     case 'U': atype = quarkbot::AuctionType::unscheduled;break;
                     case 'I': atype = quarkbot::AuctionType::intraday;break;
-                    default: return false;
+                    default: continue;
                 }            
             } else {
                 continue;

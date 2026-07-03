@@ -137,23 +137,6 @@ public:
         return false;
     }
 
-    template<typename T>
-    decltype(auto) join(coro::pending<T> &awaiting_op) {
-        while (join()) {
-            if (awaiting_op.await_ready()) break;
-        }
-        return coro::sync_await(awaiting_op);
-    }
-
-    template<typename T>
-    decltype(auto) join(coro::pending<T> &&awaiting_op) {
-        while (join()) {
-            if (awaiting_op.await_ready()) break;
-        }
-        return coro::sync_await(awaiting_op);
-    }
-
-
 
     ///Ensures that worker is available - otherwise it throw exception
     ExecutionWorker &required() {

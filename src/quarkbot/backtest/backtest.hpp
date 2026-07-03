@@ -1,6 +1,8 @@
 #pragma once
+#include "basic_coro/sync_await.hpp"
 #include "quarkbot/context.hpp"
 #include "quarkbot/exchange.hpp"
+#include "quarkbot/strategy_fragment.hpp"
 #include <chrono>
 #include <quarkbot/abstract/backtest_data_source.hpp>
 #include <filesystem>
@@ -71,7 +73,7 @@ public:
     requires(StrategyClass<_Strategy, _Context>)
     void add_strategy(_Context &&context = _Context{}) {
         init_context_basic( context);
-        context.template create_and_start_strategy<_Strategy>(std::move(context));        
+        _strategy_group.add(context.template create_and_start_strategy<_Strategy>(std::move(context)), _worker);
     }
 
 
@@ -92,11 +94,35 @@ public:
     */
     bool run(BacktestDataSource data_soruce);
 
+    auto get_execution_worker() const {return _worker;}
+    auto get_exchange() const {return _exchange;}
+    auto get_account() const {return _account;}
+    auto get_stop_token() const {return stop_src.get_token();}
+    
+    void stop() {
+        stop_src.request_stop();
+    }
+
+    ~BacktestEnv() {
+        stop();
+        join();
+    }
+
+    void join() {
+        auto pending = _strategy_group.join().launch();
+        while (!pending.await_ready()) {
+            _worker.join();
+        }
+        coro::sync_await(pending);
+    }
+
 protected:
     ExecutionWorker _worker;
     Exchange _exchange;
     Account _account;
     std::stop_source stop_src;
+    StrategyFragmentGroup _strategy_group;
+
 
     void init_context_basic(std::span<const std::string_view> instruments, StrategyContext &ctx);
     void init_context_basic( StrategyContext &ctx);

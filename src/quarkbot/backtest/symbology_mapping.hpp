@@ -29,7 +29,7 @@ concept SymbologyMap = requires(const T &v, const std::string &symbol) {
 template<SymbologyMap _Map, BacktestDataSourceType _Source>
 class SymbologyMappingBase {
 public:
-    SymbologyMappingBase(_Map map, _Source source):_map(std::move(map)), _source(source) {}
+    SymbologyMappingBase(_Map map, _Source source):_map(std::move(map)), _source(std::move(source)) {}
 protected:
     _Map _map;
     _Source _source;
@@ -70,8 +70,8 @@ public:
     using SymbologyMappingBase<_Map, _Source>::SymbologyMappingBase;
     bool operator()(BacktestEvent &ev) {
         if (!this->_source(ev)) return false;
-        auto iter = this->_map->find(ev.symbol);
-        if (iter != this->_map->end()) {
+        auto iter = this->_map.find(ev.symbol);
+        if (iter != this->_map.end()) {
             ev.symbol.clear();
             ev.symbol.append(iter->second);
         }

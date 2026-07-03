@@ -35,7 +35,7 @@ template<typename T>
 concept BacktestDataSourceType = std::is_invocable_r_v<bool, T, BacktestEvent &>;
 
 ///Backtest data source is a function that provides backtest events. It is called repeatedly until it returns false.
-using BacktestDataSource = std::function<bool(BacktestEvent &ev)>;
+using BacktestDataSource = std::move_only_function<bool(BacktestEvent &ev)>;
 
 ///Initial wallet state for the backtest environment, a list of currency and their amounts
 using WalletInitItem = std::pair<std::string, Decimal>;

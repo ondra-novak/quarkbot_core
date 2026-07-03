@@ -110,8 +110,7 @@ namespace quarkbot {
     public:
 
         ///Add fragment o group, the fragment is started, and becomes part of the group
-        void add(StrategyFragment frag) {
-            std::lock_guard _(_mx);
+        void add(StrategyFragment frag) {            
             add(std::move(frag), ExecutionWorker::current().required());
         }
 

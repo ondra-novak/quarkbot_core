@@ -40,9 +40,10 @@ struct Data {
 
 protected:    
     struct CSVSource {
-        std::function<std::string_view()> block_reader;
+        std::move_only_function<std::string_view()> block_reader;
         std::string_view cur_line = {};
-        int operator()();        
+        int operator()();     
+       
     };
 
     CSVReader<CSVSource> csv;
