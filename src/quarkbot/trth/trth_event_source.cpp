@@ -3,7 +3,6 @@
 #include "quarkbot/utils/string_utils.hpp"
 #include "trth_raw_source.hpp"
 #include <chrono>
-#include <memory>
 #include <sstream>
 #include <utility>
 

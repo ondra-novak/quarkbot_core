@@ -18,4 +18,5 @@ target_sources(quarkbot_impl PRIVATE
     minute_data_source.hpp
     merged_data_source.cpp
     merged_data_source.hpp
+    symbology_mapping.hpp
 )

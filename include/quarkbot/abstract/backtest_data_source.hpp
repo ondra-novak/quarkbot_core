@@ -7,6 +7,7 @@
 #include <chrono>
 #include <functional>
 #include <string>
+#include <type_traits>
 
 namespace quarkbot {
 
@@ -29,6 +30,9 @@ struct BacktestEvent {
     ///Data of the event, can be a trade, quote, auction or a custom event
     std::variant<CustomBacktestEvent, CustomBacktestEventOnExchange, CustomBacktestEventOnAccount, Trade, Quote, Auction> data;
 };
+
+template<typename T>
+concept BacktestDataSourceType = std::is_invocable_r_v<bool, T, BacktestEvent &>;
 
 ///Backtest data source is a function that provides backtest events. It is called repeatedly until it returns false.
 using BacktestDataSource = std::function<bool(BacktestEvent &ev)>;
