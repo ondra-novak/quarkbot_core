@@ -1,6 +1,9 @@
 
 #include "tardis_data_source.hpp"
+#include <zlib.h>
+#include <algorithm>
 #include <chrono>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -29,13 +32,51 @@ static std::chrono::system_clock::time_point parse_ns_timestamp(std::string_view
             std::chrono::nanoseconds(ns)));
 }
 
+// Strip trailing \r\n from a string in-place
+static void strip_newline(std::string &s) {
+    while (!s.empty() && (s.back() == '\n' || s.back() == '\r'))
+        s.pop_back();
+}
+
 namespace quarkbot {
 
-std::optional<IBacktestDataSource::Event> TardisTradesDataSource::next_event() {
+TardisCsvDataSource::TardisCsvDataSource(std::string instrument, std::filesystem::path csv_gz_path)
+    : _instrument(std::move(instrument)) {
+    _gz = reinterpret_cast<gzFile_s *>(gzopen(csv_gz_path.c_str(), "rb"));
+    if (!_gz) throw std::runtime_error("Cannot open gz file: " + csv_gz_path.string());
+}
+
+TardisCsvDataSource::~TardisCsvDataSource() {
+    if (_gz) gzclose(reinterpret_cast<gzFile>(_gz));
+}
+
+bool TardisCsvDataSource::read_line(std::string &out) {
+    out.clear();
+    char buf[4096];
+    while (true) {
+        if (!gzgets(reinterpret_cast<gzFile>(_gz), buf, sizeof(buf))) {
+            int errnum = 0;
+            gzerror(reinterpret_cast<gzFile>(_gz), &errnum);
+            // Z_OK or Z_STREAM_END both indicate clean EOF (behaviour varies by zlib version)
+            if (errnum != Z_OK && errnum != Z_STREAM_END)
+                throw std::runtime_error("gz read error in TardisCsvDataSource::read_line");
+            return !out.empty();
+        }
+        out += buf;
+        // gzgets stops at newline or EOF; if we got a newline we're done
+        if (!out.empty() && out.back() == '\n') {
+            strip_newline(out);
+            return true;
+        }
+        // buffer was full without a newline — loop to get rest of line
+    }
+}
+
+bool TardisTradesDataSource::operator()(BacktestEvent &ev) {
     std::string line;
 
     if (!_header_parsed) {
-        if (!read_line(line)) return std::nullopt;
+        if (!read_line(line)) return false;
         auto cols = split_csv(line);
         for (int i = 0; i < static_cast<int>(cols.size()); ++i) {
             if      (cols[static_cast<std::size_t>(i)] == "timestamp") _col_timestamp = i;
@@ -62,16 +103,19 @@ std::optional<IBacktestDataSource::Event> TardisTradesDataSource::next_event() {
         trade.price = price;
         trade.size  = amount;
         trade.time  = tp;
-        return Event{tp, instrument_spec().name, trade};
+        ev.symbol = instrument();
+        ev.time = tp;
+        ev.data = trade;
+        return true;
     }
-    return std::nullopt;
+    return false;
 }
 
-std::optional<IBacktestDataSource::Event> TardisQuotesDataSource::next_event() {
+bool TardisQuotesDataSource::operator()(BacktestEvent &ev) {
     std::string line;
 
     if (!_header_parsed) {
-        if (!read_line(line)) return std::nullopt;
+        if (!read_line(line)) return false;
         auto cols = split_csv(line);
         for (int i = 0; i < static_cast<int>(cols.size()); ++i) {
             if      (cols[static_cast<std::size_t>(i)] == "timestamp") _col_timestamp = i;
@@ -105,9 +149,12 @@ std::optional<IBacktestDataSource::Event> TardisQuotesDataSource::next_event() {
         quote.ask      = ask;
         quote.ask_size = ask_size;
         quote.time     = tp;
-        return Event{tp, instrument_spec().name, quote};
+        ev.symbol = instrument();
+        ev.time = tp;
+        ev.data = quote;
+        return true;
     }
-    return std::nullopt;
+    return false;
 }
 
 } // namespace quarkbot

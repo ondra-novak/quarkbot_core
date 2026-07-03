@@ -22,6 +22,7 @@
 #    pragma GCC diagnostic ignored "-Wpedantic"
 #  endif
 using int128_t = __int128;
+using uint128_t = unsigned  __int128;
 #  if defined(__clang__) || defined(__GNUC__)
 #    pragma GCC diagnostic pop
 #  endif
@@ -70,10 +71,25 @@ namespace _decimal_details {
         return digits - (n < thr?1:0);
     }
 
-    template<int64_t k>
-    inline constexpr std::int64_t multiply_and_div64(int64_t a, int64_t b) {
+
+    inline constexpr std::int64_t multiply_and_div64(int64_t a, int64_t b, int64_t k) {
         auto m = static_cast<int128_t>(a) * static_cast<int128_t>(b);
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+        //k fits into 64 bits and the quotient is expected to fit into 64 bits too,
+        //so the 128/64->64 division can be done directly by IDIV instead of
+        //the generic (and much slower, libgcc __divti3) int128_t/int128_t division
+        if consteval {
+            return static_cast<int64_t>(m / k);
+        } else {
+            std::int64_t hi = static_cast<std::int64_t>(m >> 64);
+            std::uint64_t lo = static_cast<std::uint64_t>(m);
+            std::int64_t q, r;
+            asm("idivq %[div]" : "=a"(q), "=d"(r) : [div] "r"(static_cast<std::int64_t>(k)), "a"(lo), "d"(hi));
+            return q;
+        }
+#else
         return static_cast<int64_t>(m/ k);
+#endif
     }
 
     ///enforces compiler to implement division as fixed with multiplication
@@ -382,20 +398,26 @@ public:
 
 
     friend constexpr Decimal operator*(Decimal a, Decimal b) {
-        auto r = _decimal_details::multiply_and_div64<(mantissa_max+1)/100>(a.mantissa(), b.mantissa());
+        auto r = _decimal_details::multiply_and_div64(a.mantissa(), b.mantissa(), (mantissa_max+1)/100);
         auto e = a.exponent()+b.exponent()-2;
         return normalize(static_cast<Mantissa>(r), static_cast<Exponent>(e));
     }
 
+    friend constexpr Decimal inverse(Decimal a) {return reciprocal(a);}
+    
     friend constexpr Decimal reciprocal(Decimal a) {
         if (!a) throw std::runtime_error("Decimal division by zero");
-        //use double calculation to calculate reciprocal mantisa
-        auto tmp = Decimal::normalize(static_cast<int64_t>(static_cast<double>(mantissa_max+1)/static_cast<double>(a.mantissa())*(mantissa_max+1)),0);
-        return scaleb10(tmp, -a.exponent()); //adjust exponent
+        auto m = static_cast<int64_t>(mantissa_max+1);
+        auto r = _decimal_details::multiply_and_div64(m, m, a.mantissa());
+        return normalize(static_cast<Mantissa>(r), static_cast<Exponent>(-a.exponent()));
     }
 
     friend constexpr Decimal operator/(Decimal a, Decimal b) {
-        return a * reciprocal(b);
+        if (!b) throw std::runtime_error("Decimal division by zero");
+        auto am = a.mantissa(); 
+        auto m = static_cast<int64_t>(mantissa_max+1);
+        auto r = _decimal_details::multiply_and_div64(am, m, b.mantissa());
+        return normalize(static_cast<Mantissa>(r), static_cast<Exponent>(a.exponent()-b.exponent()));
     }
 
     Decimal &operator+= (Decimal other) {*this = *this + other;return *this;}

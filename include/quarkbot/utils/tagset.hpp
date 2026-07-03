@@ -19,10 +19,11 @@ public:
     struct Domain: public DomainBase {
         using Super = std::span<const std::string_view>;
         std::string_view _items[N] = {};
-
+/*
         constexpr Domain(const std::string_view(&&items)[N]):Super(_items) {
             for (unsigned int i = 0; i < N; ++i) _items[i] = items[i];
         }
+            */
         constexpr Domain(const std::string_view(&items)[N]):Super(_items) {
             for (unsigned int i = 0; i < N; ++i) _items[i] = items[i];
         }

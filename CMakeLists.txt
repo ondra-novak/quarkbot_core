@@ -25,6 +25,7 @@ FetchContent_MakeAvailable(BasicCoro)
 OPTION(QUARKBOT_NETWORK "Compile network lib (requires openssl)" OFF)
 OPTION(QUARKBOT_LEVELDB "Compile leveldb storage (requires leveldb)" OFF)
 OPTION(QUARKBOT_TARDIS "Compile tardis importer (requires zlib)" OFF)
+OPTION(QUARKBOT_TRTH "Compile trth importer (requires zlib)" OFF)
 OPTION(QUARKBOT_TESTS "Compile tests (require everything)" ${quarkbot_DEVELOPMENT_MODE})
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)

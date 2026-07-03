@@ -231,7 +231,7 @@ template<typename T, BinaryReader RD>
 requires(std::is_arithmetic_v<T> && std::is_integral_v<T> && std::is_unsigned_v<T>)
 constexpr void parse_integer(T &val, RD &rd) {
     val = 0;
-    std::uint8_t c;
+    std::uint8_t c = 0;
     int shift = 0;
     do {
         rd(std::span<std::uint8_t>(&c,1));

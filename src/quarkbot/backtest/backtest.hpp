@@ -1,36 +1,21 @@
 #pragma once
-
-
 #include "quarkbot/context.hpp"
 #include "quarkbot/exchange.hpp"
-#include "quarkbot/stream/auction.hpp"
-#include "quarkbot/stream/quote.hpp"
-#include "quarkbot/stream/trade.hpp"
 #include <chrono>
+#include <quarkbot/abstract/backtest_data_source.hpp>
 #include <filesystem>
-#include <functional>
-#include <string>
 #include <variant>
 namespace quarkbot {
 
-using CustomBacktestEvent = std::function<void()>;
-
-struct BacktestEvent {
-    std::string symbol;
-    std::chrono::system_clock::time_point time;
-    std::variant<CustomBacktestEvent,Trade,Quote,Auction> data;
-};
-
-using BacktestDataSource = std::function<bool(BacktestEvent &ev)>;
-
-
-using WalletInitItem = std::pair<std::string, Decimal>;
-
-using ReportSink = std::function<void(const POrderAData &, const OrderInternalData::Update &)>;
-
 struct SimulationParams {
+    ///Report sink is a function that is called for each order update, it can be used to generate reports
+    //  - or you can specify a path to a file where the report will be written in CSV format.
+    //  Default is no report sink, no report will be generated.
     std::variant<std::monostate, std::filesystem::path, ReportSink> reporter = {};
+    ///Slippage in percent, default is 0.0 (no slippage), for example 0.001 means 0.1% slippage, 0.01 means 1% slippage
     double slippage = {};
+    ///How long the order will take to be executed, default is 0 (no latency), for example 100ms means that the order will be executed after 100ms
+    /** simulates how long the order travels through wires to the exchange and back. It is total round-trip time */
     std::chrono::system_clock::duration latency = {};    
 };
 

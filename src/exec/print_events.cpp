@@ -4,7 +4,7 @@
 #include "quarkbot/context.hpp"
 #include "quarkbot/instrument_description.hpp"
 #include "quarkbot/log.hpp"
-#include "quarkbot/tardis/mmbot_data_source.hpp"
+#include "quarkbot/backtest/minute_data_source.hpp"
 #include "../strategies/print_events/print_events.hpp"
 #include <string_view>
 using namespace quarkbot;
@@ -29,13 +29,8 @@ constexpr std::string_view source_data = "83421\n"
 int main() {
 
     auto source_file = std::istringstream(std::string(source_data));
-    auto source = std::make_shared<MMBOT_backtest_datasource>("BTCUSD", source_file, std::chrono::system_clock::now());
+    MinuteDataSource source("BTCUSD", source_file, std::chrono::system_clock::now());
 
-/*    auto source = std::make_shared<MMBOT_backtest_datasource>("BTCUSD", "/home/ondra/Stažené/minute_bitfinex_BTC_USD (m) (1).csv",
-        std::chrono::system_clock::now()-std::chrono::days(365));
-        */
-
-    
     std::array<std::pair<std::string, Decimal>,1 > wallet{std::pair<std::string, Decimal>("USD",1000_dec)};
     std::array<InstrumentDescription,1> instruments = {InstrumentDescription{
         {},
@@ -45,8 +40,7 @@ int main() {
     };
 
     BacktestEnv bt("backtest",wallet,instruments,{});
-    auto datasource = [](BacktestEvent &ev){return false;};
     bt.add_strategy<PrintEventStrategy>();
-    bt.run(datasource);
+    bt.run(std::ref(source));
 
 }

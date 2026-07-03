@@ -12,6 +12,10 @@ target_sources(quarkbot_impl PRIVATE
     simexchange.hpp 
     siminstrument.cpp 
     siminstrument.hpp 
-    simtradableinstrument.cpp 
+    simtradableinstrument.cpp
     simtradableinstrument.hpp
+    minute_data_source.cpp
+    minute_data_source.hpp
+    merged_data_source.cpp
+    merged_data_source.hpp
 )

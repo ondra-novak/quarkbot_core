@@ -18,4 +18,8 @@ endif()
 if (QUARKBOT_TARDIS OR QUARKBOT_TESTS)
 add_subdirectory("tardis" EXCLUDE_FROM_ALL)
 endif()
+if (QUARKBOT_TRTH OR QUARKBOT_TESTS)
+add_subdirectory("trth" EXCLUDE_FROM_ALL)
+endif()
+
 

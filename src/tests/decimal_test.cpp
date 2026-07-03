@@ -57,12 +57,12 @@ static_assert((Decimal(-123456789)*Decimal(246871231)).mantissa() == -3047792947
 
 static_assert((Decimal(1024)/Decimal(16)).mantissa() == 6400000000000000);
 static_assert((Decimal(1024)/Decimal(16)).exponent() == 2);
-static_assert((Decimal(Decimal::mantissa_max,10)/Decimal(23)).mantissa() == 4347826086956520);
+static_assert((Decimal(Decimal::mantissa_max,10)/Decimal(23)).mantissa() == 4347826086956521);
 static_assert((Decimal(Decimal::mantissa_max,10)/Decimal(23)).exponent() == 9);
 
 static_assert((-Decimal(11)/Decimal(2)).mantissa() == -5500000000000000);
 static_assert((-Decimal(11)/Decimal(2)).exponent() == 1);
-static_assert((Decimal(1)/Decimal(123)).mantissa() == 8130081300813009);
+static_assert((Decimal(1)/Decimal(123)).mantissa() == 8130081300813008);
 static_assert((Decimal(1)/Decimal(123)).exponent() == -2);
 static_assert(Decimal(1) < Decimal(2));
 static_assert(Decimal(1) < Decimal(200));
@@ -128,6 +128,8 @@ int main() {
     std::cout << Decimal(-11258e-25_dec).to_string() << std::endl;
     std::cout << 0_dec << std::endl;
     std::cout << 0.412_dec << std::endl;
+    std::cout << (0.412_dec * 2.42718_dec)<< std::endl;
+    std::cout << inverse(0.412_dec) << std::endl;
 }
 
 

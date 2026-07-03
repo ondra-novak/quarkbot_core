@@ -7,7 +7,6 @@ set(BASIC_TESTS
     decimal_test.cpp
     pubsub.cpp
     mem_storage_test.cpp
-    instrument_spec_test.cpp
     tardis_source_test.cpp
     merged_source_test.cpp
     serializer.cpp

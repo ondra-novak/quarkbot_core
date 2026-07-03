@@ -6,8 +6,10 @@
 #include <quarkbot/execution_worker.hpp>
 #include <quarkbot/tradable_instrument.hpp>
 #include "backtest_executor.hpp"
+#include "quarkbot/selector.hpp"
 #include "quarkbot/types.hpp"
 #include "quarkbot/utils/init_with.hpp"
+#include "simaccount.hpp"
 #include "simexchange.hpp"
 #include "simexec_report_csv.hpp"
 #include "simexecutor.hpp"
@@ -19,6 +21,7 @@ namespace quarkbot {
 
     bool run_backtest(std::shared_ptr<BacktestExecutor> executor, 
                   std::shared_ptr<SimExchange> exchange,
+                  std::shared_ptr<SimAccount> account,
                   BacktestDataSource source,std::stop_source stop_source) {
 
             
@@ -26,13 +29,15 @@ namespace quarkbot {
         if (!source(event)) return false;
         do {
             executor->set_time(event.time);
-            std::visit([&](const auto &ev){
-                if constexpr(std::is_invocable_v<decltype(ev)>) {
-                    ev();
-                } else  {
-                    exchange->on_event(event.symbol, ev);
-                }
-            }, event.data);
+            selector(event.data, [&](const CustomBacktestEvent &ev){
+                ev(event.symbol);
+            }, [&](const CustomBacktestEventOnExchange &ev){
+                ev(event.symbol, exchange.get());
+            }, [&](const CustomBacktestEventOnAccount &ev){
+                ev(event.symbol, account.get());                
+            }, [&](const auto &ev){
+                exchange->on_event(event.symbol, ev);
+            });
         } while (source(event));
 
         stop_source.request_stop();    
@@ -89,6 +94,7 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
     bool BacktestEnv::run(BacktestDataSource data_source) {
         return run_backtest(std::static_pointer_cast<BacktestExecutor>(_worker.get_handle()),
                     std::static_pointer_cast<SimExchange>(_exchange.get_handle()),
+                    std::static_pointer_cast<SimAccount>(_account.get_handle()),
                     std::move(data_source),stop_src);
     }
 
