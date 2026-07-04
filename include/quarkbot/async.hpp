@@ -56,6 +56,7 @@ namespace quarkbot {
                     return;
                 }
             } catch (...) {
+                _frame._awaiting = {};
                 target.destroy();
                 throw;
             }
