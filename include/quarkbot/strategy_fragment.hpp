@@ -1,9 +1,82 @@
 #pragma once
-#include "async.hpp"
-#include "basic_coro/awaitable.hpp"
+#include "basic_coro/coroutine.hpp"
+#include "basic_coro/exceptions.hpp"
+#include "basic_coro/pending.hpp"
+#include "execution_worker.hpp"
+#include "memory.hpp"
+#include <coroutine>
 #include <list>
 
 namespace quarkbot {
+
+
+    ///Asynchronous function which can be co_awaited, used for concurrent execution of strategy fragments and other asynchronous operations
+    /**
+        This is a coroutine which is managed by quarkbot interface. 
+        The function can use co_await. It must use co_return to returns value
+
+        @tparam T type of return value
+
+        To call this function and retrieve the return value you need to use co_await fn(...). You can
+        call such function from anothe Async or from StrategyFragment
+
+    */
+
+    class IAsyncDebugTrace {
+    public:
+
+        virtual void add(std::coroutine_handle<> h, const std::source_location &loc) = 0;
+        virtual void remove(std::coroutine_handle<> h) = 0;
+        virtual void resumed(std::coroutine_handle<> h) = 0;        
+        virtual ~IAsyncDebugTrace() = default;
+        static IAsyncDebugTrace *trace;
+    };
+
+    inline IAsyncDebugTrace * IAsyncDebugTrace::trace = nullptr;
+
+
+
+    template<typename T>
+    class Async : public coro::coroutine<T> {
+    public:
+
+        
+
+
+    class promise_type: public coro::coroutine<T>::promise_type {
+        public:            
+            void *operator new(std::size_t sz) {return LockFreeFramePool::allocate(sz);}
+            void operator delete(void *ptr, std::size_t sz) {return LockFreeFramePool::deallocate(ptr, sz);}
+            
+            
+            void (*old_resume)(std::coroutine_handle<promise_type>) = nullptr;
+
+            static void debug_traced_resume(std::coroutine_handle<promise_type> h) {
+                IAsyncDebugTrace::trace->resumed(h);
+                auto &me = h.promise();
+                me.old_resume(h);
+            }
+
+            std::suspend_always initial_suspend(std::source_location loc = std::source_location::current())  noexcept {
+                if (IAsyncDebugTrace::trace) {
+                    auto h = std::coroutine_handle<promise_type>::from_promise(*this);
+                    IAsyncDebugTrace::trace->add(h, loc);                
+                    auto frame_ptr = reinterpret_cast<void (**)(std::coroutine_handle<promise_type>) >(h.address());
+                    old_resume = *frame_ptr;
+                    *frame_ptr = &debug_traced_resume;
+                }
+                return {};
+            }        
+
+            ~promise_type() {
+                if (IAsyncDebugTrace::trace) IAsyncDebugTrace::trace->remove(std::coroutine_handle<promise_type>::from_promise(*this));
+            }
+            
+        };
+
+        Async() = default;
+        Async(coro::coroutine<T> x):coro::coroutine<T>(std::move(x)) {}
+    };
 
     ///A fragment of a strategy running concurrently with other fragments
     /**

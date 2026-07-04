@@ -1,6 +1,4 @@
 #include "backtest.hpp"
-#include "basic_coro/prepared_coro.hpp"
-#include "basic_coro/sync_await.hpp"
 #include <filesystem>
 #include <quarkbot/context.hpp>
 #include <quarkbot/execution_worker.hpp>
@@ -8,12 +6,9 @@
 #include "backtest_executor.hpp"
 #include "quarkbot/selector.hpp"
 #include "quarkbot/types.hpp"
-#include "quarkbot/utils/init_with.hpp"
 #include "simaccount.hpp"
 #include "simexchange.hpp"
 #include "simexec_report_csv.hpp"
-#include "simexecutor.hpp"
-#include "siminstrument.hpp"
 #include <memory>
 #include <variant>
 
