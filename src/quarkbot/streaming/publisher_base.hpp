@@ -5,6 +5,7 @@
 #include <basic_coro/cancel_signal.hpp>
 #include <memory>
 #include <mutex>
+#include "basic_coro/prepared_coro.hpp"
 #include "quarkbot/abstract/ieventstream.hpp"
 #include "quarkbot/execution_worker.hpp"
 namespace quarkbot {
@@ -19,7 +20,7 @@ public:
         
         ///Consumer definition - registration of awaiting coroutine
         struct Consumer {
-            ResultAndExecWorker<bool> _result; //result of suspended coroutine associated with its execution worker
+            awaitable<bool>::result _result; //result of suspended coroutine associated with its execution worker
             coro::cancel_signal *_cancel; // if not null, awaiting can be canceled
         };
 
@@ -35,7 +36,8 @@ public:
         @note MT safe
 
         */
-        bool cancel(coro::cancel_signal *sig) {            
+        bool cancel(coro::cancel_signal *sig) {       
+            coro::prepared_coro pc;     
             if (!sig || sig->is_canceled()) return false; //ignore if already canceled
             std::lock_guard _(_mx);
 
@@ -44,7 +46,7 @@ public:
             //find all awaiters in the single cancel group and cancel them
             auto end = std::remove_if(_awaiters.begin(), _awaiters.end(), [&](Consumer &c)->bool{
                 if (c._cancel == sig) {
-                    c._result(false);
+                    pc = c._result(false);
                     return true;
                 }
                 return false;

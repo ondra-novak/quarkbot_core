@@ -171,8 +171,7 @@ struct OrderEvent : OrderReport{
 template<HubProducer<OrderEvent> _Hub>
 bool Order::receive_at(_Hub hub) {
     force_valid();
-    ExecutionWorker exec = ExecutionWorker::current();
-    exec.required();
+    ExecutionWorker exec = ExecutionWorker::current().required();
     if (_order_data->is_done()) return false;
     OrderEvent ev;
     ev.order = Order(_order_data);

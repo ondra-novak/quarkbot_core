@@ -5,6 +5,7 @@
 #include "../order_defs.hpp"
 #include "../order_storage.hpp"
 #include "../types.hpp"
+#include "basic_coro/prepared_coro.hpp"
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -25,7 +26,6 @@ namespace quarkbot {
         OrderReport &report;
         POrderAData &ptr_to_redirect;
         awaitable<bool>::result result;
-        ExecutionWorker worker;
         enum RegisterStatus {
             //awaiter registered
             accepted,
@@ -116,9 +116,9 @@ namespace quarkbot {
         }
 
 
-        void update(Fill &&up) {
+        coro::prepared_coro update(Fill &&up) {             
             if (storage) {
-                if (storage->check_fill_exists(up)) return;
+                if (storage->check_fill_exists(up)) return {};
                 auto wr = storage->write();
                 storage->store_fill(wr, up);
                 fst.filled += up.amount;
@@ -128,10 +128,10 @@ namespace quarkbot {
             }
             std::scoped_lock _(updates_target->mx);
             updates_target->updates.push_back(std::move(up));
-            notify_lk();
+            return notify_lk();
         }
 
-        void update(OrderStatus st) {
+        coro::prepared_coro update(OrderStatus st) {
             if (storage && is_done_status(st)) {
                 auto wr = storage->write();
                 storage->close_order(wr, key);
@@ -139,10 +139,10 @@ namespace quarkbot {
             std::scoped_lock _(updates_target->mx);
             updates_target->updates.push_back(st);
             updates_target->done = updates_target->done || is_done_status(st);
-            updates_target->notify_lk();
+            return updates_target->notify_lk();
         }
 
-        void update(OrderRejectionReason st) {
+        coro::prepared_coro update(OrderRejectionReason st) {
             if (storage) {
                 auto wr = storage->write();
                 storage->close_order(wr, key);
@@ -150,9 +150,9 @@ namespace quarkbot {
             std::scoped_lock _(updates_target->mx);
             updates_target->updates.push_back(st);
             updates_target->done = true;
-            updates_target->notify_lk();
+            return updates_target->notify_lk();
         }
-        void update(OrderRejectionWithText &&st) {
+        coro::prepared_coro update(OrderRejectionWithText &&st) {
             if (storage) {
                 auto wr = storage->write();
                 storage->close_order(wr, key);
@@ -160,10 +160,10 @@ namespace quarkbot {
             std::scoped_lock _(updates_target->mx);
             updates.push_back(std::move(st));
             updates_target->done = true;
-            updates_target->notify_lk();
+            return updates_target->notify_lk();
         }
 
-        void update(OrderOpenStatus &&st) {
+        coro::prepared_coro update(OrderOpenStatus &&st) {
             if (storage) {
                 auto wr = storage->write();
                 storage->open_order(wr, st.key, {st.id,name,parameters});
@@ -173,10 +173,10 @@ namespace quarkbot {
             key = updates_target->key = st.key;
             updates_target->updates.push_back(OrderStatus::open);
             updates_target->done = false;
-            updates_target->notify_lk();
+            return updates_target->notify_lk();
         }
-        void forward_update(Update &&up) {
-            std::visit([&](auto &x){this->update(std::move(x));},up);
+        coro::prepared_coro forward_update(Update &&up) {
+            return std::visit([&](auto &x){return this->update(std::move(x));},up);
         }
 
         ///flush updates to report
@@ -375,30 +375,27 @@ namespace quarkbot {
 
             if (done) return OrderAwaiting::rejected_done;
 
-            //acquire worker
-            auto wrk = ExecutionWorker::current();
-            //worker is required
-            wrk.required();
             //register promise and arguments
             awaiting.emplace(OrderAwaiting{report, redirect_ptr, 
-                                           std::move(promise), std::move(wrk)});
+                                           std::move(promise)});
             //awaiting started
             return OrderAwaiting::accepted;
                             
         }
         ///notify about update (locked)
-        void notify_lk() {
+        coro::prepared_coro notify_lk() {
+            coro::prepared_coro out;
             //any awaiting
             if (awaiting.has_value()) {
                 //flush updates
                 if (flush_updates_lk(awaiting->report, awaiting->ptr_to_redirect)) {
                     //in case success, resolve promise
-                    awaiting->worker.resume(awaiting->result(true));
+                    out = awaiting->result(true);
                     //reset internal state
                     awaiting.reset();
                 }
-
             }
+            return out;
         }
 
     };

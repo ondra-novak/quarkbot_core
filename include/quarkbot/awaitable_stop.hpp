@@ -17,7 +17,7 @@ namespace quarkbot {
 
         bool await_ready() const {return tkn.stop_requested();}
         void await_suspend(std::coroutine_handle<> h) {
-            std::construct_at(&callback,tkn, CB{h, ExecutionWorker::current()});            
+            std::construct_at(&callback,tkn, CB{h});            
         }
         void await_resume() {
             std::destroy_at(&callback);
@@ -27,10 +27,8 @@ namespace quarkbot {
 
         struct CB {
             std::coroutine_handle<> h;
-            ExecutionWorker worker;
             void operator()() {
-                if (worker) worker.resume(h);
-                else h.resume();
+                h.resume();
             }
         };
 

@@ -1,6 +1,10 @@
 #pragma once
 
 #include "abstract/iexecution_worker.hpp"
+#include "basic_coro/coroutine.hpp"
+#include "basic_coro/pending.hpp"
+#include "basic_coro/prepared_coro.hpp"
+#include "quarkbot/defs.hpp"
 
 
 #include <basic_coro/await_proxy.hpp>
@@ -39,6 +43,12 @@ public:
     void run(coroutine coro) {
         resume(coro.release());       
     }
+
+    template<typename T>
+    auto launch(coro::coroutine<T> &&coro) {
+        return coro.launch([&](coro::prepared_coro c)  {resume(std::move(c));});
+    }
+
     ///Create new execution worker
     /**
         In most cases, it starts a new thread. The thread run if there is a reference
@@ -140,7 +150,7 @@ public:
 
     ///Ensures that worker is available - otherwise it throw exception
     ExecutionWorker &required() {
-        if (!_worker) throw std::runtime_error("Requires execution worker");
+        if (!_worker) throw std::runtime_error("Operation is executed in a thread wich is Execution Worker. This is required.");
         return *this;
     }
 
@@ -159,28 +169,6 @@ protected:
 
 
 
-
-struct ProxyResultExecutor {
-    ExecutionWorker _worker{nullptr};
-    void operator()(coro::prepared_coro coro) {
-        if (_worker) _worker.resume(std::move(coro));        
-    }
-};
-
-
-template<typename T>
-class ResultAndExecWorker : public coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor> {
-public:
-    ResultAndExecWorker(coro::awaitable_result<T> res):coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>(
-        std::move(res), {IExecutionWorker::current()})
-    {
-        if (!this->_executor._worker) {
-            this->_result(std::make_exception_ptr(std::runtime_error("Function can be called only from executor worker")));
-        }
-    }
-    ResultAndExecWorker():coro::result_proxy<coro::awaitable_result<T>, ProxyResultExecutor>({},{}) {}
-    operator bool() const {return this->_result.operator bool();}
-};
 
 }
 

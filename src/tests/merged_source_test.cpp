@@ -1,4 +1,5 @@
 #include "../quarkbot/backtest/merged_data_source.hpp"
+#include "quarkbot/abstract/backtest_data_source.hpp"
 #include "tests/check.h"
 #include <chrono>
 #include <iostream>
@@ -43,12 +44,12 @@ static BacktestEvent make_trade_event(long long ms) {
 }
 
 int main() {
+    std::vector<BacktestDataSource> sources;
+    sources.emplace_back(VectorSource({make_trade_event(100), make_trade_event(300), make_trade_event(500)}));
+    sources.emplace_back(VectorSource({make_trade_event(200), make_trade_event(400)}));
     // Source A: events at t=100, t=300, t=500
     // Source B: events at t=200, t=400
-    MergedDataSource merged(std::vector<BacktestDataSource>{
-        VectorSource({make_trade_event(100), make_trade_event(300), make_trade_event(500)}),
-        VectorSource({make_trade_event(200), make_trade_event(400)}),
-    });
+    MergedDataSource merged(std::move(sources));
 
     BacktestEvent ev;
     CHECK(merged(ev)); CHECK(ev.time == make_tp(100));

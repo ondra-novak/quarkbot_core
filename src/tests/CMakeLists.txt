@@ -18,6 +18,7 @@ set(BASIC_TESTS
     csv_report.cpp
     config.cpp
     tagset.cpp
+    strategy_fragment.cpp
 )
 
 

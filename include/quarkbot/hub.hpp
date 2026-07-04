@@ -116,17 +116,14 @@ private:
 
     class Common {
         coro::awaitable<bool>::result ntf;
-        ExecutionWorker worker;
     public:
         Common(coro::awaitable<bool>::result ntf)
-            :ntf(std::move(ntf))
-            ,worker(IExecutionWorker::current()) {}
+            :ntf(std::move(ntf)) {}
         ~Common() {
             resume(false);
         }
         coro::prepared_coro resume(bool value) {
             auto c = ntf(value);
-            if (c && worker) worker.resume(std::move(c));
             return c;
         }
     };

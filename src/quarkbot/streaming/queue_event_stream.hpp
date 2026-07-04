@@ -1,6 +1,7 @@
 #pragma  once
 
 #include "basic_coro/prepared_coro.hpp"
+#include "quarkbot/utils/small_buffer.hpp"
 #include <quarkbot/abstract/ieventstream.hpp>
 #include <quarkbot/execution_worker.hpp>
 #include <algorithm>
@@ -18,28 +19,28 @@ public:
         close();
     }
 
-    void push(T &&val) {
+    coro::prepared_coro push(T &&val) {
         std::scoped_lock _(_mx);        
-        if (_closed) return;;
+        if (_closed) return {};
         if (_awaiting_value) {
             *_awaiting_value = std::move(val);
-            _awaiting(true);
+            return _awaiting(true);
         } else {
             _q.push(std::move(val));
         }
-        return;
+        return {};
 
     }
-    void push(const T &val) {
+    coro::prepared_coro push(const T &val) {
         std::scoped_lock _(_mx);        
-        if (_closed) return;;
+        if (_closed) return {};
         if (_awaiting_value) {
             *_awaiting_value = val;
-            _awaiting(true);
+            return _awaiting(true);
         } else {
             _q.push(val);
         }
-        return;;
+        return {};
     }
 
     virtual bool is_open() const override {
@@ -95,7 +96,7 @@ protected:
 
     mutable std::mutex _mx;
     std::queue<T> _q;
-    ResultAndExecWorker<bool> _awaiting = {};
+    awaitable<bool>::result _awaiting = {};
     T *_awaiting_value = nullptr;
     bool _closed;
     std::function<void()> _unsub_fn;
@@ -118,9 +119,11 @@ public:
     }
 
     void publish(const T &val) {
-        std::scoped_lock _(_mx);
-        for (auto &[id, sub]: _subscribers) {
-            sub->push(val);
+        SmallBuffer<coro::prepared_coro, 32> out;
+        std::scoped_lock _(_mx); 
+        out.set_size(_subscribers.size());
+        for (std::size_t idx = 0; auto &[id, sub]: _subscribers) {
+            out[idx++] = sub->push(val);
         }
     }
 

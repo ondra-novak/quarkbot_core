@@ -91,7 +91,7 @@ public:
             if (_closed || (cancel_sig && cancel_sig->is_canceled()))  {
                 p = awaiting(false);
             } else {
-                _awaiting.emplace_back(std::move(awaiting), IExecutionWorker::current(), cancel_sig, &to, &rev);                
+                _awaiting.emplace_back(std::move(awaiting), cancel_sig, &to, &rev);                
             }
         } else {            
             rev = std::max(_current_revision - _queue.size(), rev);
@@ -178,15 +178,13 @@ protected:
 
     struct Result {
         awaitable<bool>::result result;
-        ExecutionWorker worker;//worker is optional here
         coro::cancel_signal *cancel_sig;
         T *target;
         Revision *target_rev;
 
         coro::prepared_coro resolve(bool value) {
             coro::prepared_coro out;
-            if (worker) worker.resume(result(value));
-            else out = result(value);
+            out = result(value);
             return out;
         }
     };

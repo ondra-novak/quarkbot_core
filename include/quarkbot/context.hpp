@@ -63,7 +63,7 @@ namespace quarkbot {
          */
         template<typename _S, std::derived_from<StrategyContext> _Context>
         requires(StrategyClass<_S, _Context>)
-        static StrategyFragment create_and_start_strategy(_Context &&ctx) {
+        static StrategyFragment create_and_start_strategy(_Context ctx) {
 
             ctx.active_group  = std::make_shared<StrategyFragmentGroup>();
             //retrieve worker
