@@ -169,7 +169,7 @@ void log_to_file(const std::filesystem::path &file) {
         _rotate_signal.store(true, std::memory_order_relaxed);
     });
 }
-void log_to_file_rotate(const std::filesystem::path &file, unsigned int rotate_seconds, unsigned int retention) {
+void log_to_file_rotate(const std::filesystem::path &file, unsigned int retention, unsigned int rotate_seconds) {
     std::scoped_lock _(_mx);
     if (rotate_seconds == 0){
          log_to_file(file);

@@ -19,11 +19,11 @@ namespace quarkbot {
     ///redirect log to a file and perform autorotate
     /**
     @param file target file
-    @param rotate_seconds how often are files rotated
     @param retention how many files are kept before they are deleted
+    @param rotate_seconds how often are files rotated
         */
     void log_to_file_rotate(const std::filesystem::path &file,
-            unsigned int rotate_seconds = 24*60*60, unsigned int retention = 7);        
+             unsigned int retention = 7, unsigned int rotate_seconds = 24*60*60);        
 
     void log_set_level(LogLevel level);
     ///close any logging

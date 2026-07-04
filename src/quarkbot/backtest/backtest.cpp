@@ -92,6 +92,7 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
     
         ctx.exec_worker = _worker;
         ctx.stop_signal = stop_src.get_token();        
+        ctx.mode = StrategyMode::backtest;        
     }
 
     bool BacktestEnv::run(BacktestDataSource data_source) {

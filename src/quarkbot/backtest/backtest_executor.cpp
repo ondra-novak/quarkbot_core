@@ -34,7 +34,7 @@ public:
             if  (iter == _loc.end()) return;
             auto &buff = Logger::get_buffer();
             std::string_view fnam(iter->second.function_name())            ;            
-            std::format_to(std::back_inserter(buff),"{} {} {:x}", operation, short_name(fnam), reinterpret_cast<std::uintptr_t>(h.address()));
+            std::format_to(std::back_inserter(buff),"{} {}", operation, short_name(fnam) );
             Logger::instance.log_sink(LogLevel::trace, &iter->second, {buff.data(), buff.size()});
             buff.clear();
 
@@ -123,7 +123,6 @@ void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
 }
 
 void BacktestExecutor::resume(std::coroutine_handle<> h) noexcept {
-    coroRegister.report("Scheduled", h);
     _dispatch_queue.push(h);
 }
 PExecutionWorker BacktestExecutor::spawn() noexcept {

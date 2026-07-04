@@ -54,7 +54,25 @@ public:
     requires(StrategyClass<_Strategy, _Context>)
     void add_strategy(std::span<const std::string_view> instruments , _Context &&context = _Context{}) {
         init_context_basic(instruments, context);
-        context.template create_and_start_strategy<_Strategy>(std::move(context));        
+        _strategy_group.add(context.template create_and_start_strategy<_Strategy>(std::move(context)));
+    }
+
+    ///add strategy to the backtest environment and run it (indirectly by using factory)
+    /**
+    @tparam _StrategyFactory object invokable which creates strategy
+    @tparam _Context strategy context type, default is StrategyContext
+    @param instruments list of instrument names to be added to the strategy context (as a tradable instrument)
+    @param context strategy context to be passed to the strategy constructor, default is default constructed StrategyContext. 
+        If you need initailize other members such a config, storage, etc, you can pass your own context object.
+         The function will add tradable instruments to the context and then pass it to the strategy constructor.    
+
+    @note Thet strategy is not run immediately, it is scheduled to run on the backtest executor. The backtest executor is run by the run() function of the BacktestEnv class.
+    */
+    template<typename _StrategyFactory, typename _Context = StrategyContext>
+    requires(std::is_invocable_r_v<StrategyFragment, _StrategyFactory, _Context &&>)
+    void add_strategy(_StrategyFactory &&strategy, std::span<const std::string_view> instruments , _Context &&context = _Context{}) {
+        init_context_basic(instruments, context);
+        _strategy_group.add(std::invoke(std::forward<_StrategyFactory>(strategy), std::move(context)));
     }
 
     ///add strategy to the backtest environment and run it
@@ -76,6 +94,22 @@ public:
         _strategy_group.add(context.template create_and_start_strategy<_Strategy>(std::move(context)), _worker);
     }
 
+        ///add strategy to the backtest environment and run it (indirectly by using factory)
+    /**
+    @tparam _StrategyFactory object invokable which creates strategy
+    @tparam _Context strategy context type, default is StrategyContext
+    @param context strategy context to be passed to the strategy constructor, default is default constructed StrategyContext. 
+        If you need initailize other members such a config, storage, etc, you can pass your own context object.
+         The function will add tradable instruments to the context and then pass it to the strategy constructor.    
+
+    @note Thet strategy is not run immediately, it is scheduled to run on the backtest executor. The backtest executor is run by the run() function of the BacktestEnv class.
+    */
+    template<typename _StrategyFactory, typename _Context = StrategyContext>
+    requires(std::is_invocable_r_v<StrategyFragment, _StrategyFactory, _Context &&>)
+    void add_strategy(_StrategyFactory &&strategy, _Context &&context = _Context{}) {
+        init_context_basic( context);
+        _strategy_group.add(std::invoke(std::forward<_StrategyFactory>(strategy), std::move(context)));
+    }
 
     ///run backtest with given data source
     /**
@@ -98,6 +132,11 @@ public:
     auto get_exchange() const {return _exchange;}
     auto get_account() const {return _account;}
     auto get_stop_token() const {return stop_src.get_token();}
+    
+    ///Launch custom fragment in context of backtest (not strategy)
+    void launch(StrategyFragment fragment) {
+        _strategy_group.add(std::move(fragment));
+    }
     
     void stop() {
         stop_src.request_stop();
