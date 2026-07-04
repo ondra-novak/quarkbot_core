@@ -1,4 +1,7 @@
 #pragma once
+#include "basic_coro/await_proxy.hpp"
+#include "basic_coro/concepts.hpp"
+#include "basic_coro/coro_frame.hpp"
 #include "basic_coro/coroutine.hpp"
 #include "basic_coro/exceptions.hpp"
 #include "basic_coro/pending.hpp"
@@ -36,9 +39,13 @@ namespace quarkbot {
     inline IAsyncDebugTrace * IAsyncDebugTrace::trace = nullptr;
 
 
+
     template<typename T>
     class Async : public coro::coroutine<T> {
     public:
+
+        
+
 
     class promise_type: public coro::coroutine<T>::promise_type {
         public:            
