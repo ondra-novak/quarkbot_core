@@ -28,13 +28,14 @@ namespace quarkbot {
             using RetT = decltype(_awt.await_suspend(h));
             _frame._worker = ExecutionWorker::current().required();;
             auto target = _frame.create_handle();
+            _frame._awaiting = h;
             try {
                 if constexpr(std::is_convertible_v<RetT,std::coroutine_handle<> >) {
                     auto r = _awt.await_suspend(target);
                     if (r != target) { 
-                        _frame._awaiting = h;
                         return r;                
                     }
+                    _frame._awaiting = {};
                     //no suspend happened destroy handle
                     target.destroy();
                     //return original handle
@@ -42,9 +43,9 @@ namespace quarkbot {
                 } else if constexpr(std::is_convertible_v<RetT, bool>) {                
                     bool b = _awt.await_suspend(target);
                     if (b) {
-                        _frame._awaiting = h;
                         return true;
                     }
+                    _frame._awaiting = {};
                     //no suspend happened - destroy target
                     target.destroy();
                     //return false;
@@ -52,7 +53,6 @@ namespace quarkbot {
                 } else {
                     //always suspend
                     _awt.await_suspend(target);
-                    _frame._awaiting = h;
                     return;
                 }
             } catch (...) {
