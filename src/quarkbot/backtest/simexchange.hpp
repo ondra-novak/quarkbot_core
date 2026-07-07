@@ -28,7 +28,7 @@ public:
     virtual std::vector<UnderlyingCurrency> get_all_currencies()  override;
     virtual std::string_view get_name() const override;
 
-    std::unique_ptr<IEventStreamBase> subscribe_stream(std::shared_ptr<SimInstrument> instrument, std::size_t type, const void *params);
+    std::shared_ptr<IEventStreamBase> subscribe_stream(std::shared_ptr<SimInstrument> instrument, std::size_t type, const void *params);
     PTradableInstrument create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account);
 
     ///add simulated instrument to exchange, returns a handle to it. If the same name already exists, returns the existing one (and updates its definition)

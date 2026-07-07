@@ -1,13 +1,11 @@
 #pragma once
 
 #include "serialize.hpp"
+#include "schema_fwd.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
-namespace quarkbot {
-
-
-    using SchemaHash = std::uint64_t;
+namespace srl {
 
 
     ///manages schema hashes and type mapping

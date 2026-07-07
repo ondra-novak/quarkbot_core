@@ -1,5 +1,7 @@
+#include "quarkbot/storage.hpp"
 #include "tests/check.h"
 #include "../quarkbot/common/mem_storage.hpp"
+#include "quarkbot/storage_srl.hpp"   // IWYU pragma: keep - template definitions
 #include <quarkbot/storage_namespace.hpp>
 #include <memory>
 
@@ -102,16 +104,16 @@ void test_plain_get_all_keys() {
 }
 
 void test_sequences() {
-    auto storage = MemStorage::create();
+    Storage storage = MemStorage::create();
 
     for (int i = 0; i < 100; ++i) {
-        auto wr = storage->write();
-        wr->store("data", {static_cast<std::uint64_t>(i),0}, i);
-        wr->commit();
+        auto wr = storage.write();
+        wr.store("data", {static_cast<std::uint64_t>(i),0}, i);
+        wr.commit();
     }
 
     int p = 10;
-    for (auto z: storage->select_range("data", {10,0}, {20,0})) {
+    for (auto z: storage.select_range("data", {10,0}, {20,0})) {
         int val;
         if (z >> val) {
    
@@ -121,7 +123,7 @@ void test_sequences() {
     }
     CHECK_EQUAL(p, 20);
     p = 50;
-    for (auto z: storage->select_range("data", {50,0}, {0,0})) {
+    for (auto z: storage.select_range("data", {50,0}, {0,0})) {
         int val;
         if (z >> val) {
             CHECK_EQUAL(val, p);

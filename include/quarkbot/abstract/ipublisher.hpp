@@ -23,7 +23,7 @@ template<typename T> class EventStream;
 class IPublisher {
 
 public:
-    virtual std::unique_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) = 0;
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) = 0;
     virtual ~IPublisher() = default;
 
     template<typename T>    
@@ -31,7 +31,7 @@ public:
     EventStream<T> subscribe() {
         auto x = this->subscribe_stream(class_hash<typename StreamViewType<T>::type>, nullptr);
         if (x) return EventStream<T>::from_base(std::move(x));
-        else return EventStream<T>::create_null();
+        return {};
     }
 
     template<typename T>    
@@ -39,7 +39,7 @@ public:
     EventStream<T> subscribe() {
         auto x = this->subscribe_stream(class_hash<typename StreamViewType<T>::type>, &T::param);
         if (x) return EventStream<T>::from_base(std::move(x));
-        else return EventStream<T>::create_null();
+        return {};
     }
 
     template<typename T>

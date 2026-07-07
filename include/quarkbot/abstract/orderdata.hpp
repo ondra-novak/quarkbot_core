@@ -124,7 +124,7 @@ namespace quarkbot {
                 fst.filled += up.amount;
                 fst.turnover += up.amount*up.price;
                 storage->store_filled(wr,key, fst);
-                wr->commit();
+                wr.commit();
             }
             std::scoped_lock _(updates_target->mx);
             updates_target->updates.push_back(std::move(up));
@@ -171,7 +171,7 @@ namespace quarkbot {
             std::scoped_lock _(updates_target->mx);
             id = updates_target->id = st.id;
             key = updates_target->key = st.key;
-            updates_target->updates.push_back(OrderStatus::open);
+            updates_target->updates.emplace_back(std::in_place_type<OrderStatus>, OrderStatus::open);
             updates_target->done = false;
             return updates_target->notify_lk();
         }

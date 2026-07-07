@@ -2,7 +2,6 @@
 #include "basic_coro/coroutine.hpp"
 #include "basic_coro/sync_await.hpp"
 #include "check.h"
-#include "quarkbot/abstract/iexecution_worker.hpp"
 #include "quarkbot/common/thread_executor.hpp"
 #include "quarkbot/execution_worker.hpp"
 #include <chrono>

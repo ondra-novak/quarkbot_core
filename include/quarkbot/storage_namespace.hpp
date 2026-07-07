@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include "storage.hpp"
+#include "abstract/istorage.hpp"
 #include <memory>
 namespace quarkbot {
 
@@ -31,7 +31,7 @@ namespace quarkbot {
             }
             return r;
         }
-        virtual Value get_schema_binary(SchemaHash h) const override {
+        virtual Value get_schema_binary(srl::SchemaHash h) const override {
             return _root->get_schema_binary(h);
         }
         virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) override {
@@ -79,7 +79,7 @@ namespace quarkbot {
         virtual void erase(std::string_view variable_name, const RecordKey &key) override {
             _root_tx->erase(add_prefix(variable_name), key);
         }
-        virtual void put_schema_binary(SchemaHash hash, std::string_view binary) override {
+        virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override {
             _root_tx->put_schema_binary(hash, binary);
         }
     protected:

@@ -1,6 +1,7 @@
 #include "simtradableinstrument.hpp"
 #include "simaccount.hpp"
-#include "siminstrument.hpp"
+#include "siminstrument.hpp"        // IWYU pragma: keep - failed to detect by clangd
+#include "quarkbot/storage_srl.hpp" // IWYU pragma: keep - template definitions
 #include <cassert>
 #include <memory>
 #include <optional>
@@ -40,7 +41,7 @@ void SimTradableInstrument::report_price(Decimal price) {
 }
 
 
-std::unique_ptr<IEventStreamBase> SimTradableInstrument::subscribe_stream(std::size_t hash, const void *) {
+std::shared_ptr<IEventStreamBase> SimTradableInstrument::subscribe_stream(std::size_t hash, const void *) {
      if (hash == class_hash<ExternalFill>) {
         auto s = _liquidation_stream.lock();
         if (s == nullptr) {

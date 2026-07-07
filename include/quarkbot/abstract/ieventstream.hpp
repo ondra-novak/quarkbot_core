@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../defs.hpp"
+#include "quarkbot/abstract/default_shared.hpp"
+#include <memory>
 #include <stop_token>
 namespace quarkbot {
 
@@ -65,7 +67,8 @@ public:
         set_stop_token(source.get_token());
     }
 
-    class Null;
+    class Closed;
+    class Silent;
 
 protected:
         struct StopCBInvokable {
@@ -82,13 +85,63 @@ protected:
 
 };
 
+///declares stream which is always closed on creating
+/**
+To get this stream, use static function get_instance(). Single instance is shared accros process
+because it has no state, it is closed for good
+*/
 template<typename ViewType>
-class IEventStream<ViewType>::Null: public IEventStream<ViewType> {
+class IEventStream<ViewType>::Closed: public IEventStream<ViewType> {
+public:
     virtual bool is_open() const override {return false;}
     virtual void close()  override {}
     virtual bool current(ViewType &) override  {return false;}
     virtual coro::awaitable<bool> receive(ViewType &, std::size_t &) override  {return false;};
     virtual coro::awaitable<bool> receive(ViewType &) override {return false;};
+
+    static std::shared_ptr<IEventStream<ViewType> > get_instance();
+
+};
+
+template<typename ViewType>
+constexpr IEventStream<ViewType>::Closed closed_eventstream;
+
+template<typename ViewType>
+inline std::shared_ptr<IEventStream<ViewType> > IEventStream<ViewType>::Closed::get_instance() {
+    return default_shared<IEventStream<ViewType> >(closed_eventstream<ViewType>);
+}
+
+///declares stream which is never produces any event. But can be closed
+/**
+you need create instance for this stream. The await operation blocks until the stream is closed. It doesn't
+produce any event
+*/
+template<typename ViewType>
+class IEventStream<ViewType>::Silent: public IEventStream<ViewType> {
+public:
+    virtual bool is_open() const override {return !_closed;}
+    virtual void close()  override {
+        _closed = true;
+        _awaiting(false);
+    }
+    virtual bool current(ViewType &) override  {return false;}
+    virtual coro::awaitable<bool> receive(ViewType &, std::size_t &) override  {
+        return [this](auto promise) {
+            _awaiting = std::move(promise);
+        };
+    };
+    virtual coro::awaitable<bool> receive(ViewType &) override {
+        return [this](auto promise) {
+            _awaiting = std::move(promise);
+        };
+    }
+
+    static std::shared_ptr<IEventStream<ViewType> > create_instance() {
+        return std::make_shared<Silent>();
+    }
+protected:
+    bool _closed = false;
+    awaitable<bool>::result _awaiting;
 };
 
 

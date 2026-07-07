@@ -35,7 +35,7 @@ public:
     using RangedBarStreamMap = ParametrizedStreamMap<InstrumentRef, RangedBarPublisher, RangedBar::Param>;
     using AuctionStreamMap  = SingleStreamMap<InstrumentRef, AuctionPublisher>;
 
-    std::unique_ptr<IEventStreamBase> subscribe_stream(const InstrumentRef &instrument, std::size_t type, const void *param) {
+    std::shared_ptr<IEventStreamBase> subscribe_stream(const InstrumentRef &instrument, std::size_t type, const void *param) {
         switch (type) {
             case class_hash<Quote>: return _quotes.create_subscriber(instrument);
             case class_hash<Trade>: return _trades.create_subscriber(instrument);

@@ -26,23 +26,19 @@ public:
     using ViewType = typename StreamViewType<T>::type;
     using ValueType = T;
     using value_type = T;
+    EventStream():_stream(IEventStream<ViewType>::Closed::get_instance()) {}
 
     ///constructor from IEventStreamBase pointer, stream is open if pointer is not null
-    EventStream(std::unique_ptr<IEventStream<ViewType> > stream):_stream(std::move(stream)) {}  
+    EventStream(std::shared_ptr<IEventStream<ViewType> > stream):_stream(std::move(stream)) {}  
 
-    static EventStream from_base(std::unique_ptr<IEventStreamBase> base) {
-        auto dpc = dynamic_cast<IEventStream<ViewType> *>(base.get());
-        if (dpc == nullptr) {
+    static EventStream from_base(std::shared_ptr<IEventStreamBase> base) {
+        auto dpc =std::dynamic_pointer_cast<IEventStream<ViewType> >(base);
+        if (!dpc) {
             const auto *ptr = base.get();
             throw std::invalid_argument(std::format("Cannot construct {} from stream of type {}",
                 typeid(EventStream<ViewType>).name(), typeid(*ptr).name()));
         }                
-        auto new_ptr = std::unique_ptr<IEventStream<ViewType> >(dpc);
-        std::ignore=base.release();
-        return EventStream(std::move(new_ptr));
-    }
-    static EventStream create_null() {
-        return EventStream(std::make_unique<typename IEventStream<ViewType>::Null>());
+        return EventStream(std::move(dpc));
     }
 
     ///check if stream is open

@@ -241,7 +241,7 @@ std::vector<std::string> LevelDBStorage::list(std::string_view str_prefix) const
     }
     return out;
 }
-LevelDBStorage::Value LevelDBStorage::get_schema_binary(SchemaHash h) const {
+LevelDBStorage::Value LevelDBStorage::get_schema_binary(srl::SchemaHash h) const {
     auto hbin = std::bit_cast<std::array<char, sizeof(h)> >(h);
     std::string key = build_key(schema_keyspace, {hbin.begin(), hbin.end()});
     Value out;
@@ -310,8 +310,8 @@ void LevelDBTransaction::erase(std::string_view variable_name, const RecordKey &
     watcher(*this, variable_name, key, std::nullopt);
 
 }
-void LevelDBTransaction::put_schema_binary(SchemaHash hash, std::string_view binary) {
-    auto hbin = std::bit_cast<std::array<char, sizeof(SchemaHash)> >(hash);
+void LevelDBTransaction::put_schema_binary(srl::SchemaHash hash, std::string_view binary) {
+    auto hbin = std::bit_cast<std::array<char, sizeof(srl::SchemaHash)> >(hash);
     _batch.Put(build_key(LevelDBStorage::schema_keyspace, {hbin.data(), hbin.size()}), {binary.data(), binary.size()});
 }
 

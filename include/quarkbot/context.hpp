@@ -2,6 +2,7 @@
 
 #include "awaitable_stop.hpp"
 #include "config.hpp"
+#include "quarkbot/message_bus.hpp"
 #include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
 #include "defs.hpp"
@@ -34,9 +35,11 @@ namespace quarkbot {
 
         ///List of tradable instruments available to the strategy
         /** the strategy can query for accounts and exchanges through the instruments */
-        std::vector<TradableInstrument> instruments;
+        std::vector<TradableInstrument> instruments ={};
         ///Storage associated with the strategy
-        PStorage storage;
+        Storage storage = {};
+        ///Message bus allows to strategy to communicate with outside environment
+        MessageBus msg_bus = {};
         ///Reference to strategy execute worker
         ExecutionWorker exec_worker{nullptr};
         ///current strategy mode

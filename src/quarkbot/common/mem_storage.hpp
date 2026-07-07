@@ -6,6 +6,7 @@
 #include <bit>
 #include <chrono>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -30,14 +31,14 @@ public:
         UpdateLastRevision update) override;
     virtual void erase(std::string_view variable_name) override;
     virtual void erase(std::string_view variable_name, const RecordKey &key) override;
-    virtual void put_schema_binary(SchemaHash hash, std::string_view binary) override;
+    virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override;
 
 
 private:
     struct OpPut   { std::string variable; RecordKey key; std::string data; bool update ;};
     struct OpErase { std::string variable; };
     struct OpEraseRev { std::string variable; RecordKey rev; };
-    struct OpPutSchema { SchemaHash hash; std::string schema; };
+    struct OpPutSchema { srl::SchemaHash hash; std::string schema; };
     using Op = std::variant<OpPut, OpErase, OpEraseRev, OpPutSchema>;
 
     std::vector<Op> _ops;
@@ -53,7 +54,7 @@ public:
         virtual Value get(std::string_view variable_name, const RecordKey &key) const override;
         virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const override;
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
-        virtual Value get_schema_binary(SchemaHash h) const override;
+        virtual Value get_schema_binary(srl::SchemaHash h) const override;
         virtual PStorageTransaction write() override;
         virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) override {
             connect(_watcher, consumer);
@@ -68,7 +69,7 @@ public:
 
 private:    
     std::map<std::string, std::string, std::less<> > _storage;
-    std::map<SchemaHash, std::string> _schemas;
+    std::map<srl::SchemaHash, std::string> _schemas;
     WatcherSlot _watcher;
 
     void apply(const MemStorageTransaction::OpErase &x);
@@ -117,7 +118,7 @@ inline void MemStorageTransaction::erase(std::string_view variable_name, const R
     _ops.push_back(OpEraseRev{std::string(variable_name), key});
     _storage->get_watcher()(*this, variable_name, key, std::nullopt);
 }
-inline void MemStorageTransaction::put_schema_binary(SchemaHash hash, std::string_view binary) {
+inline void MemStorageTransaction::put_schema_binary(srl::SchemaHash hash, std::string_view binary) {
     _ops.push_back(OpPutSchema{hash, std::string(binary)});
 }
 
@@ -203,7 +204,7 @@ inline std::vector<std::string> MemStorage::list(std::string_view prefix ) const
     }
     return out;
 }
-inline MemStorage::Value MemStorage::get_schema_binary(SchemaHash h) const {
+inline MemStorage::Value MemStorage::get_schema_binary(srl::SchemaHash h) const {
     auto iter = _schemas.find(h);
     if (iter == _schemas.end()) {
         return {{},{},false,{}};

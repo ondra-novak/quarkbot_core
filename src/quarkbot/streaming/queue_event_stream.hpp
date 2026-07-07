@@ -108,10 +108,10 @@ template<typename T>
 class QueueEventPublisher : public std::enable_shared_from_this<QueueEventPublisher<T> >{
 public:
 
-    std::unique_ptr<IEventStream<T> > create_subscriber() {
+    std::shared_ptr<IEventStream<T> > create_subscriber() {
         std::scoped_lock _(_mx);
         auto id = _next_id++;
-        auto sub =  std::make_unique<QueueEventStream<T> >([me = this->shared_from_this(), id]{
+        auto sub =  std::make_shared<QueueEventStream<T> >([me = this->shared_from_this(), id]{
             me->unsubscribe(id);
         });
         _subscribers.emplace_back(id, sub.get());

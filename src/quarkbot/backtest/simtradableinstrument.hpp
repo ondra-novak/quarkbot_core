@@ -39,7 +39,7 @@ public:
     }
      
     
-    virtual std::unique_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) override ;
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) override ;
     virtual PAccount get_account() const override ;
     virtual PMarketInstrument get_instrument() const override ;
     virtual std::shared_ptr<OrderInternalData> place_order(const OrderRequest &params, std::shared_ptr<OrderInternalData> replaced , std::string_view name, std::size_t) override;

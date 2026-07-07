@@ -21,7 +21,7 @@ PAccount SimExchange::create_account(std::string name, std::span<const std::pair
 }
 
 
-std::unique_ptr<IEventStreamBase> SimExchange::subscribe_stream(
+std::shared_ptr<IEventStreamBase> SimExchange::subscribe_stream(
         std::shared_ptr<SimInstrument> instrument,
         std::size_t hash, const void *param) {
     std::string name = instrument->get_info().name;

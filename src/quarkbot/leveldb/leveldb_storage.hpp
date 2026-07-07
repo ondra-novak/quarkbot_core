@@ -73,7 +73,7 @@ namespace quarkbot {
         virtual Value get(std::string_view variable_name, const RecordKey &key) const override;
         virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const override;
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
-        virtual Value get_schema_binary(SchemaHash h) const override;
+        virtual Value get_schema_binary(srl::SchemaHash h) const override;
         virtual PStorageTransaction write() override;
         virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) override;
 
@@ -100,7 +100,7 @@ public:
         UpdateLastRevision update_last_revision) override;
     virtual void erase(std::string_view variable_name) override;
     virtual void erase(std::string_view variable_name, const RecordKey &key) override;
-    virtual void put_schema_binary(SchemaHash hash, std::string_view binary) override;
+    virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override;
 
 protected:
     leveldb::WriteBatch _batch;    
