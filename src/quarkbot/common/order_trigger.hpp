@@ -2,6 +2,7 @@
 
 #include "quarkbot/abstract/orderdata.hpp"
 #include "quarkbot/defs.hpp"
+#include "quarkbot/execution_worker.hpp"
 #include "quarkbot/order.hpp"
 #include "quarkbot/stream/trade.hpp"
 #include "quarkbot/event_stream.hpp"
@@ -12,7 +13,11 @@ namespace quarkbot {
 class OrderTrigger: public std::enable_shared_from_this<OrderTrigger> {
 public:
     using Stream = EventStream<Trade>;
-    static std::shared_ptr<OrderTrigger> create(ExecutionWorker worker);
+    static std::shared_ptr<OrderTrigger> create(ExecutionWorker worker) {
+        return std::make_shared<OrderTrigger>(std::move(worker));
+    }
+
+    OrderTrigger(ExecutionWorker worker):_worker(std::move(worker)) {}
 
 
     ///place triggered order with special place request
