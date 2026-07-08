@@ -150,7 +150,7 @@ public:
 
     ///Ensures that worker is available - otherwise it throw exception
     ExecutionWorker &required() {
-        if (!_worker) throw std::runtime_error("Operation is executed in a thread wich is Execution Worker. This is required.");
+        if (!_worker) throw std::runtime_error("Operation is executed in a thread wich is not Execution Worker. This is required.");
         return *this;
     }
 
