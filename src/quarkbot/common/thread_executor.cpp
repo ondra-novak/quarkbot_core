@@ -150,19 +150,35 @@ namespace quarkbot {
     }
 
     bool ThreadExecutor::join() {
-        std::size_t join_counter;
-        {
-            std::scoped_lock _(_mx);        
-            std::size_t sz =  _in_task?1:0 + _dispatch_queue.size();
+        if (std::this_thread::get_id() == _thr.get_id()) {
+            std::unique_lock lk(_mx);
+            std::size_t sz =   _dispatch_queue.size();
             if (sz == 0) return false;
-            join_counter = _counter.load(std::memory_order_relaxed) + sz;
+            while (sz > 0) {
+                auto h = std::move(_dispatch_queue.front());
+                _dispatch_queue.pop();
+                lk.unlock();
+                h.resume();
+                lk.lock();
+                sz--;
+            }
+            return true;
+
+        } else {
+            std::size_t join_counter;
+            {
+                std::scoped_lock _(_mx);        
+                std::size_t sz =  _in_task?1:0 + _dispatch_queue.size();
+                if (sz == 0) return false;
+                join_counter = _counter.load(std::memory_order_relaxed) + sz;
+            }
+            auto c = _counter.load(std::memory_order_relaxed);        
+            while (c < join_counter) {
+                _counter.wait(c);
+                c = _counter.load(std::memory_order_relaxed);
+            }
+            return true;
         }
-        auto c = _counter.load(std::memory_order_relaxed);        
-        while (c < join_counter) {
-            _counter.wait(c);
-             c = _counter.load(std::memory_order_relaxed);
-        }
-        return true;
     }
 
 }
