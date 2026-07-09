@@ -49,6 +49,7 @@ namespace quarkbot {
     bool ThreadExecutor::cancel(coro::cancel_signal *cancel_signal) {
         if (cancel_signal) {
             std::scoped_lock _(_mx);
+            cancel_signal->request_cancel();
             bool ok = false;            
             auto r = _scheduler.remove_by_ident(cancel_signal);
             while (r) {

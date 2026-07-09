@@ -1,6 +1,7 @@
 #pragma once
 
 
+#include "quarkbot/utils/small_buffer.hpp"
 #include "types.hpp"
 #include <format>
 #include <source_location>
@@ -55,14 +56,6 @@ namespace quarkbot {
              = [](LogLevel , const std::source_location *,  std::string_view ) {/*no logger by default*/};        
     
 
-        ///retrieves local buffer suitable to hold message during formation
-        /**
-        MT safe, buffer is per thread
-         */
-        static std::vector<char> &get_buffer() {
-            static thread_local std::vector<char> buffer;
-            return buffer;
-        }        
 
         ///Instabce of global logger
         static Logger instance;
@@ -103,12 +96,12 @@ namespace quarkbot {
 
     template<typename ... Args>
     inline void logOutput(LogLevel level, LogFormatString<Args...> format, Args &&... args ) {
-        auto &buffer = Logger::get_buffer();
+        char buffer[1024];
         if (Logger::instance.cur_level < level) return;        
-        std::format_to<std::back_insert_iterator<std::vector<char> >, typename LoggerTypeType<Args>::type...>(
-                    std::back_inserter(buffer), format,  LoggerTypeType<Args>()(std::forward<Args>(args))...);
-        Logger::instance.log_sink(level, &format._loc, {buffer.begin(), buffer.end()});
-        buffer.clear();
+        auto res = std::format_to_n<char *, typename LoggerTypeType<Args>::type...>(
+                    buffer, sizeof(buffer), format,  LoggerTypeType<Args>()(std::forward<Args>(args))...);
+        Logger::instance.log_sink(level, &format._loc, {buffer, static_cast<std::size_t>(res.size)});
+        
     }
 
     template<typename ... Args>

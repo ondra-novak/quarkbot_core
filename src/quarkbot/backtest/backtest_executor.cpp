@@ -32,11 +32,10 @@ public:
         void report(std::string_view operation, std::coroutine_handle<> h) {
             auto iter = _loc.find(h.address());
             if  (iter == _loc.end()) return;
-            auto &buff = Logger::get_buffer();
+            char buff[1024];
             std::string_view fnam(iter->second.function_name())            ;            
-            std::format_to(std::back_inserter(buff),"{} {}", operation, short_name(fnam) );
-            Logger::instance.log_sink(LogLevel::trace, &iter->second, {buff.data(), buff.size()});
-            buff.clear();
+            auto res = std::format_to_n(buff, sizeof(buff), "{} {}", operation, short_name(fnam) );
+            Logger::instance.log_sink(LogLevel::trace, &iter->second, {buff, static_cast<std::size_t>(res.size)});
 
         }
 
