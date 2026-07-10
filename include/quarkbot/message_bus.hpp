@@ -3,6 +3,7 @@
 #include "abstract/imessage_bus.hpp"
 #include "event_stream.hpp"
 #include "quarkbot/abstract/default_shared.hpp"
+#include <chrono>
 #include <cstddef>
 namespace quarkbot {
 
@@ -32,7 +33,20 @@ namespace quarkbot {
         void send_raw(std::string_view target, std::vector<std::uint8_t> payload, 
                 ConversationID conversation_id = {}, 
                 srl::SchemaHash schema = {}) {
-            _shared->send(target, payload, conversation_id, schema);
+            _shared->send({
+                MessageType::normal_message,
+                {},
+                std::string(target),
+                std::move(payload),
+                conversation_id,
+                schema,
+                std::chrono::system_clock::now(),
+            });
+             
+        }
+
+        void send(const Message &msg) {
+            _shared->send(msg);
         }
 
 

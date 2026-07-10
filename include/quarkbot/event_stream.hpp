@@ -88,8 +88,8 @@ public:
             return _stream->current(val);
         }
     }
-   
-    auto get() const {return _stream.get();}
+
+    auto get_handle() const {return _stream;}
 
     template<typename _Hub, std::derived_from<T> _ItemWithContext>
     friend StrategyFragment feed_to(EventStream<T> stream, _Hub hub, _ItemWithContext context) {

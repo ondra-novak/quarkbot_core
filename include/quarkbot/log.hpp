@@ -1,12 +1,11 @@
 #pragma once
 
 
-#include "quarkbot/utils/small_buffer.hpp"
 #include "types.hpp"
 #include <format>
 #include <source_location>
+#include <sstream>
 #include <type_traits>
-#include <vector>
 
 
 namespace quarkbot {
@@ -128,5 +127,14 @@ namespace quarkbot {
     inline void logFatal(LogFormatString<Args...> format, Args &&... args ) {
         logOutput(LogLevel::fatal, format, std::forward<Args>(args)...);
     }
+    template<typename T>
+    auto logStreamedItem(const T &val) {
+        return [val] {
+            std::ostringstream s;
+            s << val;
+            return std::move(s).str();
+        };
+    }
+
     
 }
