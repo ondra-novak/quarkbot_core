@@ -20,13 +20,12 @@ quarkbot::StrategyFragment print_events(quarkbot::EventStream<int> s) {
 void test1() {
     auto pub = quarkbot::StrategyPublisher<int>::create();
     auto sub = pub->subscribe();
-    auto sub_ptr = sub.get();
-    print_events(std::move(sub));
+    print_events(sub);
     for (int i = 0; i < 5; i++) {
         pub->publish(i);
     }
     //the coroutine is still awaiting so pointer is valid
-    sub_ptr->close();
+    sub.close();
 }
 
 
