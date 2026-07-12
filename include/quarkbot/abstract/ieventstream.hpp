@@ -6,6 +6,20 @@
 #include <stop_token>
 namespace quarkbot {
 
+template<typename T> concept HasStreamView = requires(T val) {
+    {val.view()};
+};
+
+
+template<typename T>
+struct StreamViewType {
+    using type = T;
+};
+template<HasStreamView T>
+struct StreamViewType<T> {
+    using type = std::remove_reference_t<decltype(std::declval<T>().view())>;
+};
+
 
 ///Base class for event stream
 class IEventStreamBase {
@@ -25,9 +39,6 @@ public:
     virtual void close() = 0;
 };
 
-template<typename T> concept HasStreamView = requires(T val) {
-    {val.view()};
-};
 
 template<typename ViewType>
 class IEventStream: public IEventStreamBase {
@@ -143,18 +154,6 @@ protected:
     bool _closed = false;
     awaitable<bool>::result _awaiting;
 };
-
-
-
-template<typename T>
-struct StreamViewType {
-    using type = T;
-};
-template<HasStreamView T>
-struct StreamViewType<T> {
-    using type = std::remove_reference_t<decltype(std::declval<T>().view())>;
-};
-
 
 
 }

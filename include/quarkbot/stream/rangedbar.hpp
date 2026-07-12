@@ -1,20 +1,13 @@
 #pragma once
 
-#include "../stream_defs.hpp"
 #include "trade.hpp"
 
 
 namespace quarkbot {
 
-struct DecimalRange {
-    uint64_t encoded;
-    constexpr DecimalRange(Decimal val):encoded(std::bit_cast<uint64_t>(val)) {}
-    constexpr Decimal as_decimal() const {return std::bit_cast<Decimal>(encoded);  }
-};
 
-struct RangedBar: MarketInstrumentStreamTypeItem {
-    static constexpr MarketInstrumentStreamTypeItem::Type type = "ranged_bar";
-    using ParamType =  StreamSingleParam<Decimal>;
+struct RangedBar{
+    struct MarketInstrumentStream {};
     Decimal open = 0;
     Decimal high = 0;
     Decimal low = 0;
@@ -38,7 +31,7 @@ struct RangedBar: MarketInstrumentStreamTypeItem {
 
     ///initialize new candle
     RangedBar init_open() {
-        return {*this, close, close, close, close,
+        return { close, close, close, close,
              0, false, close_tp, close_tp};
     }
 
@@ -75,7 +68,7 @@ struct RangedBar: MarketInstrumentStreamTypeItem {
             }        
         }
         return {
-            {*this, open, std::max(high, new_close), std::min(low, new_close),
+            { open, std::max(high, new_close), std::min(low, new_close),
             new_close, broken?volume:volume + tr.size, gap, open_tp, tr.time}
             ,broken
         };

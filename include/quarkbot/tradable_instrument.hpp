@@ -9,6 +9,10 @@
 
 namespace quarkbot {
 
+template<typename T>
+concept TradableInstrumentStream = requires {
+    typename T::TradableInstrumentStream;
+};
 
 
 class TradableInstrument{
@@ -100,13 +104,13 @@ public:
     For example ExternalFill or FundingUpdate. These streams are private - related to the instrument and account.
     If you need to subscribe public streams (market streams), you can subscribe to them through MarketInstrument.    
     */
-    template<std::derived_from<TradableInstrumentStreamTypeItem> T>
+    template<TradableInstrumentStream T>
     requires(StreamWithoutParam<T> || StreamWithConstantParam<T>)
     EventStream<T> subscribe() {
         return _state->subscribe<T>();
     }
 
-    template<std::derived_from<TradableInstrumentStreamTypeItem> T>
+    template<TradableInstrumentStream T>
     requires(StreamWithParam<T>)
     EventStream<T> subscribe(typename T::Params params) {
         return _state->subscribe<T>(params);

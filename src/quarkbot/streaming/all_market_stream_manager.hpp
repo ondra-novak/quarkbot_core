@@ -2,6 +2,8 @@
 
 #include "quarkbot/stream/auction.hpp"
 #include "quarkbot/stream/closedbar.hpp"
+#include "quarkbot/stream/orderbook.hpp"
+#include "quarkbot/stream/periodic_snapshot.hpp"
 #include "quarkbot/stream/quote.hpp"
 #include "quarkbot/stream/rangedbar.hpp"
 #include "quarkbot/stream/trade.hpp"
@@ -12,11 +14,15 @@
 #include "ranged_bar_lambda.hpp"
 #include "stream_maps.hpp"
 #include "quarkbot/hash/class_hash.hpp"
+#include <chrono>
 namespace quarkbot {
 
 template<typename InstrumentRef>
 class AllMarketStreamManager {
 public:
+    static constexpr unsigned int max_orderbook_with = 100;
+    using OrderBookSt = OrderBook<max_orderbook_with>;
+
 
     using QuotePublisher = LockFreePublisher<Quote, 1>;
     using TradePublisher = LockFreePublisher<Trade, 1>;
@@ -25,6 +31,8 @@ public:
     using TickerPublisher = LockFreePublisher<Ticker, 1>;
     using RangedBarPublisher = LockFreePublisher<RangedBar, 1>;
     using AuctionPublisher = LockFreePublisher<Auction, 1>;
+    using OrderbookPublsher = LockFreePublisher<OrderBookSt, 1>;
+    using PeriodicSnapshotViewPublisher = LockFreePublisher<PeriodicSnapshotView, 1>;
     
 
     using QuoteStreamMap = SingleStreamMap<InstrumentRef, QuotePublisher>;
@@ -33,7 +41,10 @@ public:
     using TickerStreamMap = SingleStreamMap<InstrumentRef, TickerPublisher>;
     using ClosedBarStreamMap = ParametrizedStreamMap<InstrumentRef, ClosedBarPublisher, ClosedBar::Param>;
     using RangedBarStreamMap = ParametrizedStreamMap<InstrumentRef, RangedBarPublisher, RangedBar::Param>;
+    using OrderBookStreamMap = SingleStreamMap<InstrumentRef, RangedBarPublisher>;
     using AuctionStreamMap  = SingleStreamMap<InstrumentRef, AuctionPublisher>;
+    using PeriodicSnapshotViewMap = ParametrizedStreamMap<InstrumentRef, PeriodicSnapshotViewPublisher, PeriodicSnapshotView::Param>;
+
 
     std::shared_ptr<IEventStreamBase> subscribe_stream(const InstrumentRef &instrument, std::size_t type, const void *param) {
         switch (type) {
@@ -44,10 +55,12 @@ public:
             case class_hash<ClosedBar>: return _closed_bars.create_subscriber(instrument, *reinterpret_cast<const ClosedBar::Param *>(param));
             case class_hash<RangedBar>: return _ranged_bars.create_subscriber(instrument, *reinterpret_cast<const RangedBar::Param *>(param));
             case class_hash<Auction>: return _auctions.create_subscriber(instrument);
+            case class_hash<OrderBookView>: return _orderbook.create_subscriber(instrument);
             default: return {};
         }
     }
 
+    ///Publish quote event
     bool on_event(const InstrumentRef &instrument, const Quote &qt) {
         bool b1 = _quotes.with_publisher(instrument, [&](auto &pub){pub.publish(qt);});
         bool b2 = _tickers.with_publisher(instrument,[&](auto &pub){pub.publish(pub.get_top_value_ref().add(qt));});
@@ -55,11 +68,13 @@ public:
         return b1||b2||b3;
     }
 
+    ///Publish auction event
     bool on_event(const InstrumentRef &instrument, const Auction &au) {
         bool b1 = _auctions.with_publisher(instrument, [&](auto &pub){pub.publish(au);});
         return b1;
     }
 
+    ///Publish trade event
     bool on_event(const InstrumentRef &instrument, const Trade &tr) {
         bool b1 = _trades.with_publisher(instrument, [&](auto &pub){pub.publish(tr);});
         bool b2 = _trade_stats.with_publisher(instrument, [&](auto &pub){pub.publish(pub.get_top_value_ref().add(tr));});
@@ -68,10 +83,46 @@ public:
         bool b5 = _ranged_bars.enum_publisher(instrument,calculate_ranged_bar(tr));        
         return b1 || b2 || b3 || b4 || b5;
     }
+
+    
+    ///Publish orderbook event
+    /**
+        @param instrument
+        @param increment - contains orderbook increment - not whole orderbook - quantities are absolute, but level with quantity 0 is removed
+    */
+    bool on_event(const InstrumentRef &instrument, const OrderBookView &increment) {
+        bool b1 = _orderbook.with_publisher(instrument, [&](LockFreePublisher<OrderBookSt,1> &pub){
+            const OrderBookSt &ref = pub.get_top_value_ref();
+            pub.write([&](OrderBookSt &target) noexcept {
+                ref.apply_to(target, increment);
+                return true;
+            });
+        });
+        return b1;
+    }
+
+    ///Called periodically 
+    /**
+    @param instrument instrument
+    @param snapshot current snapshot
+    @param interval current interval
+    @retval true published
+    @retval false nobody listening
+     */
+    bool on_periodic_event(const InstrumentRef &instrument, const PeriodicSnapshotView &snapshot, unsigned int interval) {
+        bool b = false;
+        _snapshots.enum_publisher(instrument, [&](unsigned int param, PeriodicSnapshotViewPublisher &pub){
+            if (param == interval) {
+                b = true;
+                pub.publish(snapshot);
+            }
+        });
+        return b;
+    }
     
     template<typename T>
     void collect_active(std::unordered_set<InstrumentRef> &refmap) {
-        if constexpr(std::is_same_v<Trade, T> ) {
+        if constexpr(std::is_same_v<Quote, T> ) {
             _quotes.collect_active(refmap);
             _tickers.collect_active(refmap);
             _closed_bars.collect_active(refmap);
@@ -83,9 +134,10 @@ public:
             _ranged_bars.collect_active(refmap);
         } else if constexpr(std::is_same_v<Auction, T> ) {
             _auctions.collect_active(refmap);
+        } else if constexpr(std::is_same_v<OrderBookIncrement, T>) {
+            _orderbook.collect_active(refmap);
         }
     }
-
 
 protected:
     QuoteStreamMap _quotes;
@@ -95,7 +147,8 @@ protected:
     ClosedBarStreamMap _closed_bars;
     RangedBarStreamMap _ranged_bars;
     AuctionStreamMap _auctions;
- 
+    OrderBookStreamMap _orderbook;
+    PeriodicSnapshotViewMap _snapshots;
 
 };
 

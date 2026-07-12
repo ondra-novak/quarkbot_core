@@ -22,8 +22,6 @@ template class quarkbot::SchedulerRealTime<void (*)() >;
 #include <quarkbot/shared_lockable.hpp>
 #include <quarkbot/strategy_publisher.hpp>
 #include "../quarkbot/streaming/lock_free_publisher.hpp"
-#include "../quarkbot/streaming/publisher_manager.hpp"
-#include "../quarkbot/streaming/orderbook_state.hpp"
 #include <quarkbot/utils/signals.hpp>
 
 template class quarkbot::Hub<int>;

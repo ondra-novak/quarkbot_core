@@ -2,7 +2,6 @@
 
 #include "ieventstream.hpp"
 
-#include "../stream_defs.hpp"
 #include "../serializer/schema_fwd.hpp"
 #include "quarkbot/log.hpp"
 

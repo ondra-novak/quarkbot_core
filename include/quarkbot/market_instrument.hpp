@@ -3,9 +3,12 @@
 #include "abstract/imarket_instrument.hpp"
 #include "abstract/ipublisher.hpp"
 #include "quarkbot/instrument_description.hpp"
-#include "stream_defs.hpp"
-#include <concepts>
 namespace quarkbot {
+
+template<typename T>
+concept MarketInstrumentStream = requires {
+    typename T::MarketInstrumentStream;
+};
 
 
 class Account;
@@ -29,13 +32,13 @@ public:
     TradableInstrument create_tradable_instrument(const Account &account) const;
 
 
-    template<std::derived_from<MarketInstrumentStreamTypeItem> T>
+    template<MarketInstrumentStream T>
     requires(StreamWithoutParam<T> || StreamWithConstantParam<T>)
     EventStream<T> subscribe() const {
         return _state->subscribe<T>();
     }
 
-    template<std::derived_from<MarketInstrumentStreamTypeItem> T>
+    template<MarketInstrumentStream T>
     requires(StreamWithParam<T>)
     EventStream<T> subscribe(typename T::Params params) const {
         return _state->subscribe<T>(params);
@@ -53,7 +56,8 @@ protected:
 
 
 ///Stream is updated when some informations about instrument changed
-struct InstrumentInfo : public MarketInstrumentStreamTypeItem, public InstrumentGeometry  {
+struct InstrumentInfo :  InstrumentGeometry  {
+    struct MarketInstrumentStream {};
 
 };
 

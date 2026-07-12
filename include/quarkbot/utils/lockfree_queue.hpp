@@ -5,6 +5,7 @@
 #include <concepts>
 #include <type_traits>
 template<typename T, std::size_t count, std::size_t reserved = 1>
+requires(std::is_trivially_destructible_v<T>)
 class LockFreeQueue {
 public:
 

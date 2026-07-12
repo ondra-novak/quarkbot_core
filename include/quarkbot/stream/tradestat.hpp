@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../stream_defs.hpp"
 #include "../types.hpp"
 #include "trade.hpp"
 
@@ -8,9 +7,9 @@
 namespace quarkbot {
 
 ///Calculates statistics between two intervals
-struct TradeStatCounter : public MarketInstrumentStreamTypeItem {
+struct TradeStatCounter {
     
-    static constexpr Type type = "trade_stats";
+    struct MarketInstrumentStream {};
     /// total count of trades
     std::uint64_t trades = 0;
     /// total volume - it can reset when stream is reopened
@@ -65,7 +64,6 @@ struct TradeStatCounter : public MarketInstrumentStreamTypeItem {
      */
     TradeStatCounter add(const Trade &tr) const {
         return {
-            *this,
             trades+1,
             volume + tr.size,
             buy_volume + (tr.side == Side::buy?tr.size:0),

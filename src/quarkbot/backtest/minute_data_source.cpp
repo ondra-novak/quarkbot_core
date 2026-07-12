@@ -28,7 +28,7 @@ bool MinuteDataSource::operator()(BacktestEvent &ev) {
     if (_price) {
         auto t = _tp-std::chrono::seconds(30);        
         ev.data = Trade{
-            {}, *_price,{}, t, Side::undetermined
+             *_price,{}, t, Side::undetermined
         };
         ev.time = t;
         _price.reset();
@@ -38,7 +38,7 @@ bool MinuteDataSource::operator()(BacktestEvent &ev) {
     if (!n) return false;
     ev.time = _tp;
     ev.data =  Quote{
-            {},std::min(_prev_price, *n),{},std::max(_prev_price, *n),{},_tp
+            std::min(_prev_price, *n),{},std::max(_prev_price, *n),{},_tp
         };    
     _tp = _tp + std::chrono::minutes(1);
     _price = (*n + _prev_price) / 2_dec;

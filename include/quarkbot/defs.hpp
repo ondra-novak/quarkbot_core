@@ -45,4 +45,6 @@ concept HubReceiver = requires(_Hub hub, _Val &val) {
     {hub.receiver(val)} -> coro::is_awaitable;    
 };
 
+
+
 }

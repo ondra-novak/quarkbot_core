@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../stream_defs.hpp"
 #include "../order_defs.hpp"
 #include <chrono>
 
@@ -14,7 +13,8 @@ namespace quarkbot {
         unscheduled = 'U',
     };
 
-    struct Auction: quarkbot::MarketInstrumentStreamTypeItem {
+    struct Auction {
+        struct MarketInstrumentStream {};
         ///total size
         Decimal quantity;
         ///total price

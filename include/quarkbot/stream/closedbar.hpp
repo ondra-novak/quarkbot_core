@@ -1,12 +1,12 @@
 #pragma once
 
-#include "../stream_defs.hpp"
 #include "../types.hpp"
 #include "trade.hpp"
 
 
 namespace quarkbot {
-struct ClosedBar: MarketInstrumentStreamTypeItem  {
+struct ClosedBar  {
+    struct MarketInstrumentStream {};
     static constexpr std::size_t not_available = 0;
 
     Decimal open = not_available;
@@ -20,7 +20,6 @@ struct ClosedBar: MarketInstrumentStreamTypeItem  {
     using Param = unsigned int;
 
     ClosedBar &view() {return *this;}
-    static constexpr MarketInstrumentStreamTypeItem::Type type = "closed_bar";
 
     static std::size_t to_interval_index(std::chrono::system_clock::time_point tp, unsigned int interval_sec) {
         return static_cast<std::size_t>(std::chrono::system_clock::to_time_t(tp)/interval_sec);
@@ -30,12 +29,12 @@ struct ClosedBar: MarketInstrumentStreamTypeItem  {
         auto index = to_interval_index(tr.time, interval);
         if (index != interval_index) {
             return {
-                *this, tr.price,tr.price,tr.price,tr.price,
+                tr.price,tr.price,tr.price,tr.price,
                 tr.size,1,index
             };
         } else {
             return {
-                *this, open, std::max(high,tr.price), std::min(low,tr.price), tr.price, 
+                 open, std::max(high,tr.price), std::min(low,tr.price), tr.price, 
                 volume + tr.size, trades+1, index
             };
         }

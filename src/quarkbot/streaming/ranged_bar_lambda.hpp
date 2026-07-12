@@ -22,7 +22,7 @@ namespace quarkbot {
                         return true;
                     } else {
                         //generate brand new candle starting at current price
-                        newval = RangedBar{{},
+                        newval = RangedBar{
                             tr.price, tr.price, tr.price, tr.price, 0,
                              false,tr.time, tr.time};
                         //don't publish anything yet
