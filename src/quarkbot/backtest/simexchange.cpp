@@ -1,4 +1,7 @@
 #include "simexchange.hpp"
+#include "quarkbot/execution_worker.hpp"
+#include "quarkbot/stream/periodic_snapshot.hpp"
+#include "quarkbot/stream/quote.hpp"
 #include "siminstrument.hpp"
 #include "simtradableinstrument.hpp"
 #include <algorithm>
@@ -25,6 +28,13 @@ std::shared_ptr<IEventStreamBase> SimExchange::subscribe_stream(
         std::shared_ptr<SimInstrument> instrument,
         std::size_t hash, const void *param) {
     std::string name = instrument->get_info().name;
+    if (hash == class_hash<PeriodicSnapshotView>) {
+        if (!_periodic_streams) _periodic_streams = std::make_unique< PeriodicStreamMan>(
+                ExecutionWorker::current(), 
+                PeriodicStreamFactory{weak_from_this()}
+            );
+        return _periodic_streams->subscribe(name, std::chrono::seconds(*reinterpret_cast<const int *>(param)));
+    }
     return _streams.subscribe_stream(name, hash, param);
 }
 
@@ -166,5 +176,26 @@ std::shared_ptr<SimInstrument> SimExchange::InstrumentRef::get(const std::shared
 }
 
 
-
+bool SimExchange::PeriodicStreamCallback::operator()(PeriodicSnapshotView &view) {
+    Trade tr;
+    Quote qt;
+    if (_trade_stream.current(tr) && _quote_stream.current(qt)) {
+        Quote &q = view;
+        q = qt;
+        view.last_price = tr.price;
+        return true;
+    }
+    return false;
+}
+SimExchange::PeriodicStreamCallback SimExchange::PeriodicStreamFactory::operator()(std::string instrument, std::chrono::system_clock::duration ) {
+    auto exch = _exchange.lock();
+    if (!exch) {
+        return { {}, {}};
+    } else {
+        return {
+            EventStream<Trade>::from_base(exch->_streams.subscribe_stream(instrument, class_hash<Trade>, nullptr)),
+            EventStream<Quote>::from_base(exch->_streams.subscribe_stream(instrument, class_hash<Quote>, nullptr))
+        };
+    }
+}
 }
