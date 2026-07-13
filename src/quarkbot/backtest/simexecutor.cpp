@@ -36,7 +36,7 @@ namespace quarkbot {
             return;
         }
 
-        Decimal filled = ord->fst.filled;
+        Decimal filled = ord->get_filled();
         auto tif = ord->get_parameters().time_in_force;
         ActiveOrder aord{
             std::move(ord),std::move( instrument), filled, tif
@@ -415,14 +415,15 @@ namespace quarkbot {
         const auto &info = order.instrument->get_info();
         Decimal volume = price * quantity;
         Decimal fees = (taker?info.fee_rate_taker:info.fee_rate_maker) * volume;
+        const auto &params = order.ord->get_parameters();
         Fill f{
             {static_cast<std::uint64_t>(tp.time_since_epoch().count()),_random_key++},
             generate_random_string(_rnd_gen),
-            order.ord->get_name(),
+            params.label,
             tp,
             order.ord->get_instrument()->get_instrument()->get_info(),
-            order.ord->get_parameters().side,
-            order.ord->get_parameters().reason_override,
+            params.side,
+            params.reason_override,
             quantity,
             price,
             fees,

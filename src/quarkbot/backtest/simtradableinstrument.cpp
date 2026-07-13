@@ -19,8 +19,8 @@ void SimTradableInstrument::report_fill(const Fill &fill) {
             liquidation();
         }
     } else {
-        Decimal cash = -static_cast<int>(fill.side) * info.calc_turnover_quote_currency(fill.price, fill.amount);                                
-        Decimal asset = static_cast<int>(fill.side) * fill.amount;
+        Decimal cash = -static_cast<int>(fill.side) * info.calc_turnover_quote_currency(fill.price, fill.quantity);                                
+        Decimal asset = static_cast<int>(fill.side) * fill.quantity;
         Decimal fees = fill.fees * fill.fee_rate;
         _account->update_wallet(info.quote_currency, [&](WalletInfo &w){w.balance += cash - fees;}, true);
         if (info.asset_has_wallet()) {
@@ -68,30 +68,31 @@ void SimTradableInstrument::liquidation() {
     if (!cancel_all_orders()) {
         if (_position.amount > 0 && !liquidation_order) {
             liquidation_order = place_order({
+                "sim:liquidation",
                 reverse(_position.side),
                 OrderType::market,
                 _position.amount,
                 {},
                 {},
+                TimeInForce::gtc,
                 {},
                 false,
                 false,
                 false,
-                TimeInForce::gtc,
+                true,
                 ExecutionReason::liquidation
-            },{},{},0);
+            },{},0);
         }
     }
 }
 
-std::shared_ptr<OrderInternalData>  SimTradableInstrument::place_order(const OrderRequest &req, std::shared_ptr<OrderInternalData> old_state, std::string_view name, std::size_t) {
+std::shared_ptr<OrderInternalData>  SimTradableInstrument::place_order(const OrderRequest &req, std::shared_ptr<OrderInternalData> old_state, std::size_t) {
 
 
     ExecutionWorker worker = ExecutionWorker::current();    
     auto st = OrderInternalData::create(
         convert_request_to_params(req, _position.side),
         shared_from_this(),
-        std::string(name),
         old_state,
         worker.required().now(),
         _order_storage
@@ -184,7 +185,6 @@ std::vector<Order> SimTradableInstrument::attach_storage(PStorage storage, std::
         auto adata = OrderInternalData::create(
             s.st.parameters,
             shared_from_this(),
-            s.st.name,
             std::weak_ptr<OrderInternalData>(),
             worker.required().now(),
             _order_storage

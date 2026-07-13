@@ -9,7 +9,7 @@
 namespace quarkbot {
 
 template<typename ViewType, typename Publisher>
-class StreamSubscriber: public IEventStream<ViewType> {
+class StreamSubscriber: public EventStreamStoppable<ViewType> {
 public:
     using Seq = PublisherBase::Seq;
 

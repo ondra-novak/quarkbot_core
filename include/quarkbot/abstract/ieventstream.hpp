@@ -37,6 +37,8 @@ public:
     Stream cannot be reopened.
      */
     virtual void close() = 0;
+
+    virtual void set_stop_token(std::stop_token token) = 0;
 };
 
 
@@ -71,19 +73,24 @@ public:
     virtual bool current(ViewType &ref) = 0;
 
 
-    void set_stop_token(std::stop_token token) {
-        _stop_callback.emplace(std::move(token), StopCBInvokable{this});
-    }
-    void set_stop_token(const std::stop_source &source) {
-        set_stop_token(source.get_token());
-    }
-
     class Closed;
     class Silent;
 
 protected:
-        struct StopCBInvokable {
-        IEventStream *ptr;
+
+};
+
+template<typename ViewType>
+class EventStreamStoppable: public IEventStream<ViewType> {
+public:
+
+    virtual void set_stop_token(std::stop_token token) override{
+        _stop_callback.emplace(std::move(token), StopCBInvokable{this});
+    }
+
+protected:
+    struct StopCBInvokable {
+        EventStreamStoppable *ptr;
         void operator()() {
             ptr->close();
         }
@@ -91,9 +98,6 @@ protected:
     using StopCB = std::stop_callback<StopCBInvokable>;
 
     std::optional<StopCB> _stop_callback;
-
-    
-
 };
 
 ///declares stream which is always closed on creating
@@ -109,6 +113,7 @@ public:
     virtual bool current(ViewType &) override  {return false;}
     virtual coro::awaitable<bool> receive(ViewType &, std::size_t &) override  {return false;};
     virtual coro::awaitable<bool> receive(ViewType &) override {return false;};
+    virtual void set_stop_token(std::stop_token )  override {}
 
     static std::shared_ptr<IEventStream<ViewType> > get_instance();
 
@@ -128,7 +133,7 @@ you need create instance for this stream. The await operation blocks until the s
 produce any event
 */
 template<typename ViewType>
-class IEventStream<ViewType>::Silent: public IEventStream<ViewType> {
+class IEventStream<ViewType>::Silent: public EventStreamStoppable<ViewType> {
 public:
     virtual bool is_open() const override {return !_closed;}
     virtual void close()  override {

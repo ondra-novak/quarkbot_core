@@ -26,7 +26,12 @@ namespace quarkbot {
         auto await_suspend(std::coroutine_handle<> h)  {
             
             using RetT = decltype(_awt.await_suspend(h));
-            _frame._worker = ExecutionWorker::current().required();;
+            _frame._worker = ExecutionWorker::current();
+            if (!_frame._worker) {
+                throw std::runtime_error(
+                    std::format("No Execution Worker is associated with the current coroutine or thread. "
+                        "This operation requires an active Execution Worker context."));                    
+            }
             auto target = _frame.create_handle();
             _frame._awaiting = h;
             try {

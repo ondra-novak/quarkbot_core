@@ -20,6 +20,7 @@ namespace quarkbot {
     public:
         using Async<void>::Async;
         struct promise_type : Async<void>::promise_type {
+            
             void unhandled_exception() {
                 //unhandled exception in strategy fragment cannot be received on target awaiter
                 //so report that fragment is done

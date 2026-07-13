@@ -14,11 +14,10 @@ namespace quarkbot {
 
         struct OrderStoredState {
             std::string id;
-            std::string name;
             OrderParameters parameters;
             
             auto fields(this auto &self) {
-                return std::tie(self.id, self.name,self.parameters);
+                return std::tie(self.id, self.parameters);
             } 
         };
 

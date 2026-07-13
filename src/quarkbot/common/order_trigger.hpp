@@ -24,7 +24,6 @@ public:
     std::shared_ptr<OrderInternalData> place_order(PTradableInstrument instrument, 
                     const OrderParameters &trig_params, //params reported by order while trigger phase                    
                     std::shared_ptr<OrderInternalData> order_to_replace, 
-                    std::string_view name, 
                     std::function<Order()> place_request);
 
 
@@ -32,8 +31,7 @@ public:
     ///place ordinary localy triggered order
     std::shared_ptr<OrderInternalData> place_order(PTradableInstrument instrument, 
                 const OrderParameters &trig_params,
-                std::shared_ptr<OrderInternalData> order_to_replace, 
-                std::string_view name);
+                std::shared_ptr<OrderInternalData> order_to_replace);
 
     bool convert_params_to_request(const OrderParameters &params, OrderRequest &request);
 

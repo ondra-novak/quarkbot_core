@@ -59,19 +59,26 @@ public:
       @exception await_canceled_exception - operation was canceled because there is already pending await
      */
     awaitable<bool> receive(OrderReport &report) {
-        report.status_changed = false;
-        report.fills.clear();
+        //invalid order instance - false
         if (!_order_data) return false;
-        if (_order_data->flush_updates(report, _order_data)) return true;
+
+        auto st = _order_data->receive_report(report);
+        switch (st) {
+            case OrderReceiveReportStatus::already_pending: throw already_pending_exception();
+            case OrderReceiveReportStatus::done: return false;
+            case OrderReceiveReportStatus::updates: return true;
+            default:break;
+        };
+        //register itself
         return [this, &report](awaitable<bool>::result promise) -> coro::prepared_coro {
-            auto st = _order_data->register_awaiter(report, _order_data, promise);
+            //perform registration
+            auto st = _order_data->receive_report(report, promise);
             switch (st) {
                 default:
-                case OrderAwaiting::rejected_pending: return promise(
-                        std::make_exception_ptr(std::runtime_error("Order is already awaited for next event. You cannot await the same order simultaneously from multiple coroutines")));
-                case OrderAwaiting::rejected_updates: return promise(true);
-                case OrderAwaiting::rejected_done: return promise(false);
-                case OrderAwaiting::accepted: return {};
+                case OrderReceiveReportStatus::already_pending: return promise(std::make_exception_ptr(already_pending_exception()));
+                case OrderReceiveReportStatus::updates: return promise(true);
+                case OrderReceiveReportStatus::done: return promise(false);
+                case OrderReceiveReportStatus::awaiting: return {};
             }
         };
     }
@@ -94,10 +101,6 @@ public:
     ///get instrument
     TradableInstrument get_instrument() const;
 
-    ///get order name
-    const std::string &get_name() const {
-        return force_valid().get_name();
-    }
     ///get order id
     /**
         Because id is not part of report, it can be filled anytime regardless on whether report has been received
@@ -141,16 +144,6 @@ public:
     ///Access internal state - reserved for adapters, the strategy should not use it
     auto get_handle() const {return _order_data;}
 
-    ///Keep order alive when order instance is destroyed
-    /**
-    By default every order is canceled when its associated instance is destroyed. For example when
-    your code stops referencing an open order, the cancel request is immediately sent to the exchange.
-    This function deactivates this default behaviour, so keep alive order is kept alive on exchange even if its
-    associated instance is destroyed
-     */
-    void set_keep_alive(bool k = true) {
-        if (_order_data) _order_data->set_keep_alive(k);
-    }
 
 
 protected:
@@ -161,6 +154,12 @@ protected:
         if (!valid()) [[unlikely]] throw std::runtime_error("Working with order without a value [!valid()]");
         return *_order_data;
     }
+
+    static std::runtime_error already_pending_exception() {
+        return std::runtime_error("Order is already awaited for next event. You cannot await the same order simultaneously from multiple coroutines");
+    }
+
+    
 };
 
 ///A structure  carrying latest order report and associated order.
@@ -170,18 +169,45 @@ struct OrderEvent : OrderReport{
 
 template<HubProducer<OrderEvent> _Hub>
 bool Order::receive_at(_Hub hub) {
+    //ensure that order is valid
     force_valid();
-    ExecutionWorker exec = ExecutionWorker::current().required();
-    if (_order_data->is_done()) return false;
-    OrderEvent ev;
-    ev.order = Order(_order_data);
+    //allocate for report locally
+    OrderEvent rpt;
+    //initialize report
+    rpt.order = Order(_order_data);
 
-    auto coro = [](OrderEvent ev, _Hub hub) -> StrategyFragment {
-        if (!co_await ev.order.receive(ev)) [[unlikely]] co_return;        
-        co_await hub.send(std::move(ev));
-    };
-    exec.run(coro(std::move(ev), std::move(hub)));
-    return true;
+    //attempt to receive report non-blocking way - if done, then this don't need awaiting
+    awaitable<bool> awt = receive(rpt);
+
+    //we have a result!
+    if (awt.await_ready()) {
+        //retrieve result
+        bool resp = awt.await_resume();
+        //if result is false, order is done, report it
+        if (!resp) return false;
+
+        //order is not done, so we have report
+        auto coro = [](OrderEvent ev, _Hub hub) -> StrategyFragment {
+            co_await hub.send(std::move(ev));
+        };
+        //run coroutine responsible to pass the report to the hub
+        ExecutionWorker::current().required().run(coro(std::move(rpt), std::move(hub)));
+        //report ok waiting
+        return true;
+    }  else {
+        //report was not received, so start coroutine to receive and deliver report
+
+        auto coro = [](Order ord, _Hub hub) -> StrategyFragment {
+            OrderEvent ev;
+            ev.order = std::move(ord);
+            co_await ev.order.receive(ev);
+            co_await hub.send(std::move(ev));
+        };
+        //start coroutine, pass order and hub
+        ExecutionWorker::current().required().run(coro(Order(_order_data), std::move(hub)));
+        //report ok waiting
+        return true;
+    }
 }
 
 

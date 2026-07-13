@@ -69,11 +69,11 @@ public:
         return std::move(*this);
     }
     EventStream &stop_on(const std::stop_source &src) & {
-        _stream->set_stop_token(src);
+        _stream->set_stop_token(src.get_token());
         return *this;
     }
     EventStream &&stop_on(const std::stop_source &src) && {
-        _stream->set_stop_token(src);
+        _stream->set_stop_token(src.get_token());
         return std::move(*this);
     }
 

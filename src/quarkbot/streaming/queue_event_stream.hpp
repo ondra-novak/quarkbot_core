@@ -11,7 +11,7 @@ namespace quarkbot {
 
 
 template<typename T>
-class QueueEventStream: public IEventStream<T> {
+class QueueEventStream: public EventStreamStoppable<T> {
 public:
 
     QueueEventStream(std::function<void()> unsub_fn): _unsub_fn(std::move(unsub_fn) ) {}

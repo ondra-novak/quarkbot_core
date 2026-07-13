@@ -124,8 +124,8 @@ namespace quarkbot {
                 //unlock internals
                 _in_task = true;
                 lk.unlock();
-                //resume coroutine outside lock
-                p.resume();
+                //resume coroutine outside lock (also install lazy resume framework)
+                p.lazy_resume();
                 //destroy thread executor, if there are no references
                 lkme.reset();
                 //tkn can be signalized especially when this thread performed destruction - this is no longer valid

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "quarkbot/order_defs.hpp"
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -118,7 +119,7 @@ auto open_report(LineOutput line_output, ExecutionWorker worker = ExecutionWorke
             std::format_to(iter, ",{}", order->get_id());
         }
         std::format_to(iter, ",{},{},{},{}", 
-                order->get_name(), 
+                params.label,
                 to_string(params.side), 
                 order->get_remaining_quantity(),
                 to_string(params.type)                       
@@ -133,7 +134,7 @@ auto open_report(LineOutput line_output, ExecutionWorker worker = ExecutionWorke
         }
         if (is_fill) {
             const Fill &fill = std::get<Fill>(update);
-            std::format_to(iter, ",{},{}", fill.price, fill.amount);
+            std::format_to(iter, ",{},{}", fill.price, fill.quantity);
         } else {
             buffer.append(",,");
         }        

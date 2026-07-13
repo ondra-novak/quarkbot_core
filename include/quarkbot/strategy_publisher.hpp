@@ -3,6 +3,7 @@
 #include "basic_coro/cancel_signal.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "event_stream.hpp"
+#include "quarkbot/abstract/ieventstream.hpp"
 #include <atomic>
 #include <cstddef>
 #include <memory>
@@ -196,7 +197,7 @@ protected:
     std::vector<Result> _awaiting;
     bool _closed = false;
 
-    class Subscriber: public IEventStream<T>{
+    class Subscriber: public EventStreamStoppable<T>{
     public:
         Subscriber(std::shared_ptr<StrategyPublisher>  publisher):_publisher(publisher) {}
 

@@ -112,5 +112,4 @@ inline _details::GlobalPoolStack LockFreeFramePool::_global_stack[arena_count];
 inline thread_local _details::LocalPoolStack LockFreeFramePool::_local_stack[arena_count];
 
 
-
 }

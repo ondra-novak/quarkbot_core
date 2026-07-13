@@ -26,8 +26,8 @@ public:
     @return Order object representing placed order. You can co_await on this object for order updates or read fills from it.
      */   
     template<std::derived_from<OrderRequest> _Req = OrderRequest>
-    Order place_order(const _Req &params, std::string_view name = {}){
-        return Order(_state->place_order(params, {}, name, class_hash<_Req>));
+    Order place_order(const _Req &params){return Order(
+        _state->place_order(params, {},  class_hash<_Req>));
     }
 
     ///Replace order on this instrument
@@ -38,9 +38,8 @@ public:
     @return Order object representing placed order. You can co_await on this object for order updates or read fills from it.
      */     
     template<std::derived_from<OrderRequest> _Req = OrderRequest>
-    Order place_order(const _Req &params, Order order_to_replace, std::string_view name = {}) {
-        return _state->place_order(params, order_to_replace.get_handle(), name,
-             class_hash<_Req>);
+    Order place_order(const _Req &params, Order order_to_replace) {
+        return _state->place_order(params, order_to_replace.get_handle(),class_hash<_Req>);
     }
     ///Attach storage to this instrument and restore opened orders from storage
     /**
