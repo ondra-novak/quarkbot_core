@@ -1,10 +1,15 @@
 #pragma once
 
+#include "quarkbot/memory.hpp"
 #include "types.hpp"
 #include "round_policy.hpp"
+#include <list>
 
 
 namespace quarkbot {
+
+template<typename T>
+using FastList = std::list<T, LockFreeFramePool::Allocator<T> >;
 
 
 enum class OrderType : char{
@@ -234,6 +239,7 @@ struct OrderOpenStatus {
     std::string id;
     RecordKey key;
 };
+
 
 struct OrderReport {
     //can contain rejection message

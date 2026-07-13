@@ -31,14 +31,14 @@ void test_report() {
     std::shared_ptr<SimInstrument> instr = std::make_shared<SimInstrument>(nfo, nullptr);
     std::shared_ptr<SimTradableInstrument> tinstr = std::make_shared<SimTradableInstrument>(instr, std::shared_ptr<SimAccount>{});
 
-    auto ord = OrderInternalData::create({
+    auto ord = OrderInternalData::create({"ord1",
         Side::buy,OrderType::limit,123,456
-    }, std::static_pointer_cast<ITradableInstrument>(tinstr), "ord1", {}, tp,
+    }, std::static_pointer_cast<ITradableInstrument>(tinstr), {}, tp,
      {});
 
-    auto ord2 = OrderInternalData::create({
+    auto ord2 = OrderInternalData::create({"ord2",
         Side::sell,OrderType::stoplimit,111,687,689
-    }, std::static_pointer_cast<ITradableInstrument>(tinstr), "ord2", ord, tp,
+    }, std::static_pointer_cast<ITradableInstrument>(tinstr), ord, tp,
      {});
      
     auto exec = BacktestExecutor::create();
@@ -51,7 +51,7 @@ void test_report() {
 
     rep(ord, opst);
     ord->forward_update(opst);
-    rep(ord, Fill{{},"3432",ord->get_name(),tp,nfo,Side::buy, {},12,456,0,0});
+    rep(ord, Fill{{},"3432",ord->get_parameters().label,tp,nfo,Side::buy, {},12,456,0,0});
     rep(ord, OrderStatus::filled);
     rep(ord, OrderStatus::canceled);
     rep(ord, OrderRejectionReason::expired);

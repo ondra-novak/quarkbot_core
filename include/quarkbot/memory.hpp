@@ -102,6 +102,27 @@ public:
         gst.push(reinterpret_cast<_details::PoolItem *>(ptr));        
     }
 
+    template<typename T>
+    struct Allocator {
+
+        using value_type = T;
+
+        Allocator() = default;
+        Allocator(const Allocator &) = default;
+        template<typename Y>
+        Allocator(const Allocator<Y> &) {}
+
+        T *allocate(std::size_t n) {
+            std::size_t sz = sizeof(T) * n;
+            return reinterpret_cast<T *>(LockFreeFramePool::allocate(sz));
+        }
+        void deallocate(void *ptr, size_t n) {
+            std::size_t sz = sizeof(T) * n;
+            return LockFreeFramePool::deallocate(ptr, sz);
+        }
+        bool operator==(const Allocator &) const {return true;}
+    };
+
 
 protected:
     static _details::GlobalPoolStack _global_stack[arena_count];
