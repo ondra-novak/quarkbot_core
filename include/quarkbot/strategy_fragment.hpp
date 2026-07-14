@@ -19,6 +19,7 @@ namespace quarkbot {
     class StrategyFragment: public Async<void> {
     public:
         using Async<void>::Async;
+
         struct promise_type : Async<void>::promise_type {
             
             void unhandled_exception() {

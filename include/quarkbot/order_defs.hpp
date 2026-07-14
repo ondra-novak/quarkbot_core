@@ -9,7 +9,7 @@
 namespace quarkbot {
 
 template<typename T>
-using FastList = std::list<T, LockFreeFramePool::Allocator<T> >;
+using FastList = std::list<T, MagazineVMemAllocator::Allocator<T> >;
 
 
 enum class OrderType : char{

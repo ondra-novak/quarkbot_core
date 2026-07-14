@@ -1,6 +1,7 @@
 #pragma once
 #include "quarkbot/context.hpp"
 #include "quarkbot/event_stream.hpp"
+#include "quarkbot/market_instrument.hpp"
 #include "quarkbot/stream/closedbar.hpp"
 #include "quarkbot/stream/quote.hpp"
 #include "quarkbot/stream/trade.hpp"
@@ -18,17 +19,13 @@ public:
             :context(std::move(context)) {}
 
     StrategyFragment main() {
-        std::stop_source stop_sig;
         std::vector<std::function<void()>> cleanup_actions;
 
-        for (auto &x: this->context.instruments) {
-            auto instr = x.get_instrument();
-            print_quotes(instr, instr.subscribe<Quote>().stop_on(stop_sig));
-            print_trades(instr, instr.subscribe<Trade>().stop_on(stop_sig));
-            print_bars(instr, instr.subscribe<ClosedBarInterval<300>>().stop_on(stop_sig));
+        for (MarketInstrument instr: this->context.instruments) {
+            print_quotes(instr, instr.subscribe<Quote>().stop_on(context.stop_signal));
+            print_trades(instr, instr.subscribe<Trade>().stop_on(context.stop_signal));
+            print_bars(instr, instr.subscribe<ClosedBarInterval<300>>().stop_on(context.stop_signal));
         }
-        co_await this->context.stop_signal();
-        stop_sig.request_stop();
         co_return;
     }
 
