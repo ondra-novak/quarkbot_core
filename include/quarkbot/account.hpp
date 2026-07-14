@@ -1,11 +1,13 @@
 #pragma once
 #include "abstract/iaccount.hpp"
+#include "quarkbot/abstract/default_shared.hpp"
 
 namespace quarkbot {
 
 class Account {
 public:
     using WalletInfo = IAccount::WalletInfo;
+    Account():_state(default_shared(null_account)) {}
     Account(std::shared_ptr<IAccount> state):_state(state) {}
 
     std::string_view get_name() const {return _state->get_name();}

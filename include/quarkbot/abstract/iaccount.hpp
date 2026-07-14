@@ -30,6 +30,20 @@ public:
     virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency currency) const = 0;
     virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency currency) const = 0;
     virtual awaitable<bool> transfer(UnderlyingCurrency currency, std::shared_ptr<IAccount> to_account, Decimal amount)  = 0;
+
+    class Null;
 };  
+
+
+class IAccount::Null final: public IAccount {
+public:
+    virtual std::string_view get_name() const {return {"<null>"};}
+    virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency ) const {return {};}
+    virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency ) const {return {};}
+    virtual awaitable<bool> transfer(UnderlyingCurrency , std::shared_ptr<IAccount> , Decimal )  {return false;}
+};
+
+constexpr auto null_account = IAccount::Null{};
+
 
 }

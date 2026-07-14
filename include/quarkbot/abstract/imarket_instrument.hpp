@@ -32,7 +32,19 @@ public:
     
     virtual awaitable<bool> receive_snapshot(Snapshot &v, std::stop_token stop_token = {}) = 0;
 
-    
+    class Null;
     
 };
+
+class IMarketInstrument::Null final: public IMarketInstrument {
+public:
+    virtual PExchange get_exchange() const {throw UninitializedException();}
+    virtual const Info &get_info() const  {throw UninitializedException();}
+    virtual PTradableInstrument create_tradable_instrument(PAccount ) {throw UninitializedException();}
+    virtual awaitable<bool> receive_snapshot(Snapshot &, std::stop_token  = {}) {throw UninitializedException();}
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream(std::size_t , const void *) {return nullptr;}
+};
+
+constexpr auto null_market_instrument = IMarketInstrument::Null{};
+
 }

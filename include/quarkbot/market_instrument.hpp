@@ -2,6 +2,7 @@
 
 #include "abstract/imarket_instrument.hpp"
 #include "abstract/ipublisher.hpp"
+#include "quarkbot/abstract/default_shared.hpp"
 #include "quarkbot/instrument_description.hpp"
 #include "quarkbot/stream/snapshot.hpp"
 namespace quarkbot {
@@ -12,6 +13,7 @@ concept MarketInstrumentStream = requires {
 };
 
 
+class Exchange;
 class Account;
 class TradableInstrument;
 
@@ -24,8 +26,12 @@ public:
 
     using Info = IMarketInstrument::Info;
 
+    MarketInstrument():_state(default_shared(null_market_instrument)) {}
+    MarketInstrument(std::shared_ptr<IMarketInstrument> state):_state(std::move(state)){}
+
+
     ///Get exchange associated with this instrument
-    PExchange get_exchange() const {return _state->get_exchange();}
+    Exchange get_exchange() const;
     ///Get information about this instrument
     const Info &get_info() const {return _state->get_info();}
 
@@ -45,7 +51,6 @@ public:
         return _state->subscribe<T>(params);
     }
 
-    MarketInstrument(std::shared_ptr<IMarketInstrument> state):_state(std::move(state)){}
     
     ///Receive snapshot 
     /**

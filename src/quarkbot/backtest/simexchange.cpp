@@ -122,8 +122,8 @@ UnderlyingCurrency SimExchange::create_currency(std::string_view name, bool is_u
 UnderlyingCurrency SimExchange::create_currency(std::string_view name) const {
     return UnderlyingCurrency{std::string(name), std::string(name), this};
 }
-Account SimExchange::create_account(const std::string &name, const std::string &)  {
-    return Account(std::make_shared<SimAccount>(name, std::span<std::pair<UnderlyingCurrency, Decimal> >{}));
+PAccount SimExchange::create_account(const std::string &name, const std::string &)  {
+    return std::make_shared<SimAccount>(name, std::span<std::pair<UnderlyingCurrency, Decimal> >{});
 }
 std::vector<MarketInstrument> SimExchange::get_market_instruments()  {
     std::vector<MarketInstrument> out;
@@ -134,12 +134,12 @@ std::vector<MarketInstrument> SimExchange::get_market_instruments()  {
     return out;
 }
 
-MarketInstrument SimExchange::create_instrument(std::string_view id, InstrumentType type) {
+PMarketInstrument SimExchange::create_instrument(std::string_view id, InstrumentType type) {
     std::string idstr(id);
     auto instr = resolve_instrument(idstr);
     if (!instr) throw std::runtime_error("Unknown instrument: SimExchange / " + idstr);
     if (instr->get_info().type != type) throw std::runtime_error("Instrument found, but different type: SimExchange / " + idstr );   
-    return MarketInstrument(std::move(instr));
+    return instr;
     
 }
 

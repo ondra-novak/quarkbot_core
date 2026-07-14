@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <stdexcept>
 #include <tuple>
 namespace quarkbot {
 
@@ -263,5 +264,9 @@ struct Position {
 };
 
 
+class UninitializedException: public std::runtime_error {
+public:
+    UninitializedException():std::runtime_error("Called a method on uninitialized variable") {}
+};
 
 };

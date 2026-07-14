@@ -26,7 +26,7 @@ class SimExchange final: public IExchange, public std::enable_shared_from_this<S
 public:
     
     ///this function creates empty account, credentials are ignored
-    virtual Account create_account(const std::string &name, const std::string &credentials)  override;
+    virtual PAccount create_account(const std::string &name, const std::string &credentials)  override;
     virtual std::vector<MarketInstrument> get_market_instruments() override;
     virtual std::vector<UnderlyingCurrency> get_all_currencies()  override;
     virtual std::string_view get_name() const override;
@@ -49,7 +49,7 @@ public:
     PMarketInstrument add_instrument(std::unique_ptr<IMarketInstrument::Info> def);
     
     
-    virtual MarketInstrument create_instrument(std::string_view id, InstrumentType type) override;
+    virtual PMarketInstrument create_instrument(std::string_view id, InstrumentType type) override;
     UnderlyingCurrency create_currency(std::string_view name, bool is_unified = true);
     UnderlyingCurrency create_currency(std::string_view name) const;
     

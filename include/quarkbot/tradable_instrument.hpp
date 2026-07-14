@@ -5,7 +5,9 @@
 #include "hash/class_hash.hpp"
 #include "account.hpp"
 #include "order.hpp"
+#include "quarkbot/abstract/default_shared.hpp"
 #include <concepts>
+#include <cstddef>
 
 namespace quarkbot {
 
@@ -15,8 +17,11 @@ concept TradableInstrumentStream = requires {
 };
 
 
+class Exchange;
+
 class TradableInstrument{
 public:
+    TradableInstrument():_state(default_shared(null_tradable_instrument)) {}    
     TradableInstrument(std::shared_ptr<ITradableInstrument> state):_state(std::move(state)){}
 
     ///Place order on this instrument
@@ -77,9 +82,7 @@ public:
         return _state->get_instrument()->get_info();
     }
     ///get exchange associated with this instrument
-    PExchange get_exchange() const {
-        return _state->get_instrument()->get_exchange();
-    }
+    Exchange get_exchange() const;
 
     ///Convert to market instrument
     operator MarketInstrument() const {

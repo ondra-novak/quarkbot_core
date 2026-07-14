@@ -1,17 +1,20 @@
 #pragma once
 
 #include "abstract/iexchange.hpp"
-#include "account.hpp"
 #include "market_instrument.hpp"
+#include "quarkbot/abstract/default_shared.hpp"
+#include "tradable_instrument.hpp"
+#include "account.hpp"
 
 namespace quarkbot {
 
 class Exchange {
 public:
+    Exchange():_ptr(default_shared(null_exchange)) {}
     Exchange(std::shared_ptr<IExchange> state):_ptr(std::move(state)) {}
       ///create account object which is mapped to an account on the exchange. Format of credentials is exchange-specific (e.g. API key, secret, etc); for backtesting/simulation it can be left empty or used to specify initial wallet.
     Account create_account(const std::string &name, const std::string &credentials)  {
-        return _ptr->create_account(name, credentials);
+        return Account(_ptr->create_account(name, credentials));
     }
     ///get list of all instruments available on the exchange.
     std::vector<MarketInstrument> get_market_instruments() {
@@ -29,7 +32,7 @@ public:
           However, as long as there is at least one reference to an instrument, it will not be destroyed and the same object will be returned.
      */
     MarketInstrument create_instrument(std::string_view id, InstrumentType type)  {
-        return _ptr->create_instrument(id, type);
+        return MarketInstrument(_ptr->create_instrument(id, type));
     }
     ///query list of all currencies available on the exchange. This is used for wallet management and PnL calculations; it may or may not correspond to actual tradable assets on the exchange.
     std::vector<UnderlyingCurrency> get_all_currencies()  {
@@ -45,5 +48,13 @@ public:
 protected:
     std::shared_ptr<IExchange> _ptr;
 };
+
+inline Exchange MarketInstrument::get_exchange() const {
+    return Exchange(_state->get_exchange());
+}
+inline Exchange TradableInstrument::get_exchange() const {
+        return _state->get_instrument()->get_exchange();
+    }
+
 
 }
