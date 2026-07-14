@@ -24,6 +24,15 @@ public:
         }
         
     }
+
+    ///try to join, non-blocking
+    /**
+    @retval true joined
+    @retval false would block
+     */
+    bool try_join() {
+        return counter.load(std::memory_order_relaxed) == 0;
+    }
     ///wait until all scopes are exited
     void join() {
         auto n = counter.load(std::memory_order_relaxed);
