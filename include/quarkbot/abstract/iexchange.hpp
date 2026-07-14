@@ -42,7 +42,7 @@ public:
         throw UninitializedException();
     }
     virtual std::vector<MarketInstrument> get_market_instruments() {
-        return {};
+        throw UninitializedException();
     }
     virtual PMarketInstrument create_instrument(std::string_view, InstrumentType ){
         throw UninitializedException();
