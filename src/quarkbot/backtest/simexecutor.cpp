@@ -9,6 +9,7 @@
 #include <quarkbot/tradable_instrument.hpp>
 #include <quarkbot/decimal.hpp>
 #include <quarkbot/utils/random_string.hpp>
+#include "quarkbot/market_instrument.hpp"
 #include "simexchange.hpp"
 #include "siminstrument.hpp"    
 #include "simtradableinstrument.hpp"
@@ -23,7 +24,7 @@ namespace quarkbot {
 
     SimExecutor::PSimInstrument SimExecutor::extract_instrument(const POrderAData &ord) {
         TradableInstrument instr( ord->get_instrument());
-        auto minstr = instr.get_instrument();
+        MarketInstrument minstr = instr;
         return std::dynamic_pointer_cast<SimInstrument>(minstr.get_handle());        
     }
 

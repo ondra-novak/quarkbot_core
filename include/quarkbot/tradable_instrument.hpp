@@ -71,8 +71,6 @@ public:
 
     ///Get account associated with this instrument
     Account get_account() const{return _state->get_account();   }
-    ///Get market instrument associated with this tradable instrument
-    MarketInstrument get_instrument() const {return _state->get_instrument();}
 
     ///Get information about this instrument
     const IMarketInstrument::Info &get_info() const {
@@ -82,6 +80,18 @@ public:
     PExchange get_exchange() const {
         return _state->get_instrument()->get_exchange();
     }
+
+    ///Convert to market instrument
+    operator MarketInstrument() const {
+        return MarketInstrument(_state->get_instrument());
+    }
+
+    ///Convert to market instrument
+    MarketInstrument as_market_instrument() const {
+        return MarketInstrument(_state->get_instrument());
+    }
+
+
 
     ///Convert order request to order parameters.
     /**
@@ -114,7 +124,6 @@ public:
     EventStream<T> subscribe(typename T::Params params) {
         return _state->subscribe<T>(params);
     }
-
 
     ///Get handle to internal state.
     /**

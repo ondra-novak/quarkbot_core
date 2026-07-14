@@ -6,8 +6,6 @@
 #include "quarkbot/event_stream.hpp"
 #include "quarkbot/market_instrument.hpp"
 #include "quarkbot/stream/auction.hpp"
-#include "quarkbot/stream/periodic_snapshot.hpp"
-#include "../streaming/periodic_stream.hpp"
 #include "quarkbot/types.hpp"
 #include "quarkbot/underlying.hpp"
 #include "quarkbot/abstract/iexchange.hpp"
@@ -82,22 +80,10 @@ protected:
         std::shared_ptr<SimInstrument> get(const std::shared_ptr<SimExchange> &owner);
     };
 
-    struct PeriodicStreamCallback {        
-        EventStream<Trade> _trade_stream;
-        EventStream<Quote> _quote_stream;
-        bool operator()(PeriodicSnapshotView &view);
-    };
 
-    struct PeriodicStreamFactory {
-        std::weak_ptr<SimExchange> _exchange;
-        PeriodicStreamCallback operator()(std::string instrument, std::chrono::system_clock::duration dur);
-    };
-
-    using PeriodicStreamMan = PeriodicStreamManager<std::string, PeriodicSnapshotView, PeriodicStreamFactory>;
 
     std::unordered_map<std::string, InstrumentRef> _instrument_names;
     AllMarketStreamManager<std::string> _streams;
-    std::unique_ptr< PeriodicStreamMan> _periodic_streams;
     
     SimExecutor _executor;
     std::vector<std::weak_ptr<SimTradableInstrument> > _tradable_instruments;

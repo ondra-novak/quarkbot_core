@@ -3,6 +3,7 @@
 #include "abstract/imarket_instrument.hpp"
 #include "abstract/ipublisher.hpp"
 #include "quarkbot/instrument_description.hpp"
+#include "quarkbot/stream/snapshot.hpp"
 namespace quarkbot {
 
 template<typename T>
@@ -45,6 +46,23 @@ public:
     }
 
     MarketInstrument(std::shared_ptr<IMarketInstrument> state):_state(std::move(state)){}
+    
+    ///Receive snapshot 
+    /**
+        @param v variable which receives snapshot
+        @param token stop token allows to interrupt asynchronous operation prematurelly - you can use this to implement timeout
+        @retval true awaitable: value has been received
+        @retval false awaitable: operation has been interrupted
+
+        @note The implementation depends on the adapter. A simple version subscribes to the Trade and Quote streams 
+              and gets the first event of each stream which it then returns as a result. Another implementation 
+              can use a REST API request to directly request a snapshot from the exchange. Such a request 
+              can be included in rate limiting rules. Therefore, you should avoid calling this function frequently.
+              If you need snapshots more frequently (less than 1 minute), it is much easier to subscribe to a stream        
+    */
+    awaitable<bool> receive_snapshot(Snapshot &v, std::stop_token token = {}) {
+        return _state->receive_snapshot(v, std::move(token));
+    }
     
     bool operator==(const MarketInstrument &) const = default;
 

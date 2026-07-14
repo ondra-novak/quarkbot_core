@@ -167,7 +167,7 @@ namespace quarkbot {
             }
 
             // ----------------------- MONITOR PRICE ----------------------
-            auto ev = TradableInstrument(order->instrument).get_instrument().subscribe<Trade>();
+            auto ev = TradableInstrument(order->instrument).as_market_instrument().subscribe<Trade>();
             if (!order->set_event(&ev)) {
                 order->update(OrderStatus::canceled);
                 co_return;

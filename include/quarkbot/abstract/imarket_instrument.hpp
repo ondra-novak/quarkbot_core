@@ -4,6 +4,8 @@
 #include "../instrument_description.hpp"
 #include "../underlying.hpp"
 #include "../types.hpp"
+#include "quarkbot/defs.hpp"
+#include "quarkbot/stream/snapshot.hpp"
 
 namespace quarkbot {
 
@@ -26,5 +28,11 @@ public:
       @return reference to tradable instrument, can be nullptr if not available for trading with this account
      */
     virtual PTradableInstrument create_tradable_instrument(PAccount account) = 0;
+
+    
+    virtual awaitable<bool> receive_snapshot(Snapshot &v, std::stop_token stop_token = {}) = 0;
+
+    
+    
 };
 }

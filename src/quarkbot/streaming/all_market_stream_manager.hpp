@@ -3,7 +3,6 @@
 #include "quarkbot/stream/auction.hpp"
 #include "quarkbot/stream/closedbar.hpp"
 #include "quarkbot/stream/orderbook.hpp"
-#include "quarkbot/stream/periodic_snapshot.hpp"
 #include "quarkbot/stream/quote.hpp"
 #include "quarkbot/stream/rangedbar.hpp"
 #include "quarkbot/stream/trade.hpp"
@@ -32,7 +31,6 @@ public:
     using RangedBarPublisher = LockFreePublisher<RangedBar, 1>;
     using AuctionPublisher = LockFreePublisher<Auction, 1>;
     using OrderbookPublsher = LockFreePublisher<OrderBookSt, 1>;
-    using PeriodicSnapshotViewPublisher = LockFreePublisher<PeriodicSnapshotView, 1>;
     
 
     using QuoteStreamMap = SingleStreamMap<InstrumentRef, QuotePublisher>;
@@ -43,7 +41,6 @@ public:
     using RangedBarStreamMap = ParametrizedStreamMap<InstrumentRef, RangedBarPublisher, RangedBar::Param>;
     using OrderBookStreamMap = SingleStreamMap<InstrumentRef, RangedBarPublisher>;
     using AuctionStreamMap  = SingleStreamMap<InstrumentRef, AuctionPublisher>;
-    using PeriodicSnapshotViewMap = ParametrizedStreamMap<InstrumentRef, PeriodicSnapshotViewPublisher, PeriodicSnapshotView::Param>;
 
 
     std::shared_ptr<IEventStreamBase> subscribe_stream(const InstrumentRef &instrument, std::size_t type, const void *param) {
@@ -100,25 +97,6 @@ public:
         });
         return b1;
     }
-
-    ///Called periodically 
-    /**
-    @param instrument instrument
-    @param snapshot current snapshot
-    @param interval current interval
-    @retval true published
-    @retval false nobody listening
-     */
-    bool on_periodic_event(const InstrumentRef &instrument, const PeriodicSnapshotView &snapshot, unsigned int interval) {
-        bool b = false;
-        _snapshots.enum_publisher(instrument, [&](unsigned int param, PeriodicSnapshotViewPublisher &pub){
-            if (param == interval) {
-                b = true;
-                pub.publish(snapshot);
-            }
-        });
-        return b;
-    }
     
     template<typename T>
     void collect_active(std::unordered_set<InstrumentRef> &refmap) {
@@ -148,7 +126,6 @@ protected:
     RangedBarStreamMap _ranged_bars;
     AuctionStreamMap _auctions;
     OrderBookStreamMap _orderbook;
-    PeriodicSnapshotViewMap _snapshots;
 
 };
 
