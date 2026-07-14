@@ -13,6 +13,7 @@ concept has_get_hash_function = requires(T a) {
 };
 
 
+
 template<typename T>
 struct Hasher {
     std::size_t operator()(const T &obj) const {
@@ -24,3 +25,4 @@ struct Hasher {
         }
     }
 };
+

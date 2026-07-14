@@ -41,7 +41,7 @@ public:
     using TickerStreamMap = SingleStreamMap<InstrumentRef, TickerPublisher>;
     using ClosedBarStreamMap = ParametrizedStreamMap<InstrumentRef, ClosedBarPublisher, ClosedBar::Param>;
     using RangedBarStreamMap = ParametrizedStreamMap<InstrumentRef, RangedBarPublisher, RangedBar::Param>;
-    using OrderBookStreamMap = SingleStreamMap<InstrumentRef, RangedBarPublisher>;
+    using OrderBookStreamMap = SingleStreamMap<InstrumentRef, OrderbookPublsher>;
     using AuctionStreamMap  = SingleStreamMap<InstrumentRef, AuctionPublisher>;
     using PeriodicSnapshotViewMap = ParametrizedStreamMap<InstrumentRef, PeriodicSnapshotViewPublisher, PeriodicSnapshotView::Param>;
 
@@ -91,8 +91,19 @@ public:
         @param increment - contains orderbook increment - not whole orderbook - quantities are absolute, but level with quantity 0 is removed
     */
     bool on_event(const InstrumentRef &instrument, const OrderBookView &increment) {
-        bool b1 = _orderbook.with_publisher(instrument, [&](LockFreePublisher<OrderBookSt,1> &pub){
+        bool b1 = _orderbook.with_publisher(instrument, [&](LockFreePublisher<OrderBookSt,1> &pub){            
             const OrderBookSt &ref = pub.get_top_value_ref();
+            pub.write([&](OrderBookSt &target) noexcept {
+                ref.apply_to(target, increment);
+                return true;
+            });
+        });
+        return b1;
+    }
+
+    bool on_event_snapshot(const InstrumentRef &instrument, const OrderBookView &increment) {
+        bool b1 = _orderbook.with_publisher(instrument, [&](LockFreePublisher<OrderBookSt,1> &pub){            
+            OrderBookSt ref={};
             pub.write([&](OrderBookSt &target) noexcept {
                 ref.apply_to(target, increment);
                 return true;
