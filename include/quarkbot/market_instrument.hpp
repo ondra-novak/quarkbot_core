@@ -2,9 +2,9 @@
 
 #include "abstract/imarket_instrument.hpp"
 #include "abstract/ipublisher.hpp"
-#include "quarkbot/abstract/default_shared.hpp"
-#include "quarkbot/instrument_description.hpp"
-#include "quarkbot/stream/snapshot.hpp"
+#include "instrument_description.hpp"
+#include "stream/snapshot.hpp"
+#include "utils/wrapper.hpp"
 namespace quarkbot {
 
 template<typename T>
@@ -21,19 +21,17 @@ class TradableInstrument;
 /**
     You cannot use this to place orders, for that you need to create TradableInstrument by calling create_tradable_instrument() with account as parameter.
 */
-class MarketInstrument {
+class MarketInstrument: public Wrapper<IMarketInstrument> {
 public:
 
     using Info = IMarketInstrument::Info;
 
-    MarketInstrument():_state(default_shared(null_market_instrument)) {}
-    MarketInstrument(std::shared_ptr<IMarketInstrument> state):_state(std::move(state)){}
-
+    using Wrapper<IMarketInstrument>::Wrapper;
 
     ///Get exchange associated with this instrument
     Exchange get_exchange() const;
     ///Get information about this instrument
-    const Info &get_info() const {return _state->get_info();}
+    const Info &get_info() const {return _ptr->get_info();}
 
     ///Create tradable instrument for this market instrument and given account.
     TradableInstrument create_tradable_instrument(const Account &account) const;
@@ -42,13 +40,13 @@ public:
     template<MarketInstrumentStream T>
     requires(StreamWithoutParam<T> || StreamWithConstantParam<T>)
     EventStream<T> subscribe() const {
-        return _state->subscribe<T>();
+        return _ptr->subscribe<T>();
     }
 
     template<MarketInstrumentStream T>
     requires(StreamWithParam<T>)
     EventStream<T> subscribe(typename T::Params params) const {
-        return _state->subscribe<T>(params);
+        return _ptr->subscribe<T>(params);
     }
 
     
@@ -66,15 +64,9 @@ public:
               If you need snapshots more frequently (less than 1 minute), it is much easier to subscribe to a stream        
     */
     awaitable<bool> receive_snapshot(Snapshot &v, std::stop_token token = {}) {
-        return _state->receive_snapshot(v, std::move(token));
+        return _ptr->receive_snapshot(v, std::move(token));
     }
     
-    bool operator==(const MarketInstrument &) const = default;
-
-    auto get_handle() const {return _state;}
-
-protected:
-    std::shared_ptr<IMarketInstrument> _state;
 };
 
 

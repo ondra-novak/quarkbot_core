@@ -1,4 +1,5 @@
 #include "simtradableinstrument.hpp"
+#include "quarkbot/abstract/orderdata.hpp"
 #include "simaccount.hpp"
 #include "siminstrument.hpp"        // IWYU pragma: keep - failed to detect by clangd
 #include "quarkbot/storage_srl.hpp" // IWYU pragma: keep - template definitions
@@ -145,6 +146,12 @@ std::shared_ptr<OrderInternalData>  SimTradableInstrument::place_order(const Ord
         return st;
     }
 
+    auto chk =_account->get_risk_controller().pre_trade_check(st);;
+    if (chk) {
+        st->update(std::move(chk).value());
+        return st;
+    }
+
     _instrument->get_sim_exchange()->place_order(st);    
     return st;
             
@@ -153,8 +160,10 @@ std::shared_ptr<OrderInternalData>  SimTradableInstrument::place_order(const Ord
 
 void SimTradableInstrument::on_order_update(POrderAData ord, OrderInternalData::Update &&status) {
    
+    auto &cntr=_account->get_risk_controller();
     if (std::holds_alternative<Fill>(status)) {
         const Fill &f = std::get<Fill>(status);
+        if (cntr) cntr.on_order_event(Order(ord), f);
         report_fill(f);
     } else {
         if ((std::holds_alternative<OrderStatus>(status) && is_done_status(std::get<OrderStatus>(status)))
@@ -171,7 +180,9 @@ void SimTradableInstrument::on_order_update(POrderAData ord, OrderInternalData::
                 }
                 update_margin();
         } 
+        if (cntr) cntr.on_order_event(Order(ord),OrderInternalData::update2status(status));
     }
+
     ord->forward_update(std::move(status));
 }
 

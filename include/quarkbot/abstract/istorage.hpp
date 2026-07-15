@@ -1,13 +1,11 @@
 #pragma once
 
-#include "quarkbot/abstract/default_shared.hpp"
-#include "quarkbot/defs.hpp"
-#include "quarkbot/serializer/schema_fwd.hpp"
-#include "quarkbot/types.hpp"
-#include "quarkbot/utils/signals.hpp"
+#include "../defs.hpp"
+#include "../serializer/schema_fwd.hpp"
+#include "../types.hpp"
+#include "../utils/signals.hpp"
 #include <functional>
 #include <memory>
-#include <ranges>
 #include <stdexcept>
 namespace quarkbot {
 
@@ -285,18 +283,14 @@ namespace quarkbot {
         }
     };
 
-    constexpr auto null_storage = IStorage::Null();
 
     class IStorageManager::Null final: public IStorageManager {
     public:
-        virtual PStorage get_storage(std::string_view )override {
-            return default_shared<IStorage>(null_storage);
-        }       
+        virtual PStorage get_storage(std::string_view )override {return {}; }       
         virtual void delete_storage(std::string_view ) override{}
         virtual std::vector<std::string> list() override {return {};}
     };
 
-    constexpr auto null_storage_manager = IStorageManager::Null();
 
 
     

@@ -4,7 +4,8 @@
 #include "basic_coro/coroutine.hpp"
 #include "basic_coro/pending.hpp"
 #include "basic_coro/prepared_coro.hpp"
-#include "quarkbot/defs.hpp"
+#include "defs.hpp"
+#include "utils/wrapper.hpp"
 
 
 #include <basic_coro/await_proxy.hpp>
@@ -20,17 +21,29 @@
 #include <stdexcept>
 namespace quarkbot {
 
-class ExecutionWorker {
+class ExecutionWorker: public Wrapper<IExecutionWorker> {
 public:
 
-    explicit ExecutionWorker(std::nullptr_t) {}
-    ExecutionWorker(std::shared_ptr<IExecutionWorker> worker):_worker(std::move(worker)) {}
+    using Wrapper<IExecutionWorker>::Wrapper;
+    
 
+    ///Schedule coroutine for resumption in this worker
+    /**
+        @param h handle of coroutine
+        @note low-level
+        @note doesn't check for handle validity!
+        
+    */
     void resume(std::coroutine_handle<> h) noexcept {
-        _worker->resume(h);
+        _ptr->resume(h);
     }
+    ///Schedule coroutine for resumption in this worker
+    /**
+        @param h prepared_coro object 
+        @note if no coroutine prepared in the object, it does nothing. Expects valid handle in the object
+    */
     void resume(coro::prepared_coro h) {
-        if (h) _worker->resume(h.release());
+        if (h) _ptr->resume(h.release());
     }
     ///Run a coroutine in this executable worker
     /**
@@ -44,6 +57,19 @@ public:
         resume(coro.release());       
     }
 
+    ///Run a coroutine in this worker, return pending object to synchronize later
+    /**
+        @param coroutine
+        @return coro::pending - this object must be synchronized before it is destroyed. Failing this rule causes termination
+
+        @code
+        {
+            auto p = worker.launch(some_coro(...));
+            ...
+            co_await p;
+        }
+        @endcode
+    */
     template<typename T>
     auto launch(coro::coroutine<T> &&coro) {
         return coro.launch([&](coro::prepared_coro c)  {resume(std::move(c));});
@@ -57,7 +83,9 @@ public:
         @note Backtest probably doesn't spawn a new thread, it simply just creates a new reference
     */
     ExecutionWorker spawn() noexcept {
-        return _worker->spawn();
+        auto r= _ptr->spawn();
+        if (r) [[likely]] return ExecutionWorker{r};
+        return {};
     }
 
     ///Returns this thread's execution worker
@@ -65,7 +93,11 @@ public:
     @return reference to execution worker, if thread is execution worker,
              otherwise returns nullptr for other threads
      */
-    static ExecutionWorker current() { return IExecutionWorker::current();}
+    static ExecutionWorker current() { 
+        auto r =IExecutionWorker::current();
+        if (r) [[likely]] return ExecutionWorker{r};
+        return {};
+    }        
 
     ///Schedule current coroutine (StrategyFragment) on this execution worker
     /**
@@ -84,7 +116,7 @@ public:
         @return current time point
      */
     std::chrono::system_clock::time_point now() const {
-        return _worker->now();
+        return _ptr->now();
     }
 
     ///Sleep for specified time or until alerted
@@ -96,9 +128,12 @@ public:
         returns immediately canceled awaitable.
         It is allowed to have multiple sleeps on single flag. Note that cancel command will cancel all of them
         @return awaitable which completes when time point is reached or alert flag is set
+
+        @note Use Timer if you can
+        @see Timer
      */
     awaitable<bool> sleep_until(std::chrono::system_clock::time_point time_point, cancel_signal *cancel_signal_ptr = nullptr) {
-        return _worker->sleep_until(time_point, cancel_signal_ptr);
+        return _ptr->sleep_until(time_point, cancel_signal_ptr);
     }
     ///Sleep for specified duration or until alerted
     /**
@@ -109,9 +144,12 @@ public:
         returns immediately canceled awaitable.
         It is allowed to have multiple sleeps on single flag. Note that cancel command will cancel all of them
         @return awaitable which completes when duration elapses or alert flag is set
-     */
+
+        @note Use Timer if you can
+        @see Timer
+    */
     awaitable<bool> sleep_for(std::chrono::system_clock::duration duration, cancel_signal *cancel_signal_ptr = nullptr) {
-        return _worker->sleep_for(duration, cancel_signal_ptr);
+        return _ptr->sleep_for(duration, cancel_signal_ptr);
     }
 
     ///Interrupt any awaitable sleeping on the scheduler with specified alert flag
@@ -123,47 +161,39 @@ public:
        @note if there are multiple coroutines on same signal, they are canceled all of them
 
      * @param cancel_signal alert flag used to identify sleeping awaitables
+
+       @note Use Timer if you can
+       @see Timer
+
      */
     bool cancel(coro::cancel_signal *cancel_signal) {
-        return _worker->cancel(cancel_signal);
+        return _ptr->cancel(cancel_signal);
     }
 
-    ///Join all previously added tasks with current thread
+    ///Wait until all scheduled tasks are completed
     /**
-      Blocks execution until all tasks enqueued before join is called are finished.
-      Tasks added after join are not included
+        Waits until all scheduled tasks at time of call are completed. It doesn't wait for tasks scheduled after the call.
+        It garantees that all tasks scheduled before the call are completed, but state of tasks scheduled after the call 
+            is not guaranteed. It can be completed or not completed, depending on scheduling and execution order.
+        @note it also works in backtest executor which calls flush_queue() to execute all scheduled tasks
+        
+        @note implementation should be safe if called from the thread of the execution worker.
+              It just executes all scheduled tasks and returns. It doesn't wait for tasks scheduled after the call.
 
-      @note it only garantees that tasks enqueued before join are finished, It doesn't
-      mean, that tasks enqueued after join will be still queued (as they can be finished
-      as well)
-      
-      @note also works correctly in backtest executor, which invokes flush of the queue
-      @retval true some tasks has been processed before join finished
-      @retval false no-op, nothing to be processed, queue is empty
-
+        @return true if there were tasks to wait for, false if there were no tasks
      */
-    bool join() {
-        if (_worker) return _worker->join();
-        return false;
+    bool quiesce() {
+        return _ptr->quiesce();
     }
 
 
     ///Ensures that worker is available - otherwise it throw exception
     ExecutionWorker &required() {
-        if (!_worker) throw std::runtime_error("Operation requires an active Execution Worker context, but the current thread is not associated with any Execution Worker.");
+        if (!static_cast<bool>(*this)) {
+            throw std::runtime_error("Operation requires an active Execution Worker context, but the current thread is not associated with any Execution Worker.");
+        }
         return *this;
     }
-
-    ///test validity
-    explicit operator bool() const {return static_cast<bool>(_worker);}
-
-    ///get handle
-    auto get_handle() const {return _worker;}
-    
-protected:
-
-
-    std::shared_ptr<IExecutionWorker> _worker;
 
 };
 

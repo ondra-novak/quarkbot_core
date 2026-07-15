@@ -1,9 +1,8 @@
 #pragma once
 
 #include "abstract/ieventstream.hpp"
+#include "utils/wrapper.hpp"
 #include "strategy_fragment.hpp"
-#include "types.hpp"
-#include "hash/class_hash.hpp"
 #include <concepts>
 #include <format>
 #include <memory>
@@ -20,16 +19,14 @@ stream group. When the EventStream is canceled, it cancels whole group, not sing
 need separate groups, subscribe separate streams
 */
 template<typename T>
-class EventStream {
+class EventStream : Wrapper<IEventStream<typename StreamViewType<T>::type > >{
 public:
+    using Wrapper<IEventStream<typename StreamViewType<T>::type > >::Wrapper;
     ///Type of view returned by T::view() method
     using ViewType = typename StreamViewType<T>::type;
     using ValueType = T;
     using value_type = T;
-    EventStream():_stream(IEventStream<ViewType>::Closed::get_instance()) {}
 
-    ///constructor from IEventStreamBase pointer, stream is open if pointer is not null
-    EventStream(std::shared_ptr<IEventStream<ViewType> > stream):_stream(std::move(stream)) {}  
 
     static EventStream from_base(std::shared_ptr<IEventStreamBase> base) {
         auto dpc =std::dynamic_pointer_cast<IEventStream<ViewType> >(base);
@@ -42,54 +39,54 @@ public:
     }
 
     ///check if stream is open
-    bool is_open() const {return _stream->is_open();}
+    bool is_open() const {return this->_ptr->is_open();}
     ///close the stream
     /**
     @note if the stream is shared (created instances from single source), this function
     cancels whole group, not only this instance. 
     */
-    void close() {_stream->close();}
+    void close() {this->_ptr->close();}
     ///conversion to bool - true if stream is open, false if closed
     operator bool() const {return is_open();}
     ///read next event, if available, and copy it to ref
     coro::awaitable<bool> receive(T &val) {
         if constexpr (HasStreamView<T>) {
-            return _stream->receive(val.view());
+            return this->_ptr->receive(val.view());
         } else {
-            return _stream->receive(val);
+            return this->_ptr->receive(val);
         }
     }
 
     EventStream &stop_on(std::stop_token tkn) & {
-        _stream->set_stop_token(std::move(tkn));
+        this->_ptr->set_stop_token(std::move(tkn));
         return *this;
     }
     EventStream &&stop_on(std::stop_token tkn) && {
-        _stream->set_stop_token(std::move(tkn));
+        this->_ptr->set_stop_token(std::move(tkn));
         return std::move(*this);
     }
     EventStream &stop_on(const std::stop_source &src) & {
-        _stream->set_stop_token(src.get_token());
+        this->_ptr->set_stop_token(src.get_token());
         return *this;
     }
     EventStream &&stop_on(const std::stop_source &src) && {
-        _stream->set_stop_token(src.get_token());
+        this->_ptr->set_stop_token(src.get_token());
         return std::move(*this);
     }
 
          
     ///receive next event, if available, and copy it to ref, also report count of missed events     
-    coro::awaitable<bool> receive(T &val, std::size_t &missed) {return _stream->next(val.view(), missed);}
+    coro::awaitable<bool> receive(T &val, std::size_t &missed) {return this->_ptr->next(val.view(), missed);}
 
     bool current(T &val) {
           if constexpr (HasStreamView<T>) {
-            return _stream->current(val.view());
+            return this->_ptr->current(val.view());
         } else {
-            return _stream->current(val);
+            return this->_ptr->current(val);
         }
     }
 
-    auto get_handle() const {return _stream;}
+    auto get_handle() const {return this->_ptr;}
 
     template<typename _Hub, std::derived_from<T> _ItemWithContext>
     friend StrategyFragment feed_to(EventStream<T> stream, _Hub hub, _ItemWithContext context) {
@@ -97,8 +94,6 @@ public:
     }
 
 
-protected:
-    std::shared_ptr<IEventStream<ViewType> > _stream;
 
 };
 

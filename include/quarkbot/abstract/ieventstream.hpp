@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../defs.hpp"
-#include "quarkbot/abstract/default_shared.hpp"
 #include <memory>
 #include <stop_token>
 namespace quarkbot {
@@ -75,6 +74,7 @@ public:
 
     class Closed;
     class Silent;
+    using Null = Closed;
 
 protected:
 

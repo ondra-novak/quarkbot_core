@@ -3,6 +3,7 @@
 #include "../defs.hpp"
 #include "../underlying.hpp"
 #include "../types.hpp"
+#include "quarkbot/risk_controller.hpp"
 
 namespace quarkbot {
 
@@ -31,6 +32,7 @@ public:
     virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency currency) const = 0;
     virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency currency) const = 0;
     virtual awaitable<bool> transfer(UnderlyingCurrency currency, std::shared_ptr<IAccount> to_account, Decimal amount)  = 0;
+    virtual RiskController set_risk_controller(RiskController) =0;
 
     class Null;
 };  
@@ -42,9 +44,8 @@ public:
     virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency ) const {return {};}
     virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency ) const {return {};}
     virtual awaitable<bool> transfer(UnderlyingCurrency , std::shared_ptr<IAccount> , Decimal )  {return false;}
+    virtual RiskController set_risk_controller(RiskController) {return {};}
 };
-
-constexpr auto null_account = IAccount::Null{};
 
 
 }

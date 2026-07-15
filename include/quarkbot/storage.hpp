@@ -1,23 +1,19 @@
 #pragma once
 
 #include "abstract/istorage.hpp"
-#include "quarkbot/abstract/default_shared.hpp"
-#include "quarkbot/utils/signals.hpp"
-#include "quarkbot/defs.hpp"
+#include "utils/signals.hpp"
+#include "defs.hpp"
+#include "utils/wrapper.hpp"
 #include <memory>
 
 namespace quarkbot {
 
 class StorageTransaction;
 
-class Storage {
+class Storage: public Wrapper<IStorage> {
 public:
 
-    Storage():_ptr(default_shared(null_storage)) {}
-    Storage(PStorage ptr):_ptr(std::move(ptr)) {}
-
-    constexpr bool valid() const {return _ptr.get() != &null_storage;}
-    constexpr explicit operator bool() const {return valid();}
+    using Wrapper<IStorage>::Wrapper;
 
     using Value = IStorage::Value;
     using ValueView = IStorage::ValueView;
@@ -91,10 +87,7 @@ public:
         return conn;
     }
 
-    auto get_handle() const {return _ptr;}
 
-protected:
-    PStorage _ptr;
 };
 
 class StorageTransaction {
@@ -192,6 +185,37 @@ protected:
 inline StorageTransaction Storage::write() {
     return _ptr->write();
 }
+
+class StorageManager : public Wrapper<IStorageManager> {
+public:
+    using Wrapper<IStorageManager>::Wrapper;
+    ///returns storage for strategy. Storage is used to store strategy state, parameters, or any other data that needs to be preserved between runs. Storage is created on demand, so if it is not found, new storage is created and returned
+    /**
+        @param name name of storage. It must be unique for strategy.
+
+        @note there can be limit on number of storages, so it is recommended to reuse storages if possible. 
+        LevelDB implementation has limit of 127 storages.
+                            
+        */
+    Storage get_storage(std::string_view name) const {
+        auto r = _ptr->get_storage(name);
+        if (r) return Storage(r);
+        return Storage{};
+    }
+
+    ///deletes storage with specified name. After deletion, storage is not found and new storage is created 
+    /// on demand when get_storage() is called with the same name
+    void delete_storage(std::string_view name) {
+        _ptr->delete_storage(name);
+    }
+
+    ///retrieve list all storages in the database
+     std::vector<std::string> list() const {
+        return _ptr->list();
+     }
+
+};
+
 
 }
 

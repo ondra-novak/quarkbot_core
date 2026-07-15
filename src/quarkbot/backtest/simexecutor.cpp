@@ -485,7 +485,7 @@ StrategyFragment SimExecutor::cancel_order(OrderInternalData *ord) {
 
 void SimExecutor::stop_latency_queue() {
     _timer.cancel();
-    ExecutionWorker::current().join();    
+    ExecutionWorker::current().quiesce();    
 
 }
 

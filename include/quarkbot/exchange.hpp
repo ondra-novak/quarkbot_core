@@ -2,16 +2,16 @@
 
 #include "abstract/iexchange.hpp"
 #include "market_instrument.hpp"
-#include "quarkbot/abstract/default_shared.hpp"
+#include "utils/wrapper.hpp"
 #include "tradable_instrument.hpp"
 #include "account.hpp"
 
 namespace quarkbot {
 
-class Exchange {
+class Exchange: public Wrapper<IExchange> {
 public:
-    Exchange():_ptr(default_shared(null_exchange)) {}
-    Exchange(std::shared_ptr<IExchange> state):_ptr(std::move(state)) {}
+    using Wrapper<IExchange>::Wrapper;
+
       ///create account object which is mapped to an account on the exchange. Format of credentials is exchange-specific (e.g. API key, secret, etc); for backtesting/simulation it can be left empty or used to specify initial wallet.
     Account create_account(const std::string &name, const std::string &credentials)  {
         return Account(_ptr->create_account(name, credentials));
@@ -43,17 +43,15 @@ public:
         return _ptr->get_name();
     }
 
-    auto get_handle() const {return _ptr;}
-
 protected:
     std::shared_ptr<IExchange> _ptr;
 };
 
 inline Exchange MarketInstrument::get_exchange() const {
-    return Exchange(_state->get_exchange());
+    return Exchange(_ptr->get_exchange());
 }
 inline Exchange TradableInstrument::get_exchange() const {
-        return _state->get_instrument()->get_exchange();
+        return _ptr->get_instrument()->get_exchange();
     }
 
 

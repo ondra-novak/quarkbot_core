@@ -55,6 +55,4 @@ public:
     }
 };
 
-constexpr auto null_exchange = IExchange::Null{};
-
 } // namespace quarkbot
