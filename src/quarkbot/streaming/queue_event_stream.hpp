@@ -1,7 +1,7 @@
 #pragma  once
 
 #include "basic_coro/prepared_coro.hpp"
-#include "quarkbot/utils/small_buffer.hpp"
+#include "quarkbot/utils/stack_vector.hpp"
 #include <quarkbot/abstract/ieventstream.hpp>
 #include <quarkbot/execution_worker.hpp>
 #include <algorithm>
@@ -119,11 +119,11 @@ public:
     }
 
     void publish(const T &val) {
-        SmallBuffer<coro::prepared_coro, 32> out;
+        StackVector<coro::prepared_coro, 32> out;
         std::scoped_lock _(_mx); 
-        out.set_size(_subscribers.size());
-        for (std::size_t idx = 0; auto &[id, sub]: _subscribers) {
-            out[idx++] = sub->push(val);
+        out.reserve(_subscribers.size());
+        for (auto &[id, sub]: _subscribers) {
+            out.emplace_back(out, sub->push(val));
         }
     }
 

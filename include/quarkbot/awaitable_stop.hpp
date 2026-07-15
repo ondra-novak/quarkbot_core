@@ -1,6 +1,6 @@
 #pragma once
 
-#include "execution_worker.hpp"
+
 #include <coroutine>
 #include <stop_token>
 
