@@ -1,6 +1,7 @@
 #pragma once
 #include "async.hpp"
 #include "basic_coro/awaitable.hpp"
+#include "quarkbot/log.hpp"
 #include <list>
 
 namespace quarkbot {
@@ -27,6 +28,7 @@ namespace quarkbot {
                 //so report that fragment is done
                 this->return_void();
                 //report exception
+                logOutputLoc(LogLevel::error, coro_location, "Strategy fragment unhandled exception");
                 coro::async_unhandled_exception();
             }
         };

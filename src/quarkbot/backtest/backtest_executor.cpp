@@ -17,62 +17,6 @@
 
 namespace quarkbot {
 
-class CoroRegister : public IAsyncDebugTrace {
-public:
-
-        virtual void add(std::coroutine_handle<> h, const std::source_location &loc) {
-            _loc[h.address()] = loc;
-            report("Fragment created:", h);
-        }
-        virtual void remove(std::coroutine_handle<> h) {
-            report("Fragment finished: ", h);
-            _loc.erase(h.address());
-        }
-
-        void report(std::string_view operation, std::coroutine_handle<> h) {
-            auto iter = _loc.find(h.address());
-            if  (iter == _loc.end()) return;
-            char buff[1024];
-            std::string_view fnam(iter->second.function_name())            ;            
-            auto res = std::format_to_n(buff, sizeof(buff), "{} {}", operation, short_name(fnam) );
-            Logger::instance.log_sink(LogLevel::trace, &iter->second, {buff, static_cast<std::size_t>(res.size)});
-
-        }
-
-        static std::string_view short_name(std::string_view n){
-            auto sz = n.size();
-            int bc = 0;
-            for (auto i = sz-sz; i < sz; ++i) {
-                char c = n[i];
-                if (isspace(c) && bc == 0) {
-                    n = n.substr(i);
-                    break;
-                }
-                if (c == '<') bc++;
-                if (c == '>') bc--;                
-            }
-            auto rc = n.find('(');
-            if (rc != n.npos) n = n.substr(0,rc);
-            n = trim(n);
-            return n;
-        }
-
-        virtual void resumed(std::coroutine_handle<> h) {
-            report("Fragment running", h);
-        }
-
-        const std::source_location *find(std::coroutine_handle<> h) const {
-            auto iter = _loc.find(h.address());
-            if  (iter == _loc.end()) return nullptr;
-            else return &iter->second;
-        }
-
-
-protected:    
-    std::unordered_map<void *, std::source_location> _loc;
-};
-
-static CoroRegister coroRegister;
 
 
 class BacktestExecutorFactory: public BacktestExecutor {
@@ -103,9 +47,6 @@ std::shared_ptr<BacktestExecutor> BacktestExecutor::create() {
             else return std::chrono::system_clock::now();
         });
         _current_worker = me;
-        if (Logger::instance.cur_level >= LogLevel::trace) {
-            IAsyncDebugTrace::trace = &coroRegister;
-        }
         return me;
     }
 }

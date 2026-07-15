@@ -95,13 +95,24 @@ namespace quarkbot {
 
     template<typename ... Args>
     inline void logOutput(LogLevel level, LogFormatString<Args...> format, Args &&... args ) {
-        char buffer[1024];
         if (Logger::instance.cur_level < level) return;        
+        char buffer[1024];
         auto res = std::format_to_n<char *, typename LoggerTypeType<Args>::type...>(
                     buffer, sizeof(buffer), format,  LoggerTypeType<Args>()(std::forward<Args>(args))...);
         Logger::instance.log_sink(level, &format._loc, {buffer, static_cast<std::size_t>(res.size)});
         
     }
+
+    template<typename ... Args>
+    inline void logOutputLoc(LogLevel level, const std::source_location &loc, LogFormatString<Args...> format, Args &&... args ) {
+        if (Logger::instance.cur_level < level) return;        
+        char buffer[1024];
+        auto res = std::format_to_n<char *, typename LoggerTypeType<Args>::type...>(
+                    buffer, sizeof(buffer), format,  LoggerTypeType<Args>()(std::forward<Args>(args))...);
+        Logger::instance.log_sink(level, &loc, {buffer, static_cast<std::size_t>(res.size)});        
+    }
+
+    
 
     template<typename ... Args>
     inline void logDebug(LogFormatString<Args...> format, Args &&... args ) {
@@ -135,6 +146,7 @@ namespace quarkbot {
             return std::move(s).str();
         };
     }
+    
 
     
 }

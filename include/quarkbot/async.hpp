@@ -2,10 +2,12 @@
 #include "basic_coro/concepts.hpp"
 #include "basic_coro/coro_frame.hpp"
 #include "basic_coro/coroutine.hpp"
-#include "memory.hpp"
+#include "log.hpp"
 #include <coroutine>
 #include <source_location>
 #include "execution_worker.hpp"
+#include "quarkbot/utils/magazine_vmem_pool.hpp"
+#include "quarkbot/utils/string_utils.hpp"
 namespace quarkbot {
 
     template<coro::is_awaiter _Awt>
@@ -104,17 +106,6 @@ namespace quarkbot {
 
     */
 
-    class IAsyncDebugTrace {
-    public:
-
-        virtual void add(std::coroutine_handle<> h, const std::source_location &loc) = 0;
-        virtual void remove(std::coroutine_handle<> h) = 0;
-        virtual void resumed(std::coroutine_handle<> h) = 0;        
-        virtual ~IAsyncDebugTrace() = default;
-        static IAsyncDebugTrace *trace;
-    };
-
-    inline IAsyncDebugTrace * IAsyncDebugTrace::trace = nullptr;
 
 
     template<typename T>
@@ -123,22 +114,60 @@ namespace quarkbot {
 
     class promise_type: public coro::coroutine<T>::promise_type {
         public:            
+            std::source_location coro_location;
+            std::string_view coro_function_name;
+
             void *operator new(std::size_t sz) {return MagazineVMemAllocator::allocate(sz);}
             void operator delete(void *ptr, std::size_t sz) {return MagazineVMemAllocator::deallocate(ptr, sz);}
             
             
             void (*old_resume)(std::coroutine_handle<promise_type>) = nullptr;
 
+            static std::string_view short_name(std::string_view n){
+                auto sz = n.size();
+                int bc = 0;
+                while (true) {
+                    if (n.starts_with("static ")) {
+                       n = trim(n.substr(7));
+                    } else if (n.starts_with("struct ")) {
+                        n = trim(n.substr(7));
+                    } else if (n.starts_with("class ")) {
+                        n = trim(n.substr(6));
+                    } else if (n.starts_with("enum ")) {
+                        n = trim(n.substr(5));
+                    } else break;                
+                }
+                for (auto i = sz-sz; i < sz; ++i) {
+                    char c = n[i];
+                    if (isspace(c) && bc == 0) {
+                        n = n.substr(i);
+                        break;
+                    }
+                    if (c == '<') bc++;
+                    if (c == '>') bc--;                
+                }
+                auto rc = n.find('(');
+                if (rc != n.npos) n = n.substr(0,rc);
+                n = trim(n);
+                return n;
+            }
+        
+
             static void debug_traced_resume(std::coroutine_handle<promise_type> h) {
-                IAsyncDebugTrace::trace->resumed(h);
                 auto &me = h.promise();
+                logOutputLoc(LogLevel::trace, me.coro_location, "Fragment is running: {}",
+                     me.coro_function_name);
                 me.old_resume(h);
             }
 
+
+
             std::suspend_always initial_suspend(std::source_location loc = std::source_location::current())  noexcept {
-                if (IAsyncDebugTrace::trace) {
+                this->coro_location = loc;
+                coro_function_name = short_name(loc.function_name());
+                if (Logger::instance.cur_level >= LogLevel::trace) {
+                    logOutputLoc(LogLevel::trace, loc, "Fragment created: {}", coro_function_name);
                     auto h = std::coroutine_handle<promise_type>::from_promise(*this);
-                    IAsyncDebugTrace::trace->add(h, loc);                
                     auto frame_ptr = reinterpret_cast<void (**)(std::coroutine_handle<promise_type>) >(h.address());
                     old_resume = *frame_ptr;
                     *frame_ptr = &debug_traced_resume;
@@ -147,7 +176,7 @@ namespace quarkbot {
             }        
 
             ~promise_type() {
-                if (IAsyncDebugTrace::trace) IAsyncDebugTrace::trace->remove(std::coroutine_handle<promise_type>::from_promise(*this));
+                logOutputLoc(LogLevel::trace, coro_location, "Fragment finished: {}", coro_function_name);
             }
 
             template<typename _Awt>
