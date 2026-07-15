@@ -1,5 +1,6 @@
 #include "simtradableinstrument.hpp"
 #include "quarkbot/abstract/orderdata.hpp"
+#include "quarkbot/order_defs.hpp"
 #include "simaccount.hpp"
 #include "siminstrument.hpp"        // IWYU pragma: keep - failed to detect by clangd
 #include "quarkbot/storage_srl.hpp" // IWYU pragma: keep - template definitions
@@ -165,6 +166,10 @@ void SimTradableInstrument::on_order_update(POrderAData ord, OrderInternalData::
         const Fill &f = std::get<Fill>(status);
         if (cntr) cntr.on_order_event(Order(ord), f);
         report_fill(f);
+    } else if (std::holds_alternative<OrderOpenStatus>(status)) {
+        ord->forward_update(std::move(status));
+        if (cntr) cntr.on_order_event(Order(ord),OrderInternalData::update2status(status));        
+        return;
     } else {
         if ((std::holds_alternative<OrderStatus>(status) && is_done_status(std::get<OrderStatus>(status)))
             || std::holds_alternative<OrderRejectionReason>(status)

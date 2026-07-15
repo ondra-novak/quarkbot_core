@@ -1,6 +1,7 @@
 #pragma once
 
 #include "quarkbot/memory.hpp"
+#include "quarkbot/utils/lookup.hpp"
 #include "types.hpp"
 #include "round_policy.hpp"
 #include <list>
@@ -171,6 +172,20 @@ enum class OrderStatus : uint8_t {
     lost
 };
 
+template<>
+inline constexpr auto string_lookup<OrderStatus> = make_string_lookup_table<OrderStatus>({
+    {OrderStatus::unknown,"unknown"},
+    {OrderStatus::sent,"sent"},
+    {OrderStatus::pending_trigger,"pending_trigger"},
+    {OrderStatus::open,"open"},
+    {OrderStatus::filled,"filled"},
+    {OrderStatus::canceled,"canceled"},
+    {OrderStatus::rejected,"rejected"},
+    {OrderStatus::replaced,"replaced"},
+    {OrderStatus::restored,"restored"},
+    {OrderStatus::lost,"lost"},
+});
+
 enum class OrderRejectionReason : uint8_t{
     //no reason given
     none,
@@ -221,6 +236,35 @@ enum class OrderRejectionReason : uint8_t{
     //other reason (textural),
     other
 };
+
+template<>
+inline constexpr auto string_lookup<OrderRejectionReason> = make_string_lookup_table<OrderRejectionReason>({
+    {OrderRejectionReason::none,"none"},
+    {OrderRejectionReason::not_tradable,"not_tradable"},
+    {OrderRejectionReason::too_large,"too_large"},
+    {OrderRejectionReason::too_small,"too_small"},
+    {OrderRejectionReason::insufficient_funds,"insufficient_funds"},
+    {OrderRejectionReason::invalid_params,"invalid_params"},
+    {OrderRejectionReason::invalid_replace,"invalid_replace"},
+    {OrderRejectionReason::order_not_found,"order_not_found"},
+    {OrderRejectionReason::price_range,"price_range"},
+    {OrderRejectionReason::post_only_taker,"post_only_taker"},
+    {OrderRejectionReason::min_volume,"min_volume"},
+    {OrderRejectionReason::too_late,"too_late"},
+    {OrderRejectionReason::overloaded,"overloaded"},
+    {OrderRejectionReason::rate_limited,"rate_limited"},
+    {OrderRejectionReason::too_risky,"too_risky"},
+    {OrderRejectionReason::permission_denied,"permission_denied"},
+    {OrderRejectionReason::unsupported,"unsupported"},
+    {OrderRejectionReason::timeout,"timeout"},
+    {OrderRejectionReason::expired,"expired"},
+    {OrderRejectionReason::reduce_doesnt_reduce,"reduce_doesnt_reduce"},
+    {OrderRejectionReason::slippage,"slippage"},
+    {OrderRejectionReason::exchange_issue,"exchange_issue"},
+    {OrderRejectionReason::internal_error,"internal_error"},
+    {OrderRejectionReason::other,"other"}
+});
+
 
 inline constexpr bool is_done_status(OrderStatus status) {
     return status == OrderStatus::filled ||

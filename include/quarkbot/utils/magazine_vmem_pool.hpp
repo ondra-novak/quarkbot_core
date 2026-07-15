@@ -168,7 +168,7 @@ namespace _magazine_vmem_details {
                     //swap with current, it is possible, that there is space in current
                     std::swap(previous, current);
                     //no space at all
-                    if (current->count >= depot->magazine_size) {
+                   if (previous && previous->count >= depot->magazine_size) {
                         //return previous to depot
                         depot->push(previous);
                         //previous is now empty

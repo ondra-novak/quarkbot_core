@@ -43,8 +43,6 @@ public:
         return _ptr->get_name();
     }
 
-protected:
-    std::shared_ptr<IExchange> _ptr;
 };
 
 inline Exchange MarketInstrument::get_exchange() const {
