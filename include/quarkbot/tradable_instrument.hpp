@@ -5,7 +5,6 @@
 #include "hash/class_hash.hpp"
 #include "account.hpp"
 #include "order.hpp"
-#include "quarkbot/abstract/default_shared.hpp"
 #include <concepts>
 #include <cstddef>
 
@@ -19,11 +18,11 @@ concept TradableInstrumentStream = requires {
 
 class Exchange;
 
-class TradableInstrument{
+class TradableInstrument: public Wrapper<ITradableInstrument> {
 public:
-    TradableInstrument():_state(default_shared(null_tradable_instrument)) {}    
-    TradableInstrument(std::shared_ptr<ITradableInstrument> state):_state(std::move(state)){}
 
+
+    using Wrapper<ITradableInstrument>::Wrapper;
     ///Place order on this instrument
     /**
     @param params order parameters
@@ -32,7 +31,7 @@ public:
      */   
     template<std::derived_from<OrderRequest> _Req = OrderRequest>
     Order place_order(const _Req &params){return Order(
-        _state->place_order(params, {},  class_hash<_Req>));
+        _ptr->place_order(params, {},  class_hash<_Req>));
     }
 
     ///Replace order on this instrument
@@ -44,7 +43,7 @@ public:
      */     
     template<std::derived_from<OrderRequest> _Req = OrderRequest>
     Order place_order(const _Req &params, Order order_to_replace) {
-        return _state->place_order(params, order_to_replace.get_handle(),class_hash<_Req>);
+        return _ptr->place_order(params, order_to_replace.get_handle(),class_hash<_Req>);
     }
     ///Attach storage to this instrument and restore opened orders from storage
     /**
@@ -59,11 +58,11 @@ public:
     If the order is not found onf the exachnge, it receives status "lost".    
     */
     std::vector<Order> attach_storage(PStorage storage, std::string key_name) {
-        return _state->attach_storage(std::move(storage), std::move(key_name));
+        return _ptr->attach_storage(std::move(storage), std::move(key_name));
     }
     ///Cancel alll orders on this instrument
     bool cancel_all_orders() {
-        return _state->cancel_all_orders();
+        return _ptr->cancel_all_orders();
     }
 
     ///Get current position on this instrument
@@ -72,26 +71,26 @@ public:
     This function performs a request to the exchange which can take some time, this is the reason why the function is asynchronous.
     If position is not available, async operation is marked canceled.
      */
-    awaitable<Position> get_position() const {return _state->get_position();}
+    awaitable<Position> get_position() const {return _ptr->get_position();}
 
     ///Get account associated with this instrument
-    Account get_account() const{return _state->get_account();   }
+    Account get_account() const{return _ptr->get_account();   }
 
     ///Get information about this instrument
     const IMarketInstrument::Info &get_info() const {
-        return _state->get_instrument()->get_info();
+        return _ptr->get_instrument()->get_info();
     }
     ///get exchange associated with this instrument
     Exchange get_exchange() const;
 
     ///Convert to market instrument
     operator MarketInstrument() const {
-        return MarketInstrument(_state->get_instrument());
+        return MarketInstrument(_ptr->get_instrument());
     }
 
     ///Convert to market instrument
     MarketInstrument as_market_instrument() const {
-        return MarketInstrument(_state->get_instrument());
+        return MarketInstrument(_ptr->get_instrument());
     }
 
 
@@ -104,10 +103,9 @@ public:
     to provide custom conversion logic.
     */
     OrderParameters convert_request_to_params(const OrderRequest &req, Side cur_position_side) {
-        return _state->convert_request_to_params(req, cur_position_side);
+        return _ptr->convert_request_to_params(req, cur_position_side);
     }
 
-    bool operator==(const TradableInstrument &) const = default;
    
 
     ///Subscribe to stream of events related to this instrument
@@ -119,25 +117,15 @@ public:
     template<TradableInstrumentStream T>
     requires(StreamWithoutParam<T> || StreamWithConstantParam<T>)
     EventStream<T> subscribe() {
-        return _state->subscribe<T>();
+        return _ptr->subscribe<T>();
     }
 
     template<TradableInstrumentStream T>
     requires(StreamWithParam<T>)
     EventStream<T> subscribe(typename T::Params params) {
-        return _state->subscribe<T>(params);
+        return _ptr->subscribe<T>(params);
     }
 
-    ///Get handle to internal state.
-    /**
-    You can use this handle to call functions of ITradableInstrument interface, but be careful with it,
-     because it can cause undefined behavior if used after the instrument is destroyed.
-     */
-
-    auto get_handle() const {return _state;}
-
-protected:
-    std::shared_ptr<ITradableInstrument> _state;
 };
 
 
@@ -148,7 +136,7 @@ inline TradableInstrument Order::get_instrument() const{
 
 
 inline TradableInstrument MarketInstrument::create_tradable_instrument(const Account &acc) const{
-    return _state->create_tradable_instrument(acc.get_handle());
+    return _ptr->create_tradable_instrument(acc.get_handle());
 }
 
 ///implementation of get_turnover for order

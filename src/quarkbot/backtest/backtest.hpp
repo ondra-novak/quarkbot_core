@@ -150,7 +150,7 @@ public:
     void join() {
         auto pending = _strategy_group.join().launch();
         while (!pending.await_ready()) {
-            _worker.join();
+            _worker.quiesce();
         }
         coro::sync_await(pending);
     }

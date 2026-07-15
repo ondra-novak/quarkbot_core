@@ -92,7 +92,7 @@ bool BacktestExecutor::cancel(coro::cancel_signal *cancel_signal) {
     }
 }
 
-bool BacktestExecutor::join() {
+bool BacktestExecutor::quiesce() {
     if (_dispatch_queue.empty()) return false;
     flush_queue();
     return true;

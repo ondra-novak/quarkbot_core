@@ -45,6 +45,6 @@ public:
     virtual std::shared_ptr<IEventStreamBase> subscribe_stream(std::size_t , const void *) {return nullptr;}
 };
 
-constexpr auto null_market_instrument = IMarketInstrument::Null{};
+
 
 }

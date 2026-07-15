@@ -133,7 +133,7 @@ namespace quarkbot {
                 //lock back
                 lk.lock();
                 _in_task = false;
-                _counter.fetch_add(1, std::memory_order_relaxed);
+                _counter.fetch_add(1, std::memory_order_release);
                 _counter.notify_all();
                 continue;
             } 
@@ -150,7 +150,7 @@ namespace quarkbot {
         
     }
 
-    bool ThreadExecutor::join() {
+    bool ThreadExecutor::quiesce() {
         if (std::this_thread::get_id() == _thr.get_id()) {
             std::unique_lock lk(_mx);
             std::size_t sz =   _dispatch_queue.size();
@@ -171,12 +171,12 @@ namespace quarkbot {
                 std::scoped_lock _(_mx);        
                 std::size_t sz =  _in_task?1:0 + _dispatch_queue.size();
                 if (sz == 0) return false;
-                join_counter = _counter.load(std::memory_order_relaxed) + sz;
+                join_counter = _counter.load(std::memory_order_acquire) + sz;
             }
-            auto c = _counter.load(std::memory_order_relaxed);        
+            auto c = _counter.load(std::memory_order_acquire);        
             while (c < join_counter) {
                 _counter.wait(c);
-                c = _counter.load(std::memory_order_relaxed);
+                c = _counter.load(std::memory_order_acquire);
             }
             return true;
         }

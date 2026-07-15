@@ -24,7 +24,7 @@ public:
 
     unsigned int stop_join_and_get_counter() {
         _timer.cancel();
-        _exit_notify.join();    //wait until task is done
+        _exit_notify.wait();
         return _counter;
     }
 

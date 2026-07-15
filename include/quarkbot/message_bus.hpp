@@ -2,17 +2,17 @@
 
 #include "abstract/imessage_bus.hpp"
 #include "event_stream.hpp"
-#include "quarkbot/abstract/default_shared.hpp"
+#include "utils/wrapper.hpp"
 #include <chrono>
 #include <cstddef>
 namespace quarkbot {
 
 
     ///Class which handles sending and receiving messages from and into the strategy
-    class MessageBus {
+    class MessageBus: public Wrapper<IMessageBus> {
     public:
-        MessageBus():_shared(default_shared(null_messagebus)) {}
-        MessageBus(std::shared_ptr<IMessageBus> shared):  _shared(std::move(shared)){}
+        
+        using Wrapper<IMessageBus>::Wrapper;
 
         ///Subscribe stream
         /**

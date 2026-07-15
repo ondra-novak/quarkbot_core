@@ -24,8 +24,14 @@ public:
         }
         
     }
+
+
+    explicit operator bool() const {
+        return counter.load(std::memory_order_relaxed) == 0;
+    }
+
     ///wait until all scopes are exited
-    void join() {
+    void wait() {
         auto n = counter.load(std::memory_order_relaxed);
         while (n) {
             counter.wait(n);
