@@ -131,7 +131,7 @@ public:
 
 
 inline TradableInstrument Order::get_instrument() const{
-    return TradableInstrument(_order_data->get_instrument());
+    return TradableInstrument(_ptr->get_instrument());
 }
 
 

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "quarkbot/abstract/orderdata.hpp"
+#include "quarkbot/order.hpp"
+#include "quarkbot/order_defs.hpp"
 #include "quarkbot/stream/auction.hpp"
 #include "quarkbot/stream/quote.hpp"
 #include "quarkbot/stream/trade.hpp"
@@ -41,7 +42,7 @@ using BacktestDataSource = std::move_only_function<bool(BacktestEvent &ev)>;
 using WalletInitItem = std::pair<std::string, Decimal>;
 
 ///Report sink is a function that is called for each order update, it can be used to generate reports
-using ReportSink = std::function<void(const POrderAData &, const OrderInternalData::Update &)>;
+using ReportSink = std::function<void(const Order &, const OrderStatusUpdate &)>;
 
 
 } // namespace quarkbot

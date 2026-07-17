@@ -3,6 +3,8 @@
 #include "quarkbot/backtest/siminstrument.hpp"
 #include "quarkbot/backtest/simtradableinstrument.hpp"
 #include "../quarkbot/backtest/simexec_report_csv.hpp"
+#include "quarkbot/common/orderdata.hpp"
+#include "quarkbot/order_defs.hpp"
 #include <chrono>
 #include <memory>
 
@@ -31,16 +33,22 @@ void test_report() {
     std::shared_ptr<SimInstrument> instr = std::make_shared<SimInstrument>(nfo, nullptr);
     std::shared_ptr<SimTradableInstrument> tinstr = std::make_shared<SimTradableInstrument>(instr, std::shared_ptr<SimAccount>{});
 
-    auto ord = OrderInternalData::create({"ord1",
-        Side::buy,OrderType::limit,123,456
-    }, std::static_pointer_cast<ITradableInstrument>(tinstr), {}, tp,
-     {});
+    auto cancelcb = [](auto){};
+    using CancelCB = decltype(cancelcb);
+    using OrderData = OrderWithCancelCallback<CancelCB>;
 
-    auto ord2 = OrderInternalData::create({"ord2",
+    auto pord = std::make_shared<OrderData>(OrderParameters{"ord1",
+        Side::buy,OrderType::limit,123,456
+    }, std::static_pointer_cast<ITradableInstrument>(tinstr), POrder{}, tp,nullptr, cancelcb);
+
+    auto pord2 = std::make_shared<OrderData>(OrderParameters{"ord2",
         Side::sell,OrderType::stoplimit,111,687,689
-    }, std::static_pointer_cast<ITradableInstrument>(tinstr), ord, tp,
-     {});
+    }, std::static_pointer_cast<ITradableInstrument>(tinstr), pord, tp, nullptr, cancelcb);
      
+    auto ord = Order(pord);
+    auto ord2 = Order(pord2);
+
+
     auto exec = BacktestExecutor::create();
     exec->set_time(tp);
 
@@ -50,14 +58,14 @@ void test_report() {
     auto opst2 = OrderOpenStatus{"2578",{}};
 
     rep(ord, opst);
-    ord->forward_update(opst);
-    rep(ord, Fill{{},"3432",ord->get_parameters().label,tp,nfo,Side::buy, {},12,456,0,0});
+    pord->forward_update(opst);
+    rep(ord, Fill{{},"3432",pord->get_parameters().label,tp,nfo,Side::buy, {},12,456,0,0});
     rep(ord, OrderStatus::filled);
     rep(ord, OrderStatus::canceled);
     rep(ord, OrderRejectionReason::expired);
     rep(ord, OrderRejectionWithText{OrderRejectionReason::other,"Some error message"});
     rep(ord2, opst2);
-    ord2->forward_update(opst2);
+    pord2->forward_update(opst2);
     rep(ord2, OrderStatus::replaced);
     rep(ord2, OrderRejectionReason::insufficient_funds);
     

@@ -21,6 +21,7 @@ class IStorage;
 class IScheduler;
 class IExecutionWorker;
 class IMessageBus;
+class IOrder;
 
 
 
@@ -32,6 +33,7 @@ using PStorage = std::shared_ptr<IStorage>;
 using PExecutionWorker = std::shared_ptr<IExecutionWorker>;
 using coroutine = coro::coroutine<void>;
 using PMessageBus = std::shared_ptr<IMessageBus>;
+using POrder = std::shared_ptr<IOrder>;
 
 
 template<typename _Hub, typename _Val>
@@ -42,7 +44,7 @@ concept HubProducer = requires(_Hub hub, _Val val) {
 
 template<typename _Hub, typename _Val>
 concept HubReceiver = requires(_Hub hub, _Val &val) {
-    {hub.receiver(val)} -> coro::is_awaitable;    
+    {hub.receive(val)} -> coro::is_awaitable;    
 };
 
 

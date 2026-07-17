@@ -1,5 +1,5 @@
 #include "simexecutor.hpp"
-#include <quarkbot/abstract/orderdata.hpp>
+#include "../common/orderdata.hpp"
 #include <quarkbot/execution_worker.hpp>
 #include <quarkbot/order_defs.hpp>
 #include <quarkbot/stream/auction.hpp>
@@ -9,6 +9,7 @@
 #include <quarkbot/tradable_instrument.hpp>
 #include <quarkbot/decimal.hpp>
 #include <quarkbot/utils/random_string.hpp>
+#include "../common/orderdata.hpp"
 #include "quarkbot/market_instrument.hpp"
 #include "simexchange.hpp"
 #include "siminstrument.hpp"    
@@ -22,13 +23,13 @@
 
 namespace quarkbot {
 
-    SimExecutor::PSimInstrument SimExecutor::extract_instrument(const POrderAData &ord) {
+    SimExecutor::PSimInstrument SimExecutor::extract_instrument(const POrder &ord) {
         TradableInstrument instr( ord->get_instrument());
         MarketInstrument minstr = instr;
         return std::dynamic_pointer_cast<SimInstrument>(minstr.get_handle());        
     }
 
-    void SimExecutor::place_order_internal(POrderAData ord) {
+    void SimExecutor::place_order_internal(POrder ord) {
 
 
         auto instrument = extract_instrument(ord);
@@ -37,7 +38,13 @@ namespace quarkbot {
             return;
         }
 
-        Decimal filled = ord->get_filled();
+        POrderData ordd = std::dynamic_pointer_cast<OrderInternalData>(ord);
+        if (!ordd) {
+            set_order_status(ord,  OrderRejectionReason::unsupported);
+            return ;
+        }
+
+        Decimal filled = ordd->get_filled();
         auto tif = ord->get_parameters().time_in_force;
         ActiveOrder aord{
             std::move(ord),std::move( instrument), filled, tif
@@ -51,7 +58,7 @@ namespace quarkbot {
         _active_orders.push_back(std::move(aord));
 
     }
-    void SimExecutor::place_order_internal(POrderAData ord, POrderAData prev_order) {
+    void SimExecutor::place_order_internal(POrder ord, POrder prev_order) {
 
 
         auto instrument = extract_instrument(ord);
@@ -88,7 +95,7 @@ namespace quarkbot {
         }
 
     }
-    void SimExecutor::cancel_order_internal(OrderInternalData *ord) {
+    void SimExecutor::cancel_order_internal(IOrder *ord) {
         auto found = std::find_if(_active_orders.begin(), _active_orders.end(), [&](const ActiveOrder &a){
             return a.ord.get() == ord;
         });
@@ -99,7 +106,7 @@ namespace quarkbot {
     }
 
     bool SimExecutor::validate_order(ActiveOrder &order) {
-        const POrderAData &ord = order.ord;
+        const POrder &ord = order.ord;
         const OrderParametersGen<Decimal> &params = ord->get_parameters();
 
         if (params.quantity <= 0 && params.type != OrderType::alert) {
@@ -447,13 +454,13 @@ bool SimExecutor::cancel_all(PTradableInstrument instrument) {
     return r;
 }
 
-void SimExecutor::set_order_status(const POrderAData &ord, OrderInternalData::Update &&st) {
+void SimExecutor::set_order_status(const POrder &ord, OrderInternalData::Update &&st) {
     auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());    
     if (_report_sink) _report_sink(ord, st);
     simt.on_order_update(ord, std::move(st));
 }
 
-void  SimExecutor::accept_order(const POrderAData &ord) {
+void  SimExecutor::accept_order(const POrder &ord) {
     std::string id = generate_random_string(_rnd_gen);
     std::hash<std::string> hasher;
     RecordKey rk({
@@ -463,21 +470,21 @@ void  SimExecutor::accept_order(const POrderAData &ord) {
     set_order_status(ord, OrderOpenStatus{id, rk});
 }
 
-StrategyFragment SimExecutor::place_order(POrderAData ord) {
+StrategyFragment SimExecutor::place_order(POrder ord) {
     if (co_await _timer.sleep_for(latency)){
         place_order_internal(std::move(ord));
     }
 }
-StrategyFragment SimExecutor::replace_order(POrderAData ord, POrderAData prev_order) {
+StrategyFragment SimExecutor::replace_order(POrder ord, POrder prev_order) {
     if (co_await _timer.sleep_for(latency)){
         place_order_internal(std::move(ord), std::move(prev_order));
     }
     
 }
-StrategyFragment SimExecutor::cancel_order(POrderAData ord) {
+StrategyFragment SimExecutor::cancel_order(POrder ord) {
     return cancel_order(ord.get());
 }
-StrategyFragment SimExecutor::cancel_order(OrderInternalData *ord) {
+StrategyFragment SimExecutor::cancel_order(IOrder *ord) {
     if (co_await _timer.sleep_for(latency)){
         cancel_order_internal(ord);
     }

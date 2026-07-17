@@ -16,14 +16,18 @@ namespace quarkbot {
         static StrategyFragment monitor_order(std::shared_ptr<TrigOrder> order, std::function<Order()> place_request);
 
         EventStream<Trade> *ev = nullptr;
-        std::shared_ptr<OrderInternalData> placed_order = {};
+        POrder placed_order = {};
 
         bool cancel_for_replace();
         bool replaced = false;        
         bool set_event(EventStream<Trade> *ev);
-        bool set_new_order(std::shared_ptr<OrderInternalData> new_order);
+        bool set_new_order(POrder new_order);
         bool was_replaced() const;
         auto set_report(OrderReport &rpt);
+        virtual void cancel() override {
+            cancel_for_replace();
+        }
+        ~TrigOrder();
     };
 
     void TrigOrder::cancel_request() {
@@ -54,7 +58,7 @@ namespace quarkbot {
         return replaced;
     }
     
-    bool TrigOrder::set_new_order(std::shared_ptr<OrderInternalData> new_order) {
+    bool TrigOrder::set_new_order(POrder new_order) {
         std::scoped_lock _(mx);
         ev = nullptr;
         if (canceled.exchange(true)) return false;
@@ -71,32 +75,27 @@ namespace quarkbot {
     }
 
 
-    std::shared_ptr<OrderInternalData> OrderTrigger::place_order(PTradableInstrument instrument, 
+    POrder OrderTrigger::place_order(PTradableInstrument instrument, 
                     const OrderParameters &trig_params, //params reported by order while trigger phase
-                    std::shared_ptr<OrderInternalData> order_to_replace, 
+                    POrder order_to_replace, 
                     std::function<Order()> place_request) {
         
-        auto nword = std::make_shared<TrigOrder>(trig_params,instrument,order_to_replace, _worker.now(),                 
-                std::shared_ptr<OrderStorage>{});
-        nword->set_cancel_fn([](OrderInternalData *me){
-            static_cast<TrigOrder *>(me)->cancel_request();
-        });
+        auto nword = std::make_shared<TrigOrder>(trig_params,instrument,order_to_replace, _worker.now(),   nullptr);              
         
         _worker.run(TrigOrder::monitor_order(nword, place_request));
         return nword;
     }
 
-    std::shared_ptr<OrderInternalData> OrderTrigger::place_order(PTradableInstrument instrument, 
+    POrder OrderTrigger::place_order(PTradableInstrument instrument, 
                 const OrderParameters &trig_params, //params reported by order while trigger phase                    
-                std::shared_ptr<OrderInternalData> order_to_replace) {
+                POrder order_to_replace) {
         if (trig_params.type == OrderType::alert) {
             return place_order(instrument, trig_params, order_to_replace, {});
         } else {
             OrderRequest req;
             bool b = convert_params_to_request(trig_params, req);
             if (!b) {
-                auto out =  OrderInternalData::create(trig_params, instrument,  
-                    order_to_replace, _worker.now(), {});
+                auto out =  std::make_shared<TrigOrder>(trig_params, instrument,  order_to_replace, _worker.now(), nullptr);
                 out->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "Not supported by local trigger"});
                 return out;
             } else {

@@ -1,9 +1,14 @@
 #pragma once
 
+#include "../common/orderdata.hpp"
+#include "quarkbot/abstract/backtest_data_source.hpp"
+#include "quarkbot/abstract/imarket_instrument.hpp"
+#include "quarkbot/abstract/itradable_instrument.hpp"
 #include "quarkbot/order_defs.hpp"
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <variant>
 namespace quarkbot {
@@ -99,12 +104,13 @@ auto open_report(LineOutput line_output, ExecutionWorker worker = ExecutionWorke
     worker.required();
     line_output("time,event,q,instrument,order,name,side,quantity,type,limit-price,stop-price,fill-price,fill-quantity,note");
     return [worker, line_output = std::move(line_output), buffer = std::string()]
-                            (const POrderAData &order, const OrderInternalData::Update &update) mutable{        
+                            (const Order &raw_order, const OrderStatusUpdate &update) mutable{        
+        POrderData order = std::dynamic_pointer_cast<OrderInternalData>(raw_order.get_handle());
         const auto &params =order->get_parameters();
         auto iter = std::back_inserter(buffer);
         bool is_open = std::holds_alternative<OrderOpenStatus>(update);
         bool is_fill = std::holds_alternative<Fill>(update);
-        OrderStatus act_status = OrderInternalData::update2status(update);
+        OrderStatus act_status = update2status(update);        
         
         std::format_to(iter, "{:%Y-%m-%d %H:%M:%S},{},{},{}", 
             worker.now(), 
@@ -143,9 +149,12 @@ auto open_report(LineOutput line_output, ExecutionWorker worker = ExecutionWorke
         } else if (std::holds_alternative<OrderRejectionWithText>(update)) {
             std::format_to(iter, ",{} ({})",to_string(std::get<OrderRejectionWithText>(update).reason), std::get<OrderRejectionWithText>(update).text);
         } else if (is_open) {
-            auto rep = order->get_replaced_order().lock();
-            if (rep) {
-                std::format_to(iter, ",Replace: {}", rep->get_id());
+            auto raw_rep = order->get_replaced_order().lock();
+            if (raw_rep) {
+                auto rep = std::dynamic_pointer_cast<OrderInternalData>(raw_rep);
+                if (rep) {
+                    std::format_to(iter, ",Replace: {}", rep->get_id());
+                }
             }
         }
         
@@ -156,14 +165,14 @@ auto open_report(LineOutput line_output, ExecutionWorker worker = ExecutionWorke
 
 }
 
-inline std::function<void(const POrderAData &, const OrderInternalData::Update &)> open_report(const std::filesystem::path &output, ExecutionWorker worker = ExecutionWorker::current()) {
+inline ReportSink open_report(const std::filesystem::path &output, ExecutionWorker worker = ExecutionWorker::current()) {
     auto f = std::make_shared<std::ofstream>(output, std::ios::out|std::ios::trunc);
     if (!(*f)) throw std::runtime_error(std::format("Failed to open {}", output.string()));
     return open_report([f](std::string_view line) mutable{
         (*f) << line << "\n";
     }, std::move(worker));
 }
-inline std::function<void(const POrderAData &, const OrderInternalData::Update &)> open_report(std::ostream &output, ExecutionWorker worker = ExecutionWorker::current()) {
+inline ReportSink open_report(std::ostream &output, ExecutionWorker worker = ExecutionWorker::current()) {
     return open_report([&output](std::string_view line) mutable{
         output << line << "\n";
     }, std::move(worker));

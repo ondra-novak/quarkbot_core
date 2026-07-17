@@ -1,12 +1,15 @@
 #pragma once
 
 #include "abstract/ieventstream.hpp"
+#include "basic_coro/awaitable.hpp"
+#include "basic_coro/concepts.hpp"
 #include "utils/wrapper.hpp"
 #include "strategy_fragment.hpp"
 #include <concepts>
 #include <format>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 #include <typeinfo>
 namespace quarkbot {
 
@@ -88,11 +91,46 @@ public:
 
     auto get_handle() const {return this->_ptr;}
 
-    template<typename _Hub, std::derived_from<T> _ItemWithContext>
-    friend StrategyFragment feed_to(EventStream<T> stream, _Hub hub, _ItemWithContext context) {
-        while (co_await stream.receive(context) && co_await hub.send(context));
-    }
+    ///Feed events to a hub
+    /**
+        @param hub target hub
+        @param context contains T or a struct derived from T
+        @return StrategyFragment of running coroutine
+    */
+    template<typename _Hub, std::derived_from<T> _ItemWithContext = T>
+    StrategyFragment feed_to( _Hub hub, const _ItemWithContext &context = _ItemWithContext{}) {
+        EventStream<T> me(*this);
+        auto coro = [](EventStream<T> stream, _Hub hub, _ItemWithContext context) -> StrategyFragment {
+            while (co_await stream.receive(context) && co_await hub.send(context));
+        };
+        return coro(me, std::move(hub), context);
+    };
 
+    ///Feed events to a callback
+    /**
+        @param cb a callback function which receives events. The callback function must return bool or any awaitable of bool (Async<bool>).
+        The callback can suspend self causing to suspend whole cycle. The callback returns false if it needs to stop receiving events
+
+        
+
+     */
+    template<std::invocable<T &> _CB>
+    StrategyFragment feed_to(_CB &&cb) {
+        EventStream<T> me(*this);
+        using Res = std::invoke_result_t<_CB, T &>;
+        static_assert((coro::is_awaiter<Res> && std::is_convertible_v<coro::awaiter_result<Res>, bool>) || std::is_convertible_v<Res, bool>,
+            "Callback must return bool, or awaitable<bool>");
+
+        auto coro = [](EventStream<T> stream, _CB cb) -> StrategyFragment {
+            T v;
+            if constexpr(coro::is_awaiter<Res>) {
+                while (co_await stream.receive(v) && co_await cb(v));    
+            } else {
+                while (co_await stream.receive(v) && cb(v));
+            }
+        };
+        return coro(me, std::forward<_CB>(cb));
+    }
 
 
 };

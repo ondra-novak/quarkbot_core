@@ -3,6 +3,7 @@
 #include "awaitable_stop.hpp"
 #include "config.hpp"
 #include "quarkbot/message_bus.hpp"
+#include "quarkbot/storage.hpp"
 #include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
 #include "defs.hpp"

@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include "quarkbot/abstract/orderdata.hpp"
+#include "../common/orderdata.hpp"
 #include "quarkbot/defs.hpp"
 #include "quarkbot/event_stream.hpp"
 #include "quarkbot/market_instrument.hpp"
@@ -53,7 +53,6 @@ public:
     UnderlyingCurrency create_currency(std::string_view name, bool is_unified = true);
     UnderlyingCurrency create_currency(std::string_view name) const;
     
-    using ReportSink = SimExecutor::ReportSink;
 
     void set_slippage(double slippage) { _executor.set_slippage(slippage); }
     void set_latency(std::chrono::system_clock::duration dur) {_executor.set_latency(dur);}
@@ -67,9 +66,9 @@ public:
     void on_event(const std::string &instrument, Auction au);
 
     bool cancel_all_orders(PTradableInstrument instrument );
-    void cancel_order(POrderAData ord);
-    void cancel_order(OrderInternalData *ord);
-    void place_order(POrderAData ord);
+    void cancel_order(POrder ord);
+    void cancel_order(IOrder *ord);
+    void place_order(POrder ord);
 
 
 protected:

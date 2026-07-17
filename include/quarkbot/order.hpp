@@ -1,17 +1,19 @@
 #pragma once
 
+#include "basic_coro/concepts.hpp"
 #include "basic_coro/prepared_coro.hpp"
-#include "abstract/orderdata.hpp"
 #include "defs.hpp"
 #include "execution_worker.hpp"
 #include "order_defs.hpp"
+#include "abstract/iorder.hpp"
+#include "utils/wrapper.hpp"
 #include "strategy_fragment.hpp"
-#include "abstract/orderdata.hpp"
 #include <cassert>
 #include <chrono>
 #include <exception>
 #include <optional>
 #include <stdexcept>
+#include <type_traits>
 
 
 
@@ -22,29 +24,14 @@ class Order;
 struct OrderEvent;
 
 
-class Order {
+class Order : public Wrapper<IOrder> {
 public:
 
-    Order()=default;
-    Order(POrderAData data):_order_data(std::move(data)) {}
-
-    ///return true, if order is valid
-    /**
-        return true order instance contains a valid order
-        return false order instance was not initialized
-     */
-    explicit operator bool() const {return static_cast<bool>(_order_data);}
-
-    ///return true, if order instance is valid, i.e. contains and order information
-    /**
-        return true order instance contains a valid order
-        return false order instance was not initialized
-     */
-    bool valid() const {return static_cast<bool>(_order_data); }
+    using Wrapper<IOrder>::Wrapper;
 
 
 
-    ///Receive order report
+     ///Receive order report
     /**
       Function is awaitable. The first it attempt to receive report in non-blocking mode. If no report is
       available yet, it can be co_await(ed) to wait for next report
@@ -59,26 +46,24 @@ public:
       @exception await_canceled_exception - operation was canceled because there is already pending await
      */
     awaitable<bool> receive(OrderReport &report) {
-        //invalid order instance - false
-        if (!_order_data) return false;
-
-        auto st = _order_data->receive_report(report);
+  
+        auto st = _ptr->receive_report(report);
         switch (st) {
-            case OrderReceiveReportStatus::already_pending: throw already_pending_exception();
-            case OrderReceiveReportStatus::done: return false;
-            case OrderReceiveReportStatus::updates: return true;
+            case IOrder::RcvStatus::already_pending: throw already_pending_exception();
+            case IOrder::RcvStatus::done: return false;
+            case IOrder::RcvStatus::updates: return true;
             default:break;
         };
         //register itself
         return [this, &report](awaitable<bool>::result promise) -> coro::prepared_coro {
             //perform registration
-            auto st = _order_data->receive_report(report, promise);
+            auto st = _ptr->receive_report(report, promise);
             switch (st) {
                 default:
-                case OrderReceiveReportStatus::already_pending: return promise(std::make_exception_ptr(already_pending_exception()));
-                case OrderReceiveReportStatus::updates: return promise(true);
-                case OrderReceiveReportStatus::done: return promise(false);
-                case OrderReceiveReportStatus::awaiting: return {};
+                case IOrder::RcvStatus::already_pending: return promise(std::make_exception_ptr(already_pending_exception()));
+                case IOrder::RcvStatus::updates: return promise(true);
+                case IOrder::RcvStatus::done: return promise(false);
+                case IOrder::RcvStatus::awaiting: return {};
             }
         };
     }
@@ -96,18 +81,11 @@ public:
 
     ///get order parameters
     const OrderParameters &get_parameters() const {
-        return force_valid().get_parameters();
+        return _ptr->get_parameters();
     }
     ///get instrument
     TradableInstrument get_instrument() const;
 
-    ///get order id
-    /**
-        Because id is not part of report, it can be filled anytime regardless on whether report has been received
-    */
-    const std::string &get_id() const {
-        return force_valid().get_id_unsafe();
-    }
 
     ///retrieve order instance which has been replaced
     /**
@@ -118,42 +96,47 @@ public:
     */
     std::optional<Order> get_replaced_order() const {
         std::optional<Order> out;
-        auto lk = force_valid().get_replaced_order().lock();
+        auto lk = _ptr->get_replaced_order().lock();
         if (lk) out.emplace(lk);
         return out;
     }
 
     std::chrono::system_clock::time_point get_creation_time() const {
-        return force_valid().get_create_time();
+        return _ptr->get_creation_time();
     }
     void cancel() {
-        if (_order_data) _order_data->cancel();
+        _ptr->cancel();
     }
 
-    
-    bool operator==(const Order &) const = default;
-    
-    ///create hash (for unordered map)
-    std::uint64_t get_hash() const {
-        force_valid();
-        std::hash<POrderAData> hasher;
-        return hasher(_order_data);
+    ///Feed reports to callback
+    /**
+        @param cb callback. The function receives OrderReport &. The callback must return true to continue receiving, or false to
+        stop receiving. When order is done, the callback is called once with final status and then callback is destroyed
+
+        @return StrategyFragment allows to schedule execution of the coroutine
+
+    */
+
+    template<std::invocable<OrderReport &> _CB>
+    StrategyFragment feed_to(_CB &&cb) {
+        using _Res = std::invoke_result_t<_CB, OrderReport &>;
+        static_assert(std::is_convertible_v<_Res, bool> || (coro::is_awaiter<_Res> && std::is_convertible_v<coro::awaiter_result<_Res>, bool>),
+            "Callback must return bool or awaitable<bool> compatible");
+        Order me(*this);
+        auto coro = [](Order order, _CB cb) {
+            OrderReport rpt;
+            if (coro::is_awaiter<_Res>) {
+                while (co_await order.receive(rpt) && bool(co_await cb(rpt)));
+            } else {
+                while (co_await order.receive(rpt) && bool(cb(rpt)));
+            }
+        };
+        return coro(me, std::forward<_CB>(cb));
     }
-
-
-    ///Access internal state - reserved for adapters, the strategy should not use it
-    auto get_handle() const {return _order_data;}
 
 
 
 protected:
-    POrderAData _order_data;
-
-    ///Throws exeception if order is not valud
-    const OrderInternalData &force_valid() const {
-        if (!valid()) [[unlikely]] throw std::runtime_error("Working with order without a value [!valid()]");
-        return *_order_data;
-    }
 
     static std::runtime_error already_pending_exception() {
         return std::runtime_error("Order is already awaited for next event. You cannot await the same order simultaneously from multiple coroutines");
@@ -169,12 +152,10 @@ struct OrderEvent : OrderReport{
 
 template<HubProducer<OrderEvent> _Hub>
 bool Order::receive_at(_Hub hub) {
-    //ensure that order is valid
-    force_valid();
     //allocate for report locally
     OrderEvent rpt;
     //initialize report
-    rpt.order = Order(_order_data);
+    rpt.order = Order(*this);
 
     //attempt to receive report non-blocking way - if done, then this don't need awaiting
     awaitable<bool> awt = receive(rpt);
@@ -204,11 +185,12 @@ bool Order::receive_at(_Hub hub) {
             co_await hub.send(std::move(ev));
         };
         //start coroutine, pass order and hub
-        ExecutionWorker::current().required().run(coro(Order(_order_data), std::move(hub)));
+        ExecutionWorker::current().required().run(coro(Order(*this), std::move(hub)));
         //report ok waiting
         return true;
     }
 }
+
 
 
 }

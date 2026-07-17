@@ -1,15 +1,9 @@
 #pragma once
 
-#include "../defs.hpp"
-#include "../order_defs.hpp"
-#include "../order_storage.hpp"
-#include "../types.hpp"
-#include "basic_coro/prepared_coro.hpp"
-#include <atomic>
-#include <memory>
-#include <mutex>
-#include <type_traits>
-#include <variant>
+#include "quarkbot/abstract/iorder.hpp"
+#include "quarkbot/defs.hpp"
+#include "quarkbot/order_defs.hpp"
+#include "quarkbot/order_storage.hpp"
 namespace quarkbot {
 
 
@@ -18,18 +12,8 @@ namespace quarkbot {
 
     class OrderInternalData;
     class ITradableInstrument;
-    using POrderAData = std::shared_ptr<OrderInternalData>;
     using POrderData = std::shared_ptr<OrderInternalData>;
     using OrderData = OrderInternalData;
-
-    enum class OrderReceiveReportStatus {
-        awaiting,
-        done,
-        updates,
-        already_pending,
-        need_await
-
-    };
 
     constexpr OrderStatus rejection_reason_2_status(OrderRejectionReason rej) {    
         return (rej == OrderRejectionReason::expired || rej == OrderRejectionReason::post_only_taker)
@@ -37,37 +21,17 @@ namespace quarkbot {
     }
 
 
-    class OrderInternalData {
+    class OrderInternalData: public IOrder {
     public:
         //update definition
 
-        using Update = std::variant<Fill, OrderStatus, OrderRejectionReason, OrderRejectionWithText,  OrderOpenStatus>;
-        using CancelFn = std::function<void(OrderInternalData *)>;
-
+        using Update = OrderStatusUpdate;
         
-
-        static OrderStatus update2status(const Update &up) {
-            return std::visit([]<typename T>(const T &x){
-                if constexpr(std::is_same_v<T, OrderStatus>) {
-                    return x;
-                } else if constexpr(std::is_same_v<T, OrderRejectionReason>) {
-                    return rejection_reason_2_status(x);
-                } else if constexpr(std::is_same_v<T, OrderRejectionWithText>) {
-                    return rejection_reason_2_status(x.reason);                    
-                } else if constexpr(std::is_same_v<T, OrderOpenStatus>) {
-                    return OrderStatus::open;
-                } else {
-                    static_assert(std::is_same_v<T,Fill>);
-                    return OrderStatus::open;
-                }
-            }, up);
-        }
-
         
         OrderInternalData(
             OrderParameters parameters,
-            std::shared_ptr<ITradableInstrument> instrument,
-            std::weak_ptr<OrderInternalData> replaced_order,            
+            PTradableInstrument instrument,
+            std::weak_ptr<IOrder> replaced_order,            
             std::chrono::system_clock::time_point create_time,
             std::shared_ptr<OrderStorage> storage)
                 :parameters(std::move(parameters))
@@ -78,30 +42,14 @@ namespace quarkbot {
                  {                  
                 }
 
-        virtual ~OrderInternalData() {
+                //TODO handle cancel in separate class
+/*        virtual ~OrderInternalData() {
             if (!done && !parameters.keep_alive) {
                 cancel();
             }
-        }
+        }*/
         OrderInternalData(const OrderInternalData &) = delete;
         OrderInternalData &operator=(const OrderInternalData &) = delete;
-
-        static std::shared_ptr<OrderInternalData> create(OrderParameters parameters,
-                                                std::shared_ptr<ITradableInstrument> instrument,
-                                                std::weak_ptr<OrderInternalData> replaced_order,            
-                                                std::chrono::system_clock::time_point create_time,                
-                                                std::shared_ptr<OrderStorage> storage
-                                            ) 
-        {
-            return  std::make_shared<OrderInternalData>(
-                            std::move(parameters), 
-                            std::move(instrument),
-                            std::move(replaced_order),
-                            std::move(create_time),                
-                            std::move(storage)
-                        );
-        }
-
 
         coro::prepared_coro update(Fill &&up) {           
             std::scoped_lock _(mx);
@@ -211,33 +159,19 @@ namespace quarkbot {
             @param promise reference to result promise. If not initialized, non-blocking operation is requested
             @return RegisterStatus status of operation
         */
-        OrderReceiveReportStatus receive_report(OrderReport &report) {
+        IOrder::RcvStatus receive_report(OrderReport &report) override {
             return receive_report_lk(report);
         }
-        OrderReceiveReportStatus receive_report(OrderReport &report, awaitable<bool>::result &promise) {
+        IOrder::RcvStatus receive_report(OrderReport &report, awaitable<bool>::result &promise) override {
             std::scoped_lock _(mx);
             return receive_report_lk(report, promise);
         }
 
-        const OrderParameters &get_parameters() const {return parameters;}
-        std::shared_ptr<ITradableInstrument> get_instrument() const {return instrument;}
-        std::weak_ptr<OrderInternalData> get_replaced_order() const {return replaced_order;}
-        std::chrono::system_clock::time_point get_create_time() const {return create_time;}
-        void cancel() {if (cancel_fn) [[likely]] cancel_fn(this);}
+        const OrderParameters &get_parameters() const override {return parameters;}
+        const PTradableInstrument & get_instrument() const override {return instrument;}
+        std::weak_ptr<IOrder> get_replaced_order() const override {return replaced_order;}
+        virtual std::chrono::system_clock::time_point get_creation_time() const override {return create_time;}        
 
-        ///set cancel callback
-        /**
-            The provider must set cancel callback before the order is emited to the frontend, otherwise operation is not MT
-        */
-        void set_cancel_fn(CancelFn fn) {cancel_fn = std::move(fn);};
-        ///mark canceled
-        /**
-        @retval true canceled
-        @retval false already cancel before
-        */
-        bool mark_canceled() {
-            return !canceled.exchange(true, std::memory_order_relaxed);
-        }
         
         void set_restored_data(std::string id, OrderStorage::FilledState fst) {
             std::scoped_lock _(mx);
@@ -267,7 +201,7 @@ namespace quarkbot {
         ///associated instrument
         std::shared_ptr<ITradableInstrument> instrument = {};
         ///reference to replaced order
-        std::weak_ptr<OrderInternalData> replaced_order = {};
+        std::weak_ptr<IOrder> replaced_order = {};
         ///time, when this order has been created (or restored)
         std::chrono::system_clock::time_point create_time = {};
         ///adapter's generated unique record key - this can be used to store into database
@@ -276,8 +210,8 @@ namespace quarkbot {
         std::string id = {};
         ///associated order storage
         std::shared_ptr<OrderStorage> storage = {};
-        ///cancel function - must be filled by adapter
-        CancelFn cancel_fn = {};
+        ///order has been canceled internally - reserved for adapter
+        std::atomic<bool> canceled = {};
     
         mutable std::mutex mx;
 
@@ -290,8 +224,6 @@ namespace quarkbot {
 
         ///awaiting coroutine
         std::optional<OrderAwaiting> awaiting;
-        ///order has been canceled internally - reserved for adapter
-        std::atomic<bool> canceled = {};
         //order is done
         bool done = false;
 
@@ -323,25 +255,25 @@ namespace quarkbot {
         }
 
 
-        OrderReceiveReportStatus receive_report_lk(OrderReport &report) {
+        IOrder::RcvStatus receive_report_lk(OrderReport &report) {
             //nobody should await yet
-            if (awaiting) return OrderReceiveReportStatus::already_pending;
+            if (awaiting) return IOrder::RcvStatus::already_pending;
 
             //try to flush updates
-            if (flush_updates_lk(report)) return OrderReceiveReportStatus::updates;
+            if (flush_updates_lk(report)) return IOrder::RcvStatus::updates;
 
-            if (done) return OrderReceiveReportStatus::done;
-            return OrderReceiveReportStatus::need_await;
+            if (done) return IOrder::RcvStatus::done;
+            return IOrder::RcvStatus::need_await;
         }
 
-        OrderReceiveReportStatus receive_report_lk(OrderReport &report, awaitable<bool>::result &promise) {
+        IOrder::RcvStatus receive_report_lk(OrderReport &report, awaitable<bool>::result &promise) {
             auto res = receive_report_lk(report);
-            if (res != OrderReceiveReportStatus::need_await) return res;
+            if (res != IOrder::RcvStatus::need_await) return res;
 
             //register promise and arguments
             awaiting.emplace(OrderAwaiting{report, std::move(promise)});
             //awaiting started
-            return OrderReceiveReportStatus::awaiting;
+            return IOrder::RcvStatus::awaiting;
                     
         }
         ///notify about update (locked)
@@ -360,8 +292,43 @@ namespace quarkbot {
             return out;
         }
 
+        bool mark_canceled() {
+            return !canceled.exchange(true, std::memory_order_relaxed);
+        }        
+
     };
 
- 
+
+    template<std::invocable<IOrder *> _CancelCB>
+    class OrderWithCancelCallback: public OrderInternalData {
+    public:
+        OrderWithCancelCallback(OrderParameters parameters,
+                                PTradableInstrument instrument,
+                                std::weak_ptr<IOrder> replaced_order,            
+                                std::chrono::system_clock::time_point create_time,
+                                std::shared_ptr<OrderStorage> storage,
+                                _CancelCB cb
+                            )
+            :OrderInternalData(std::move(parameters),
+                               std::move(instrument),
+                               std::move(replaced_order),
+                               std::move(create_time),
+                               std::move(storage))
+            ,_cancelCB(std::move(cb)) {}
+            ~OrderWithCancelCallback() {
+                if (!this->parameters.keep_alive && !this->done) {
+                    OrderWithCancelCallback::cancel();
+                }
+            }
+
+            virtual void cancel() override {
+                if (mark_canceled()) _cancelCB(this);
+            }
+
+
+    protected:
+        _CancelCB _cancelCB;
+    };
+
 }
 

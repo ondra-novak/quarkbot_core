@@ -1,7 +1,9 @@
 #include "simtradableinstrument.hpp"
-#include "quarkbot/abstract/orderdata.hpp"
+#include "../common/orderdata.hpp"
+#include "quarkbot/defs.hpp"
 #include "quarkbot/order_defs.hpp"
 #include "simaccount.hpp"
+#include "simexchange.hpp"
 #include "siminstrument.hpp"        // IWYU pragma: keep - failed to detect by clangd
 #include "quarkbot/storage_srl.hpp" // IWYU pragma: keep - template definitions
 #include <cassert>
@@ -88,20 +90,25 @@ void SimTradableInstrument::liquidation() {
     }
 }
 
-std::shared_ptr<OrderInternalData>  SimTradableInstrument::place_order(const OrderRequest &req, std::shared_ptr<OrderInternalData> old_state, std::size_t) {
+struct CancelCallback {
+    std::shared_ptr<SimExchange> exchange;
+    void operator()(IOrder *ord) {
+        exchange->cancel_order(ord);
+    }
+};
+
+POrder  SimTradableInstrument::place_order(const OrderRequest &req, POrder old_state, std::size_t) {
 
 
     ExecutionWorker worker = ExecutionWorker::current();    
-    auto st = OrderInternalData::create(
+    auto st = std::make_shared<OrderWithCancelCallback<CancelCallback> >(
         convert_request_to_params(req, _position.side),
         shared_from_this(),
         old_state,
         worker.required().now(),
-        _order_storage
+        _order_storage, 
+        CancelCallback{_instrument->get_sim_exchange()}
     );
-    st->set_cancel_fn([me = shared_from_this()](OrderInternalData *order){
-            me->_instrument->get_sim_exchange()->cancel_order(order);
-    });
 
 
     const auto &info = _instrument->get_info();    
@@ -147,7 +154,7 @@ std::shared_ptr<OrderInternalData>  SimTradableInstrument::place_order(const Ord
         return st;
     }
 
-    auto chk =_account->get_risk_controller().pre_trade_check(st);;
+    auto chk =_account->get_risk_controller().pre_trade_check({st});;
     if (chk) {
         st->update(std::move(chk).value());
         return st;
@@ -159,8 +166,9 @@ std::shared_ptr<OrderInternalData>  SimTradableInstrument::place_order(const Ord
 }
 
 
-void SimTradableInstrument::on_order_update(POrderAData ord, OrderInternalData::Update &&status) {
+void SimTradableInstrument::on_order_update(POrder ord_raw, OrderStatusUpdate &&status) {
    
+    POrderData ord = std::static_pointer_cast<OrderInternalData>(ord_raw);
     auto &cntr=_account->get_risk_controller();
     if (std::holds_alternative<Fill>(status)) {
         const Fill &f = std::get<Fill>(status);
@@ -168,7 +176,7 @@ void SimTradableInstrument::on_order_update(POrderAData ord, OrderInternalData::
         report_fill(f);
     } else if (std::holds_alternative<OrderOpenStatus>(status)) {
         ord->forward_update(std::move(status));
-        if (cntr) cntr.on_order_event(Order(ord),OrderInternalData::update2status(status));        
+        if (cntr) cntr.on_order_event(Order(ord),update2status(status));        
         return;
     } else {
         if ((std::holds_alternative<OrderStatus>(status) && is_done_status(std::get<OrderStatus>(status)))
@@ -185,7 +193,7 @@ void SimTradableInstrument::on_order_update(POrderAData ord, OrderInternalData::
                 }
                 update_margin();
         } 
-        if (cntr) cntr.on_order_event(Order(ord),OrderInternalData::update2status(status));
+        if (cntr) cntr.on_order_event(Order(ord),update2status(status));
     }
 
     ord->forward_update(std::move(status));
@@ -198,17 +206,15 @@ std::vector<Order> SimTradableInstrument::attach_storage(PStorage storage, std::
 
     auto orders = _order_storage->load_opened_orders();
     for (auto &s: orders) {
-        auto adata = OrderInternalData::create(
+        auto adata = std::make_shared<OrderWithCancelCallback<CancelCallback> >(
             s.st.parameters,
             shared_from_this(),
             std::weak_ptr<OrderInternalData>(),
             worker.required().now(),
-            _order_storage
+            _order_storage,
+            CancelCallback{_instrument->get_sim_exchange()}
         );
         adata->set_restored_data(s.st.id,s.fill_st);
-        adata->set_cancel_fn([this](OrderInternalData *order){
-                    _instrument->get_sim_exchange()->cancel_order(order);
-        });
         Order ord(std::move(adata));
         out.push_back(ord);
     }

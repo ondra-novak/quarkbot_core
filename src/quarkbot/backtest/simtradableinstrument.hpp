@@ -1,10 +1,12 @@
 #pragma once
 
+#include "quarkbot/order_defs.hpp"
 #include "simexecutor.hpp"
 #include "siminstrument.hpp"
 #include "../streaming/queue_event_stream.hpp"
 
-#include <quarkbot/abstract/orderdata.hpp>
+#include "../common/orderdata.hpp"
+#include "../common/tradable_instrument_base.hpp"
 #include <quarkbot/defs.hpp>
 #include <quarkbot/order.hpp>
 #include <quarkbot/order_storage.hpp>
@@ -24,7 +26,7 @@ class SimInstrument;
 class SimAccount;
 
 
-class SimTradableInstrument final: public ITradableInstrument, public std::enable_shared_from_this<SimTradableInstrument> {
+class SimTradableInstrument final: public TradableInstrumentBase, public std::enable_shared_from_this<SimTradableInstrument> {
 public:
     SimTradableInstrument(std::shared_ptr<SimInstrument> instr, std::shared_ptr<SimAccount> account)
         :_instrument(std::move(instr)), _account(std::move(account)) {}
@@ -42,17 +44,18 @@ public:
     virtual std::shared_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) override ;
     virtual PAccount get_account() const override ;
     virtual PMarketInstrument get_instrument() const override ;
-    virtual std::shared_ptr<OrderInternalData> place_order(const OrderRequest &params, std::shared_ptr<OrderInternalData> replaced , std::size_t) override;
+    virtual POrder place_order(const OrderRequest &params, POrder replaced , std::size_t) override;
     virtual bool cancel_all_orders() override;
     virtual awaitable<Position> get_position() const override {return _position;}
     virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) override;
 
-    void on_order_update(POrderAData ord, OrderInternalData::Update &&status);
+    void on_order_update(POrder ord, OrderStatusUpdate &&status);
 
 protected:
 
     struct RegOrder {
-        POrderAData order;
+    void on_order_update(POrder ord, OrderStatusUpdate &&status);
+        POrder order;
         Decimal turnover;        
         Decimal filled = {};
     };
@@ -123,7 +126,7 @@ protected:
 
 
     void liquidation();
-    std::shared_ptr<OrderInternalData> liquidation_order; 
+    POrder liquidation_order; 
 
     
     

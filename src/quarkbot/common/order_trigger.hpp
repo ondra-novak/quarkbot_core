@@ -1,11 +1,9 @@
 #pragma once 
 
-#include "quarkbot/abstract/orderdata.hpp"
-#include "quarkbot/defs.hpp"
-#include "quarkbot/execution_worker.hpp"
+#include "../common/orderdata.hpp"
+#include "quarkbot/event_stream.hpp"
 #include "quarkbot/order.hpp"
 #include "quarkbot/stream/trade.hpp"
-#include "quarkbot/event_stream.hpp"
 #include <memory>
 namespace quarkbot {
 
@@ -21,17 +19,17 @@ public:
 
 
     ///place triggered order with special place request
-    std::shared_ptr<OrderInternalData> place_order(PTradableInstrument instrument, 
+    POrder place_order(PTradableInstrument instrument, 
                     const OrderParameters &trig_params, //params reported by order while trigger phase                    
-                    std::shared_ptr<OrderInternalData> order_to_replace, 
+                    POrder order_to_replace, 
                     std::function<Order()> place_request);
 
 
 
     ///place ordinary localy triggered order
-    std::shared_ptr<OrderInternalData> place_order(PTradableInstrument instrument, 
+    POrder place_order(PTradableInstrument instrument, 
                 const OrderParameters &trig_params,
-                std::shared_ptr<OrderInternalData> order_to_replace);
+                POrder order_to_replace);
 
     bool convert_params_to_request(const OrderParameters &params, OrderRequest &request);
 

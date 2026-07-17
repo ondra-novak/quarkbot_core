@@ -86,13 +86,13 @@ PTradableInstrument SimExchange::create_tradable_instrument(std::shared_ptr<SimI
 bool SimExchange::cancel_all_orders(PTradableInstrument instrument ) {
     return _executor.cancel_all(instrument);
 }
-void SimExchange::cancel_order(POrderAData ord) {
+void SimExchange::cancel_order(POrder ord) {
     _executor.cancel_order(ord);
 }
-void SimExchange::cancel_order(OrderInternalData *ord) {
+void SimExchange::cancel_order(IOrder *ord) {
     _executor.cancel_order(ord);
 }
-void SimExchange::place_order(POrderAData ord) {
+void SimExchange::place_order(POrder ord) {
     auto rep_ord =ord->get_replaced_order().lock();
     if (rep_ord) {
         _executor.replace_order(ord, rep_ord);

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <quarkbot/abstract/orderdata.hpp>
+#include "../common/orderdata.hpp"
+#include "quarkbot/abstract/backtest_data_source.hpp"
 #include <quarkbot/defs.hpp>
 #include <quarkbot/order_defs.hpp>
 #include <quarkbot/strategy_fragment.hpp>
@@ -30,17 +31,16 @@ public:
     void on_event(PSimInstrument instrument, Quote &quote);
     void on_event(PSimInstrument instrument, Auction &auction);
 
-    StrategyFragment place_order(POrderAData ord);
-    StrategyFragment replace_order(POrderAData ord, POrderAData prev_order);
-    StrategyFragment cancel_order(POrderAData ord);
-    StrategyFragment cancel_order(OrderInternalData *ord);
+    StrategyFragment place_order(POrder ord);
+    StrategyFragment replace_order(POrder ord, POrder prev_order);
+    StrategyFragment cancel_order(POrder ord);
+    StrategyFragment cancel_order(IOrder *ord);
     bool cancel_all(PTradableInstrument instrument);
     void set_slippage(double slippage) { _slippage = slippage; }
     void set_latency(std::chrono::system_clock::duration dur) {latency = dur;}
 
     ~SimExecutor();
 
-    using ReportSink = std::function<void(const POrderAData &, const OrderInternalData::Update &)>;
 
     void set_report_sink(ReportSink rpt) {
         _report_sink = std::move(rpt);
@@ -54,7 +54,7 @@ protected:
     ReportSink _report_sink;
 
     struct ActiveOrder {
-        POrderAData ord;
+        POrder ord;
         PSimInstrument instrument;
         Decimal filled = {};
         TimeInForce time_in_force;
@@ -92,18 +92,18 @@ protected:
 
     OrderType real_order_type(const ActiveOrder &order);
 
-    static PSimInstrument extract_instrument(const POrderAData &ord);
+    static PSimInstrument extract_instrument(const POrder &ord);
 
-    void set_order_status(const POrderAData &ord, OrderInternalData::Update &&st);
-    void accept_order(const POrderAData &ord);
+    void set_order_status(const POrder &ord, OrderInternalData::Update &&st);
+    void accept_order(const POrder &ord);
     
     Timer _timer;    
     std::default_random_engine _rnd_gen;
 
 
-    void place_order_internal(POrderAData ord);
-    void place_order_internal(POrderAData ord, POrderAData prev_order);
-    void cancel_order_internal(OrderInternalData *ord);
+    void place_order_internal(POrder ord);
+    void place_order_internal(POrder ord, POrder prev_order);
+    void cancel_order_internal(IOrder *ord);
     void stop_latency_queue();
     void close_day(PSimInstrument instrument);
 
