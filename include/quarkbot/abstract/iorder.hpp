@@ -38,6 +38,8 @@ public:
     virtual std::chrono::system_clock::time_point get_creation_time() const = 0;
     ///get instrument
     virtual const PTradableInstrument &get_instrument() const = 0;
+    ///get order ID
+    virtual std::string_view get_id() const = 0;
 
     virtual ~IOrder() = default;
 
@@ -65,6 +67,9 @@ public:
     }
     virtual const PTradableInstrument &get_instrument() const override {
         throw UninitializedException();
+    }
+    virtual std::string_view get_id() const override {
+        return {};
     }
     
 

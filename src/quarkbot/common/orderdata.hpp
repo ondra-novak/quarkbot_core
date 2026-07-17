@@ -180,20 +180,17 @@ namespace quarkbot {
             this->next_report.turnover = fst.turnover;
         }
 
-        const std::string &get_id() const {return id;}
-
-        const std::string &get_id_unsafe() const {
-            static std::string empty_id;
+        std::string_view get_id() const override{
             std::scoped_lock _(mx);
-            //if id is empty - return empty id reference
-            if (id.empty()) return empty_id;
-            //otherwise we can return valid object as the object won't be changed
-            else return id;
-
+            return id;  //id will not change when it is set, so it is safe to return view which is either empty or valid
         }
         void set_id(std::string id) {this->id = std::move(id);}
         Decimal get_remaining_quantity() const {return parameters.quantity - next_report.filled;}
         Decimal get_filled() const  {return  next_report.filled;}
+
+        bool mark_canceled() {
+            return !canceled.exchange(true, std::memory_order_relaxed);
+        }        
 
     protected:
         ///current order parameters
@@ -292,9 +289,6 @@ namespace quarkbot {
             return out;
         }
 
-        bool mark_canceled() {
-            return !canceled.exchange(true, std::memory_order_relaxed);
-        }        
 
     };
 

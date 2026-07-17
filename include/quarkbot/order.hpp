@@ -46,8 +46,13 @@ public:
       @exception await_canceled_exception - operation was canceled because there is already pending await
      */
     awaitable<bool> receive(OrderReport &report) {
+        return raw_receive(_ptr.get(), report);
+    }
+
+    ///Receive on raw pointer (needed by some functions)
+    static awaitable<bool> raw_receive(IOrder *ord, OrderReport &report) {
   
-        auto st = _ptr->receive_report(report);
+        auto st = ord->receive_report(report);
         switch (st) {
             case IOrder::RcvStatus::already_pending: throw already_pending_exception();
             case IOrder::RcvStatus::done: return false;
@@ -55,9 +60,9 @@ public:
             default:break;
         };
         //register itself
-        return [this, &report](awaitable<bool>::result promise) -> coro::prepared_coro {
+        return [ord, &report](awaitable<bool>::result promise) -> coro::prepared_coro {
             //perform registration
-            auto st = _ptr->receive_report(report, promise);
+            auto st = ord->receive_report(report, promise);
             switch (st) {
                 default:
                 case IOrder::RcvStatus::already_pending: return promise(std::make_exception_ptr(already_pending_exception()));
@@ -101,12 +106,29 @@ public:
         return out;
     }
 
+    ///Retrieve time of order creation
     std::chrono::system_clock::time_point get_creation_time() const {
         return _ptr->get_creation_time();
     }
+
+    ///Retrieve ID of order
+    /**
+        Internal ID of the order. Note this string is exchange depend.
+        - The returned value don't need to be unique
+        - Returned value can be constant, if ID is not available
+        - The function can return empty string, when ID is not yet received from the exchange
+            - in this case, ID is set with the first report
+        Once ID is set, it doesn't change during order's lifetime
+    */
+    std::string_view get_id() const {
+        return _ptr->get_id();
+    }
+
     void cancel() {
         _ptr->cancel();
     }
+
+
 
     ///Feed reports to callback
     /**
@@ -115,6 +137,7 @@ public:
 
         @return StrategyFragment allows to schedule execution of the coroutine
 
+        @note Ensure, that instance of the order is valid when coroutine is started, otherwise, it can cause UB.
     */
 
     template<std::invocable<OrderReport &> _CB>
@@ -126,17 +149,16 @@ public:
         } else {
             static_assert(std::is_convertible_v<_Res, bool>,
                 "Callback must return bool or awaitable<bool> compatible");
-        }
-        Order me(*this);
-        auto coro = [](Order order, _CB cb) -> StrategyFragment {
+        }        
+        auto coro = [](IOrder *order, _CB cb) -> StrategyFragment {
             OrderReport rpt;
             if constexpr (coro::is_awaiter<_Res>) {
-                while (co_await order.receive(rpt) && bool(co_await cb(rpt)));
+                while (co_await Order::raw_receive(order, rpt) && bool(co_await cb(rpt)));
             } else {
-                while (co_await order.receive(rpt) && bool(cb(rpt)));
+                while (co_await Order::raw_receive(order, rpt) && bool(cb(rpt)));
             }
         };
-        return coro(me, std::forward<_CB>(cb));
+        return coro(_ptr.get(), std::forward<_CB>(cb));
     }
 
 
