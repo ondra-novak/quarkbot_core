@@ -109,6 +109,10 @@ public:
         _state->close();
     }
 
+    bool is_open() const {
+        std::scoped_lock _(_state->_mx);
+        return !_state->_closed;
+    }
 
 private:
 
