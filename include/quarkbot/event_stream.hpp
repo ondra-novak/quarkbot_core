@@ -98,6 +98,7 @@ public:
         @return StrategyFragment of running coroutine
     */
     template<typename _Hub, std::derived_from<T> _ItemWithContext = T>
+    requires HubProducer<_Hub, _ItemWithContext>
     StrategyFragment feed_to( _Hub hub, const _ItemWithContext &context = _ItemWithContext{}) {
         EventStream<T> me(*this);
         auto coro = [](EventStream<T> stream, _Hub hub, _ItemWithContext context) -> StrategyFragment {
@@ -118,8 +119,13 @@ public:
     StrategyFragment feed_to(_CB &&cb) {
         EventStream<T> me(*this);
         using Res = std::invoke_result_t<_CB, T &>;
-        static_assert((coro::is_awaiter<Res> && std::is_convertible_v<coro::awaiter_result<Res>, bool>) || std::is_convertible_v<Res, bool>,
-            "Callback must return bool, or awaitable<bool>");
+        if constexpr (coro::is_awaiter<Res>) {
+            static_assert(std::is_convertible_v<coro::awaiter_result<Res>, bool>,
+                "Callback must return bool, or awaitable<bool>");
+        } else {
+            static_assert(std::is_convertible_v<Res, bool>,
+                "Callback must return bool, or awaitable<bool>");
+        }
 
         auto coro = [](EventStream<T> stream, _CB cb) -> StrategyFragment {
             T v;

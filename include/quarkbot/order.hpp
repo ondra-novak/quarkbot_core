@@ -120,12 +120,17 @@ public:
     template<std::invocable<OrderReport &> _CB>
     StrategyFragment feed_to(_CB &&cb) {
         using _Res = std::invoke_result_t<_CB, OrderReport &>;
-        static_assert(std::is_convertible_v<_Res, bool> || (coro::is_awaiter<_Res> && std::is_convertible_v<coro::awaiter_result<_Res>, bool>),
-            "Callback must return bool or awaitable<bool> compatible");
+        if constexpr (coro::is_awaiter<_Res>) {
+            static_assert(std::is_convertible_v<coro::awaiter_result<_Res>, bool>,
+                "Callback must return bool or awaitable<bool> compatible");
+        } else {
+            static_assert(std::is_convertible_v<_Res, bool>,
+                "Callback must return bool or awaitable<bool> compatible");
+        }
         Order me(*this);
-        auto coro = [](Order order, _CB cb) {
+        auto coro = [](Order order, _CB cb) -> StrategyFragment {
             OrderReport rpt;
-            if (coro::is_awaiter<_Res>) {
+            if constexpr (coro::is_awaiter<_Res>) {
                 while (co_await order.receive(rpt) && bool(co_await cb(rpt)));
             } else {
                 while (co_await order.receive(rpt) && bool(cb(rpt)));

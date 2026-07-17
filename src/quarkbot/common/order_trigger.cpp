@@ -25,10 +25,18 @@ namespace quarkbot {
         bool was_replaced() const;
         auto set_report(OrderReport &rpt);
         virtual void cancel() override {
-            cancel_for_replace();
+            cancel_request();
         }
         ~TrigOrder();
     };
+
+    TrigOrder::~TrigOrder() {
+        //autocancel - the same rule as OrderWithCancelCallback
+        //no lock needed, this is the last reference
+        if (!done && !parameters.keep_alive) {
+            cancel_request();
+        }
+    }
 
     void TrigOrder::cancel_request() {
         std::scoped_lock _(mx);        
