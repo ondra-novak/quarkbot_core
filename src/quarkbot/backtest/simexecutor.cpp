@@ -44,11 +44,10 @@ namespace quarkbot {
             return ;
         }
 
-        Decimal filled = ordd->get_filled();
-        auto tif = ord->get_parameters().time_in_force;
+        const auto &nxrep = ordd->get_fill_stats();
+        auto tif = ord->get_parameters().time_in_force; 
         ActiveOrder aord{
-            std::move(ord),std::move( instrument), filled, tif
-        };
+            std::move(ord),std::move( instrument), tif, nxrep    };
         if (!validate_order(aord)) return;
 
         accept_order(aord.ord);
@@ -69,7 +68,7 @@ namespace quarkbot {
 
         auto tif = ord->get_parameters().time_in_force;
         ActiveOrder aord{
-            std::move(ord),std::move( instrument), 0,tif
+            std::move(ord),std::move( instrument),tif,{}
         };
         if (!validate_order(aord)) return;
 
@@ -84,7 +83,7 @@ namespace quarkbot {
             return ;
         }
         if (!validate_order_replace(aord, *found)) return;
-        aord.filled = found->filled; //copy filled 
+        
 
         set_order_status(found->ord, {OrderStatus::replaced});        
 
@@ -194,10 +193,10 @@ namespace quarkbot {
             }
             return false;
         }
-        while (order.filled < params.quantity) {
+        while (order.calcs.filled < params.quantity) {
 
             if (!_last_quote.has_value()) return false;
-            auto leave_quant = params.quantity - order.filled;
+            auto leave_quant = params.quantity - order.calcs.filled;
             auto &p = params.side == Side::sell?quote.bid:quote.ask;
             auto &s = params.side== Side::sell?quote.bid_size:quote.ask_size;
             Decimal dq = leave_quant - s;
@@ -273,9 +272,9 @@ namespace quarkbot {
             if ((params.side == Side::buy && trade.price <= params.limit_price)
                 || (params.side == Side::sell && trade.price >= params.limit_price))
             {                
-                Decimal leave_quant = params.quantity - order.filled;
+                Decimal leave_quant = params.quantity - order.calcs.filled;
                 create_fill(order, params.limit_price, std::min(leave_quant, trade.size), trade.time,false);
-                bool filled = order.filled >= params.quantity;
+                bool filled = order.calcs.filled >= params.quantity;
                 if (filled) set_order_status(order.ord, {OrderStatus::filled});
                 return filled;
             }
@@ -429,17 +428,19 @@ namespace quarkbot {
             generate_random_string(_rnd_gen),
             params.label,
             tp,
-            order.ord->get_instrument()->get_instrument()->get_info(),
+            info,
             params.side,
             params.reason_override,
             quantity,
-            price,
-            fees,
-            1.0
+            price
         };
-        order.filled += quantity;
+        order.calcs.fees += fees;
+        order.calcs.filled += quantity;
+        order.calcs.turnover += info.calc_turnover_pnl_currency(price, quantity);
+        order.calcs.fee_rate = 1.0;
         auto &simt = *static_cast<SimTradableInstrument *>(order.ord->get_instrument().get());
         if (_report_sink) _report_sink(order.ord, f);
+        simt.on_order_update(order.ord, order.calcs);
         simt.on_order_update(order.ord, f);
     }
 

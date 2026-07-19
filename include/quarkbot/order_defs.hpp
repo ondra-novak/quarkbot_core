@@ -158,6 +158,8 @@ enum class OrderStatus : uint8_t {
     pending_trigger,
     ///order is active, open, waiting in orderbook, there can be partial fills (see fills)
     open,    
+    ///order has pending settlement. It may appear before final state, such an filled, canceled, rejected. Order is nearly done. but some fields are not yet updated
+    settlement,
     ///order is done, filled complete
     filled,
     ///order is done, has been canceled
@@ -274,26 +276,26 @@ inline constexpr bool is_done_status(OrderStatus status) {
            status == OrderStatus::lost ;
 }
 
-struct OrderRejectionWithText {
-    OrderRejectionReason reason;
-    std::string text;
-};
 
-struct OrderOpenStatus {
-    std::string id;
-    RecordKey key;
+///Order fill statics 
+struct OrderFillStats {
+    ///quantity filled
+    Decimal filled = {};
+    ///turnover
+    Decimal turnover = {};
+    ///total fees
+    Decimal fees = {};
+    ///fee rate
+    Decimal fee_rate = {};
 };
-
 
 struct OrderReport {
     //can contain rejection message
     std::string rejection_message = {};
     //the vector contains unprocessed fills
     FastList<Fill> fills = {};
-    //total filled amount (as reported from adapter)
-    Decimal filled = 0;
-    //total turnover (quantity * price accumulated)
-    Decimal turnover = 0;
+    ///stats
+    OrderFillStats fill_stats = {};
     ///is set true if status changed while new report was generated
     bool status_changed = false;
     ///current status of the order
@@ -305,7 +307,7 @@ struct OrderReport {
 
     //calc average fill price
     Decimal calc_avg_fill_price() const {
-        if (filled) return turnover/filled;
+        if (fill_stats.filled) return fill_stats.turnover/fill_stats.filled;
         return 0;
     }
 
@@ -315,32 +317,4 @@ struct OrderReport {
     }
 
 };
-
-using OrderStatusUpdate = std::variant<Fill, OrderStatus, OrderRejectionReason, OrderRejectionWithText,  OrderOpenStatus>;
-
-
-inline OrderStatus update2status(const OrderStatusUpdate &up) {
-
-    auto rejection_reason_2_status = [](OrderRejectionReason rej) {    
-        return (rej == OrderRejectionReason::expired || rej == OrderRejectionReason::post_only_taker)
-            ?OrderStatus::canceled:OrderStatus::rejected;
-    };
-
-
-    return std::visit([=]<typename T>(const T &x){
-        if constexpr(std::is_same_v<T, OrderStatus>) {
-            return x;
-        } else if constexpr(std::is_same_v<T, OrderRejectionReason>) {
-            return rejection_reason_2_status(x);
-        } else if constexpr(std::is_same_v<T, OrderRejectionWithText>) {
-            return rejection_reason_2_status(x.reason);                    
-        } else if constexpr(std::is_same_v<T, OrderOpenStatus>) {
-            return OrderStatus::open;
-        } else {
-            static_assert(std::is_same_v<T,Fill>);
-            return OrderStatus::open;
-        }
-    }, up);
-}
-
 }

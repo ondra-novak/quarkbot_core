@@ -1,14 +1,18 @@
 #pragma once
 
+#include "basic_coro/prepared_coro.hpp"
 #include "quarkbot/abstract/iorder.hpp"
 #include "quarkbot/defs.hpp"
 #include "quarkbot/order_defs.hpp"
-#include "quarkbot/order_storage.hpp"
+#include "order_internal_defs.hpp"
 namespace quarkbot {
 
 
 
+
     static constexpr OrderParameters empty_order_parameters = {};
+
+    
 
     class OrderInternalData;
     class ITradableInstrument;
@@ -32,51 +36,23 @@ namespace quarkbot {
             OrderParameters parameters,
             PTradableInstrument instrument,
             std::weak_ptr<IOrder> replaced_order,            
-            std::chrono::system_clock::time_point create_time,
-            std::shared_ptr<OrderStorage> storage)
+            std::chrono::system_clock::time_point create_time)
                 :parameters(std::move(parameters))
                 ,instrument(std::move(instrument))
                 ,replaced_order(std::move(replaced_order))
-                ,create_time(std::move(create_time))
-                ,storage(std::move(storage))
-                 {                  
-                }
+                ,create_time(std::move(create_time))  {}
 
-                //TODO handle cancel in separate class
-/*        virtual ~OrderInternalData() {
-            if (!done && !parameters.keep_alive) {
-                cancel();
-            }
-        }*/
         OrderInternalData(const OrderInternalData &) = delete;
-        OrderInternalData &operator=(const OrderInternalData &) = delete;
+        OrderInternalData &operator=(const OrderInternalData &) = delete;                
 
         coro::prepared_coro update(Fill &&up) {           
             std::scoped_lock _(mx);
 
-            if (storage) {
-                if (storage->check_fill_exists(up)) return {};
-                auto wr = storage->write();
-                storage->store_fill(wr, up);
-
-                next_report.filled += up.quantity;
-                next_report.turnover += up.contract.calc_turnover_pnl_currency(up.price, up.quantity);
-
-                storage->store_filled(wr,key, {next_report.filled, next_report.turnover});
-                wr.commit();
-            } else {
-                next_report.filled += up.quantity;
-                next_report.turnover += up.contract.calc_turnover_pnl_currency(up.price, up.quantity);
-            }
             next_report.fills.push_back(std::move(up));            
             return notify_lk();
         }
 
         coro::prepared_coro update(OrderStatus st) {
-            if (storage && is_done_status(st)) {
-                auto wr = storage->write();
-                storage->close_order(wr, key);
-            }
             std::scoped_lock _(mx);
             next_report.status = st;
             next_report.status_changed = true;
@@ -85,10 +61,6 @@ namespace quarkbot {
         }
 
         coro::prepared_coro update(OrderRejectionReason st) {
-            if (storage) {
-                auto wr = storage->write();
-                storage->close_order(wr, key);
-            }
             std::scoped_lock _(mx);
             next_report.status = OrderStatus::rejected;
             next_report.rejection_reason = st;
@@ -98,10 +70,6 @@ namespace quarkbot {
             return notify_lk();
         }
         coro::prepared_coro update(OrderRejectionWithText &&st) {
-            if (storage) {
-                auto wr = storage->write();
-                storage->close_order(wr, key);
-            }
             std::scoped_lock _(mx);
             next_report.status = OrderStatus::rejected;
             next_report.rejection_reason = st.reason;
@@ -112,10 +80,6 @@ namespace quarkbot {
         }
 
         coro::prepared_coro update(OrderOpenStatus &&st) {
-            if (storage) {
-                auto wr = storage->write();
-                storage->open_order(wr, st.key, {st.id,parameters});
-            }
             std::scoped_lock _(mx);
             id = std::move(st.id);
             key = st.key;
@@ -124,6 +88,11 @@ namespace quarkbot {
             done = false;
             return notify_lk();
         }
+        coro::prepared_coro update(OrderFillStats &&st) {
+            next_report.fill_stats = std::move(st);
+            return notify_lk();
+        }
+
         coro::prepared_coro forward_update(Update &&up) {
             return std::visit([&](auto &x){return this->update(std::move(x));},up);
         }
@@ -173,20 +142,14 @@ namespace quarkbot {
         virtual std::chrono::system_clock::time_point get_creation_time() const override {return create_time;}        
 
         
-        void set_restored_data(std::string id, OrderStorage::FilledState fst) {
-            std::scoped_lock _(mx);
-            this->id = std::move(id);
-            this->next_report.filled = fst.filled;
-            this->next_report.turnover = fst.turnover;
-        }
-
         std::string_view get_id() const override{
             std::scoped_lock _(mx);
             return id;  //id will not change when it is set, so it is safe to return view which is either empty or valid
         }
         void set_id(std::string id) {this->id = std::move(id);}
-        Decimal get_remaining_quantity() const {return parameters.quantity - next_report.filled;}
-        Decimal get_filled() const  {return  next_report.filled;}
+        Decimal get_remaining_quantity() const {return parameters.quantity - next_report.fill_stats.filled;}
+        Decimal get_filled() const  {return  next_report.fill_stats.filled;}
+        const OrderFillStats &get_fill_stats() const {return next_report.fill_stats;}
 
         bool mark_canceled() {
             return !canceled.exchange(true, std::memory_order_relaxed);
@@ -205,8 +168,6 @@ namespace quarkbot {
         RecordKey key = {};
         ///internal order ID
         std::string id = {};
-        ///associated order storage
-        std::shared_ptr<OrderStorage> storage = {};
         ///order has been canceled internally - reserved for adapter
         std::atomic<bool> canceled = {};
     
@@ -236,15 +197,13 @@ namespace quarkbot {
             if (next_report.fills.empty() && !next_report.status_changed) return false;
 
             //store some stats - because move over trivail types is UB
-            auto filled = next_report.filled;
-            auto turnover = next_report.turnover;
+            auto filled = next_report.fill_stats;
             
             //move
             report = std::move(next_report);
             
             //restore stats - hope, compiler will optimize out if not needed
-            next_report.turnover = turnover;
-            next_report.filled = filled;
+            next_report.fill_stats = std::move(filled);
 
             //status did not changed in new report
             next_report.status_changed = false;
@@ -300,14 +259,12 @@ namespace quarkbot {
                                 PTradableInstrument instrument,
                                 std::weak_ptr<IOrder> replaced_order,            
                                 std::chrono::system_clock::time_point create_time,
-                                std::shared_ptr<OrderStorage> storage,
                                 _CancelCB cb
                             )
             :OrderInternalData(std::move(parameters),
                                std::move(instrument),
                                std::move(replaced_order),
-                               std::move(create_time),
-                               std::move(storage))
+                               std::move(create_time))
             ,_cancelCB(std::move(cb)) {}
             ~OrderWithCancelCallback() {
                 if (!this->parameters.keep_alive && !this->done) {

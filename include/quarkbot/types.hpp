@@ -196,13 +196,6 @@ struct Fill {
     Decimal quantity;
     ///fill price
     Decimal price;
-    ///absolute fees in original currency
-    Decimal fees;
-    ///conversion rate between original currency and contract currency
-    /**
-    formula: contract_currenct = fees * fee_rate;
-     */
-    Decimal fee_rate;
 
     bool operator==(const Fill &other) const = default;
 
@@ -215,8 +208,6 @@ struct Fill {
         ar(self.reason,"reason");
         ar(self.quantity,"quantity");
         ar(self.price,"price");
-        ar(self.fees,"fees");
-        ar(self.fee_rate,"fee_rate");
     }
     
 };

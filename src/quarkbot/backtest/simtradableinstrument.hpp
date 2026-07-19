@@ -9,7 +9,6 @@
 #include "../common/tradable_instrument_base.hpp"
 #include <quarkbot/defs.hpp>
 #include <quarkbot/order.hpp>
-#include <quarkbot/order_storage.hpp>
 #include <quarkbot/tradable_instrument.hpp>
 #include <quarkbot/types.hpp>
 #include <quarkbot/decimal.hpp>
@@ -63,7 +62,6 @@ protected:
     std::shared_ptr<SimInstrument> _instrument;
     std::shared_ptr<SimAccount> _account;   
     std::vector<RegOrder> _active_orders;
-    std::shared_ptr<OrderStorage> _order_storage;
     
 
     Position _position = {}; //current position

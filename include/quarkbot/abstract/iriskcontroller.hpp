@@ -20,7 +20,7 @@ namespace quarkbot {
 
             @note implementation must be MT safe
         */
-        virtual std::optional<OrderRejectionWithText> pre_trade_check(const Order &order) = 0;
+        virtual std::optional<OrderRejectionReason> pre_trade_check(const Order &order) = 0;
            
 
         ///Called when event - fill
@@ -45,7 +45,7 @@ namespace quarkbot {
 
     class IRiskController::Null final: public IRiskController {
     public:
-        virtual std::optional<OrderRejectionWithText> pre_trade_check(const Order &) override {return std::nullopt;}
+        virtual std::optional<OrderRejectionReason> pre_trade_check(const Order &) override {return std::nullopt;}
         virtual void on_order_event(const Order &, const Fill &) override {}
         virtual void on_order_event(const Order &, OrderStatus ) override {};
     };

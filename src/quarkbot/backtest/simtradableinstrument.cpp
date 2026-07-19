@@ -25,8 +25,8 @@ void SimTradableInstrument::report_fill(const Fill &fill) {
     } else {
         Decimal cash = -static_cast<int>(fill.side) * info.calc_turnover_quote_currency(fill.price, fill.quantity);                                
         Decimal asset = static_cast<int>(fill.side) * fill.quantity;
-        Decimal fees = fill.fees * fill.fee_rate;
-        _account->update_wallet(info.quote_currency, [&](WalletInfo &w){w.balance += cash - fees;}, true);
+//        Decimal fees = fill.fees * fill.fee_rate;
+        _account->update_wallet(info.quote_currency, [&](WalletInfo &w){w.balance += cash ;}, true);
         if (info.asset_has_wallet()) {
             _account->update_wallet(*info.asset_wallet, [&](WalletInfo &w){w.balance += asset;}, true);
         }
@@ -106,7 +106,6 @@ POrder  SimTradableInstrument::place_order(const OrderRequest &req, POrder old_s
         shared_from_this(),
         old_state,
         worker.required().now(),
-        _order_storage, 
         CancelCallback{_instrument->get_sim_exchange()}
     );
 
@@ -199,28 +198,8 @@ void SimTradableInstrument::on_order_update(POrder ord_raw, OrderStatusUpdate &&
     ord->forward_update(std::move(status));
 }
 
-std::vector<Order> SimTradableInstrument::attach_storage(PStorage storage, std::string key_name) {
-    _order_storage = std::make_shared<OrderStorage>(storage, key_name);
-    ExecutionWorker worker = ExecutionWorker::current();
-    std::vector<Order> out;
-
-    auto orders = _order_storage->load_opened_orders();
-    for (auto &s: orders) {
-        auto adata = std::make_shared<OrderWithCancelCallback<CancelCallback> >(
-            s.st.parameters,
-            shared_from_this(),
-            std::weak_ptr<OrderInternalData>(),
-            worker.required().now(),
-            _order_storage,
-            CancelCallback{_instrument->get_sim_exchange()}
-        );
-        adata->set_restored_data(s.st.id,s.fill_st);
-        Order ord(std::move(adata));
-        out.push_back(ord);
-    }
-
-    //TODO: register orders to sim exchange
-    return out;
+std::vector<Order> SimTradableInstrument::attach_storage(PStorage ,std::string ) {  
+    return {};
 
 }
 

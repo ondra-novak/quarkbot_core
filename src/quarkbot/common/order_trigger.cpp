@@ -88,7 +88,7 @@ namespace quarkbot {
                     POrder order_to_replace, 
                     std::function<Order()> place_request) {
         
-        auto nword = std::make_shared<TrigOrder>(trig_params,instrument,order_to_replace, _worker.now(),   nullptr);              
+        auto nword = std::make_shared<TrigOrder>(trig_params,instrument,order_to_replace, _worker.now());              
         
         _worker.run(TrigOrder::monitor_order(nword, place_request));
         return nword;
@@ -103,7 +103,7 @@ namespace quarkbot {
             OrderRequest req;
             bool b = convert_params_to_request(trig_params, req);
             if (!b) {
-                auto out =  std::make_shared<TrigOrder>(trig_params, instrument,  order_to_replace, _worker.now(), nullptr);
+                auto out =  std::make_shared<TrigOrder>(trig_params, instrument,  order_to_replace, _worker.now());
                 out->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "Not supported by local trigger"});
                 return out;
             } else {

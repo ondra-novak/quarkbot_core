@@ -56,8 +56,8 @@ protected:
     struct ActiveOrder {
         POrder ord;
         PSimInstrument instrument;
-        Decimal filled = {};
         TimeInForce time_in_force;
+        OrderFillStats calcs;
         bool trig = false;
     };
 

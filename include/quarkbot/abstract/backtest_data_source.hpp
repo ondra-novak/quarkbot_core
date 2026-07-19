@@ -41,6 +41,8 @@ using BacktestDataSource = std::move_only_function<bool(BacktestEvent &ev)>;
 ///Initial wallet state for the backtest environment, a list of currency and their amounts
 using WalletInitItem = std::pair<std::string, Decimal>;
 
+class OrderStatusUpdate;
+
 ///Report sink is a function that is called for each order update, it can be used to generate reports
 using ReportSink = std::function<void(const Order &, const OrderStatusUpdate &)>;
 

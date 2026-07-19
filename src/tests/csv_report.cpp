@@ -39,11 +39,11 @@ void test_report() {
 
     auto pord = std::make_shared<OrderData>(OrderParameters{"ord1",
         Side::buy,OrderType::limit,123,456
-    }, std::static_pointer_cast<ITradableInstrument>(tinstr), POrder{}, tp,nullptr, cancelcb);
+    }, std::static_pointer_cast<ITradableInstrument>(tinstr), POrder{}, tp, cancelcb);
 
     auto pord2 = std::make_shared<OrderData>(OrderParameters{"ord2",
         Side::sell,OrderType::stoplimit,111,687,689
-    }, std::static_pointer_cast<ITradableInstrument>(tinstr), pord, tp, nullptr, cancelcb);
+    }, std::static_pointer_cast<ITradableInstrument>(tinstr), pord, tp,  cancelcb);
      
     auto ord = Order(pord);
     auto ord2 = Order(pord2);
@@ -59,7 +59,7 @@ void test_report() {
 
     rep(ord, opst);
     pord->forward_update(opst);
-    rep(ord, Fill{{},"3432",pord->get_parameters().label,tp,nfo,Side::buy, {},12,456,0,0});
+    rep(ord, Fill{{},"3432",pord->get_parameters().label,tp,nfo,Side::buy, {},12,456});
     rep(ord, OrderStatus::filled);
     rep(ord, OrderStatus::canceled);
     rep(ord, OrderRejectionReason::expired);

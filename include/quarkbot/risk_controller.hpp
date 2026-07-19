@@ -1,6 +1,7 @@
 #pragma once
 
 #include "abstract/iriskcontroller.hpp"
+#include "quarkbot/order_defs.hpp"
 #include "utils/wrapper.hpp"
 #include <type_traits>
 namespace quarkbot {
@@ -16,7 +17,7 @@ namespace quarkbot {
             return RiskController(std::make_shared<T>(std::forward<Args>(args)...));
         }
 
-        std::optional<OrderRejectionWithText> pre_trade_check(const Order &order) {
+        std::optional<OrderRejectionReason> pre_trade_check(const Order &order) {
                         return _ptr->pre_trade_check(order);
                     }
 

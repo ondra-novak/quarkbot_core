@@ -7,4 +7,5 @@ target_sources(quarkbot_impl PRIVATE
     thread_executor.cpp 
     thread_executor.hpp
     somodule.cpp
+    order_internal_defs.hpp
 )
