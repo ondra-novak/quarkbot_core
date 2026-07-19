@@ -182,8 +182,8 @@ struct Fill {
     RecordKey key;
     ///internal fill identifier (don't need to be unique!)
     std::string id;
-    ///name of order responsible for this fill
-    std::string order_name;
+    ///label of order responsible for this fill
+    std::string label;
     ///time when fill happened
     std::chrono::system_clock::time_point time;
     ///contract information

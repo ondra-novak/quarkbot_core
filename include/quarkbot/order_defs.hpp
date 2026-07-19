@@ -26,9 +26,9 @@ enum class OrderType : char{
     ///stop order - amount and stop_price are mandatory
     stop,
     ///stop limit order - amount, stop_price and limit_price are mandatory
-    stoplimit,
-    ///pair of orders - one order is limit, second is stop. When one is filled, the other is canceled
-    oco
+    stoplimit
+/*    ///pair of orders - one order is limit, second is stop. When one is filled, the other is canceled
+    oco*/ // removed - not supported
 };
 
 enum class TimeInForce : char {
@@ -51,7 +51,7 @@ enum class TimeInForce : char {
 inline constexpr bool is_limit_order(OrderType type) {
     return type == OrderType::limit
         || type == OrderType::limit_post_only
-        || type == OrderType::oco
+//        || type == OrderType::oco
         || type == OrderType::stoplimit;
 }
 
@@ -59,8 +59,8 @@ inline constexpr bool is_limit_order(OrderType type) {
 inline constexpr bool is_stop_order(OrderType type) {
     return type == OrderType::stop
         || type == OrderType::stoplimit
-        || type == OrderType::alert
-        || type == OrderType::oco;
+        || type == OrderType::alert;
+//        || type == OrderType::oco;
 }
 
 inline constexpr bool is_auction_order(TimeInForce type) {
@@ -283,10 +283,10 @@ struct OrderFillStats {
     Decimal filled = {};
     ///turnover
     Decimal turnover = {};
-    ///total fees
+    ///total fees in quote currency (can be calculated)
     Decimal fees = {};
-    ///fee rate
-    Decimal fee_rate = {};
+    ///total fees in native currency (original fees reported by exchange)
+    Decimal fees_native = {};
 };
 
 struct OrderReport {

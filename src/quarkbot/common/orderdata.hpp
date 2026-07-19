@@ -88,8 +88,8 @@ namespace quarkbot {
             done = false;
             return notify_lk();
         }
-        coro::prepared_coro update(OrderFillStats &&st) {
-            next_report.fill_stats = std::move(st);
+        coro::prepared_coro update(const OrderFillStats &st) {
+            next_report.fill_stats = st;
             return notify_lk();
         }
 

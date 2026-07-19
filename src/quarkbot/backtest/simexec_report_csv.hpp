@@ -47,7 +47,7 @@ constexpr inline std::string_view to_string(OrderType x) {
     case OrderType::limit_post_only: return "LIMIT(post)";
     case OrderType::stop: return "STOP";
     case OrderType::stoplimit: return "STOPLIMIT";
-    case OrderType::oco: return "OCO(TP/SL)";
+//    case OrderType::oco: return "OCO(TP/SL)";
     default: return "Unknown";
     }
 };

@@ -208,11 +208,11 @@ namespace quarkbot {
             switch (type) {
                 case OrderType::stop:
                 case OrderType::stoplimit:
-                case OrderType::oco:
+/*                case OrderType::oco:
                     dp = params.stop_price - p;
                     if (sgn(dp) * sid < 0) order.trig = true;
                     else return false;
-                    break;
+                    break;*/
                 case OrderType::market:
                     if (dq > 0) {
                         create_fill(order, p, dq,quote.time,taker);
@@ -254,7 +254,7 @@ namespace quarkbot {
         auto type = order.ord->get_parameters().type;
         if (order.trig) {
             switch (type) {
-                case OrderType::oco: type = OrderType::market;break;
+//                case OrderType::oco: type = OrderType::market;break;
                 case OrderType::stop: type = OrderType::market;break;
                 case OrderType::stoplimit: type = OrderType::limit;break;
                 default: break;                    
@@ -437,7 +437,7 @@ namespace quarkbot {
         order.calcs.fees += fees;
         order.calcs.filled += quantity;
         order.calcs.turnover += info.calc_turnover_pnl_currency(price, quantity);
-        order.calcs.fee_rate = 1.0;
+        order.calcs.fees_native += fees;
         auto &simt = *static_cast<SimTradableInstrument *>(order.ord->get_instrument().get());
         if (_report_sink) _report_sink(order.ord, f);
         simt.on_order_update(order.ord, order.calcs);
