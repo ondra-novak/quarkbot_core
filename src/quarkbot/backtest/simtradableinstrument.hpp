@@ -39,7 +39,6 @@ public:
     virtual std::shared_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) override ;
     virtual bool cancel_all_orders() override;
     virtual awaitable<Position> get_position() const override {return _position;}
-    virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) override;
 
     void on_order_update(POrder ord, OrderStatusUpdate &&status);
     auto get_sim_account() const {return std::static_pointer_cast<SimAccount>(_account);}

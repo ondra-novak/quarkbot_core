@@ -5,6 +5,7 @@
 #include "quarkbot/defs.hpp"
 #include "quarkbot/order_defs.hpp"
 #include "order_internal_defs.hpp"
+#include "quarkbot/types.hpp"
 namespace quarkbot {
 
 
@@ -154,6 +155,8 @@ namespace quarkbot {
         bool mark_canceled() {
             return !canceled.exchange(true, std::memory_order_relaxed);
         }        
+
+        const RecordKey &get_key() const {return key;}
 
     protected:
         ///current order parameters

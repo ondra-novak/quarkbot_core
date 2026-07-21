@@ -289,6 +289,27 @@ struct OrderFillStats {
     Decimal fees_native = {};
 };
 
+///Order fill stats for database record
+struct OrderFillStatsRecord : OrderFillStats {
+    ///order label
+    std::string label;
+    ///timestamp
+    std::chrono::system_clock::time_point timestamp;
+    ///contract info
+    ContractInfo contract;
+
+    void serialize(this auto &self, auto &ar) {
+        ar(self.filled, "filled");
+        ar(self.turnover, "turnover");
+        ar(self.fees, "fees");
+        ar(self.fees_native, "fees_native");
+        ar(self.label, "label");
+        ar(self.timestamp,"time");
+        ar(self.contract,"contract");
+    }
+};
+
+
 struct OrderReport {
     //can contain rejection message
     std::string rejection_message = {};

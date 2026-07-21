@@ -5,6 +5,7 @@
 #include "hash/class_hash.hpp"
 #include "account.hpp"
 #include "order.hpp"
+#include "quarkbot/storage.hpp"
 #include <concepts>
 #include <cstddef>
 
@@ -21,6 +22,7 @@ class Exchange;
 class TradableInstrument: public Wrapper<ITradableInstrument> {
 public:
 
+    using StorageConfig = ITradableInstrument::StorageConfig;
 
     using Wrapper<ITradableInstrument>::Wrapper;
     ///Place order on this instrument
@@ -45,21 +47,31 @@ public:
     Order place_order(const _Req &params, Order order_to_replace) {
         return _ptr->place_order(params, order_to_replace.get_handle(),class_hash<_Req>);
     }
-    ///Attach storage to this instrument and restore opened orders from storage
-    /**
-    The storage is used to remember opened order, to store fills and other statistics for later retrieval.
-    You should attach storage per instrument at the very beginning of the strategy.
-    @param storage storage to attach
-    @param key_name name of the key in storage, where orders will be stored. It shoud be unique per instrument.
-    @return vector of active orders. Each order receives status "restored". The actual status and fills are later retrieved throug
-    the co_awaiting on each order. 
 
-    The main operation of this function is to find and identify orders on the exchange and retrieve its state and history.
-    If the order is not found onf the exachnge, it receives status "lost".    
-    */
-    std::vector<Order> attach_storage(PStorage storage, std::string key_name) {
-        return _ptr->attach_storage(std::move(storage), std::move(key_name));
+    ///Attach storage and restore orders
+    bool attach_storage(Storage storage, const StorageConfig &cfg, function_view<void(Order)> restored_orders) {
+        return _ptr->attach_storage(storage.get_handle(), cfg, restored_orders);
     }
+
+    ///Attach storage and restore orders (simple version)
+    /**
+        @param storage storage object
+        @param key_prefix prefix for keys: prefix.fills, prefix.trades, prefix.orders
+        @param restored_orders called for every restored order. You need to await on each for status to receive its actual state
+        @retval true function succesfully attached storage
+        @retval false function is not supported, storage is probably not implemented
+
+        @note TO improve performance, the function is not MT safe. You should call this function before the first order is created
+        to avoid chance of clash between setting storage and receiving report
+    */
+    bool attach_storage(Storage storage, std::string key_prefix, function_view<void(Order)> restored_orders) {
+        return _ptr->attach_storage(storage.get_handle(), {
+            std::format("{}.fills",key_prefix),
+            std::format("{}.trades", key_prefix),
+            std::format("{}.orders", key_prefix)}
+        , restored_orders);
+    }
+
     ///Cancel alll orders on this instrument
     bool cancel_all_orders() {
         return _ptr->cancel_all_orders();

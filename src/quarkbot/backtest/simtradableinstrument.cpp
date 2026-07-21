@@ -136,10 +136,6 @@ void SimTradableInstrument::on_order_update(POrder ord_raw, OrderStatusUpdate &&
     );
 }
 
-std::vector<Order> SimTradableInstrument::attach_storage(PStorage ,std::string ) {  
-    return {};
-
-}
 
 POrderData SimTradableInstrument::create_order(const OrderParameters &params, POrder replaced_order, std::size_t ) {
     ExecutionWorker worker = ExecutionWorker::current();    
