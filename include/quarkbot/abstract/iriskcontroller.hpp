@@ -6,10 +6,20 @@ namespace quarkbot {
 
     class Order;
 
-    class IRiskController {
+    ///The object controlling risk, just interface, can be anything
+    class IRiskControl {
     public:
 
-        virtual ~IRiskController() = default;
+        struct CheckResult {
+            //set true to allow this order, false to reject order
+            bool ok;
+            //if false is set, specify reject reason
+            OrderRejectionReason rej_reason = OrderRejectionReason::too_risky;
+            //you can also add some message 
+            std::string rej_message = {};
+        };
+
+        virtual ~IRiskControl() = default;
         ///Called when order is placed
         /**
             @param instrument on which instrument the order is placed
@@ -20,7 +30,7 @@ namespace quarkbot {
 
             @note implementation must be MT safe
         */
-        virtual std::optional<OrderRejectionReason> pre_trade_check(const Order &order) = 0;
+        virtual CheckResult pre_trade_check(const Order &order) = 0;
            
 
         ///Called when event - fill
@@ -43,13 +53,29 @@ namespace quarkbot {
         class Null;
     };
 
-    class IRiskController::Null final: public IRiskController {
+    class IRiskControl::Null final: public IRiskControl {
     public:
-        virtual std::optional<OrderRejectionReason> pre_trade_check(const Order &) override {return std::nullopt;}
+        virtual CheckResult pre_trade_check(const Order &) override {return {false, OrderRejectionReason::not_tradable};}
         virtual void on_order_event(const Order &, const Fill &) override {}
         virtual void on_order_event(const Order &, OrderStatus ) override {};
     };
 
+    ///The standalone object to control and define risk rules
+    class IRiskController : public IRiskControl {
+    public:
+        class Null;
+        //empty, just alias
+
+    };
+
+    class IRiskController::Null: public IRiskController {
+    public:
+        virtual CheckResult pre_trade_check(const Order &) override {return {false, OrderRejectionReason::not_tradable};}
+        virtual void on_order_event(const Order &, const Fill &) override {}
+        virtual void on_order_event(const Order &, OrderStatus ) override {};
+    };
+
+    
 
 
 };

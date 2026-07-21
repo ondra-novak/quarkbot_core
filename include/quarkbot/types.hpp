@@ -201,7 +201,7 @@ struct Fill {
 
     void serialize(this auto &self, auto &ar) {
         ar(self.id,"id");
-        ar(self.order_name,"order_name");
+        ar(self.label,"label");
         ar(self.time,"time");
         ar(self.contract,"contract");
         ar(self.side,"side");
@@ -254,10 +254,29 @@ struct Position {
     }
 };
 
+struct WalletInfo {
+    ///available balance (can be used for trading)
+    Decimal balance = {};
+    ///unrealized pnl for open positions in this currency (if applicable)
+    Decimal unrealized_pnl = {};
+    ///blocked balance for opened orders (spot markets)
+    Decimal order_blocked = {};
+    ///initial margin for opened orders and positions (leveraged markets)
+    Decimal initial_margin = {};
+    ///maintenance margin for opened positions (leveraged markets)
+    Decimal maintenance_margin = {};
+
+    Decimal remaining_balance() const {
+        return balance + unrealized_pnl - order_blocked - initial_margin;
+    }
+};
+
 
 class UninitializedException: public std::runtime_error {
 public:
     UninitializedException():std::runtime_error("Called a method on uninitialized variable") {}
 };
+
+
 
 };

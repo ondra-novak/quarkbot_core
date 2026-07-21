@@ -3,29 +3,16 @@
 #include "../defs.hpp"
 #include "../underlying.hpp"
 #include "../types.hpp"
+#include "quarkbot/abstract/iriskcontroller.hpp"
+#include "quarkbot/order_defs.hpp"
 #include "quarkbot/risk_controller.hpp"
 
 namespace quarkbot {
 
-class IAccount {
+class IAccount: public IRiskControl {
 public:
 
-    struct WalletInfo {
-        ///available balance (can be used for trading)
-        Decimal balance = {};
-        ///unrealized pnl for open positions in this currency (if applicable)
-        Decimal unrealized_pnl = {};
-        ///blocked balance for opened orders (spot markets)
-        Decimal order_blocked = {};
-        ///initial margin for opened orders and positions (leveraged markets)
-        Decimal initial_margin = {};
-        ///maintenance margin for opened positions (leveraged markets)
-        Decimal maintenance_margin = {};
-
-        Decimal remaining_balance() const {
-            return balance + unrealized_pnl - order_blocked - initial_margin;
-        }
-    };
+    using WalletInfo = ::quarkbot:: WalletInfo;
 
     virtual ~IAccount() = default;
     virtual std::string_view get_name() const = 0;
@@ -40,11 +27,14 @@ public:
 
 class IAccount::Null final: public IAccount {
 public:
-    virtual std::string_view get_name() const {return {"<null>"};}
-    virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency ) const {return {};}
-    virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency ) const {return {};}
-    virtual awaitable<bool> transfer(UnderlyingCurrency , std::shared_ptr<IAccount> , Decimal )  {return false;}
-    virtual RiskController set_risk_controller(RiskController) {return {};}
+    virtual std::string_view get_name() const override {return {"<null>"};}
+    virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency ) const override {return {};}
+    virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency ) const override {return {};}
+    virtual awaitable<bool> transfer(UnderlyingCurrency , std::shared_ptr<IAccount> , Decimal ) override {return false;}
+    virtual RiskController set_risk_controller(RiskController) override {return {};}
+    virtual CheckResult pre_trade_check(const Order &) override {return {false, OrderRejectionReason::not_tradable};}
+    virtual void on_order_event(const Order &, const Fill &) override {}
+    virtual void on_order_event(const Order &, OrderStatus ) override {};
 };
 
 

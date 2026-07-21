@@ -45,8 +45,8 @@ public:
 
     template<MarketInstrumentStream T>
     requires(StreamWithParam<T>)
-    EventStream<T> subscribe(typename T::Params params) const {
-        return _ptr->subscribe<T>(params);
+    EventStream<T> subscribe(typename T::Param param) const {
+        return _ptr->subscribe<T>(param);
     }
 
     

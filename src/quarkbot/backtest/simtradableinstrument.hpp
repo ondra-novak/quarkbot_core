@@ -25,30 +25,29 @@ class SimInstrument;
 class SimAccount;
 
 
-class SimTradableInstrument final: public TradableInstrumentBase, public std::enable_shared_from_this<SimTradableInstrument> {
+class SimTradableInstrument final: public TradableInstrumentBase {
 public:
     SimTradableInstrument(std::shared_ptr<SimInstrument> instr, std::shared_ptr<SimAccount> account)
-        :_instrument(std::move(instr)), _account(std::move(account)) {}
+        :TradableInstrumentBase(std::move(instr), std::move(account)) {}
 
 
     void report_fill(const Fill &fill);    
     void report_price(Decimal price) ;
 
 
-    auto get_sim_instrument() const {
-        return _instrument;
-    }
-     
     
     virtual std::shared_ptr<IEventStreamBase> subscribe_stream(std::size_t class_hash, const void *params) override ;
-    virtual PAccount get_account() const override ;
-    virtual PMarketInstrument get_instrument() const override ;
-    virtual POrder place_order(const OrderRequest &params, POrder replaced , std::size_t) override;
     virtual bool cancel_all_orders() override;
     virtual awaitable<Position> get_position() const override {return _position;}
     virtual std::vector<Order> attach_storage(PStorage storage, std::string key_name) override;
 
     void on_order_update(POrder ord, OrderStatusUpdate &&status);
+    auto get_sim_account() const {return std::static_pointer_cast<SimAccount>(_account);}
+    auto get_sim_instrument() const {return std::static_pointer_cast<SimInstrument>(_instrument);}
+
+    virtual POrderData create_order(const OrderParameters &params, POrder replaced_order, std::size_t class_hash) override;
+    virtual void submit_order(POrderData order) override;
+    virtual bool need_local_trigger(OrderType type) const override;
 
 protected:
 
@@ -59,9 +58,8 @@ protected:
         Decimal filled = {};
     };
 
-    std::shared_ptr<SimInstrument> _instrument;
-    std::shared_ptr<SimAccount> _account;   
     std::vector<RegOrder> _active_orders;
+    
     
 
     Position _position = {}; //current position
@@ -92,7 +90,7 @@ protected:
             }
             Decimal bigger = std::max(buy_orders, sell_orders);
             Decimal margin = bigger / info.leverage;
-            ok = _account->update_wallet(info.pnl_currency, [&](SimAccount::WalletInfoExt &w){
+            ok = get_sim_account()->update_wallet(info.pnl_currency, [&](SimAccount::WalletInfoExt &w){
                 w.initial_margin  = margin - _margin;
             }, true) || ok;
             _margin = margin;
@@ -108,12 +106,12 @@ protected:
                     pos_blocked += std::max<Decimal>(params.quantity - f,0);                    
                 }
             }
-            ok = _account->update_wallet(info.quote_currency, [&](SimAccount::WalletInfoExt &w){
+            ok = get_sim_account()->update_wallet(info.quote_currency, [&](SimAccount::WalletInfoExt &w){
                 w.order_blocked = cur_blocked - _margin;
             }, true) || ok;
             _margin = cur_blocked;
             if (info.asset_has_wallet()) {
-                ok = _account->update_wallet(*info.asset_wallet, [&](SimAccount::WalletInfoExt &w){
+                ok = get_sim_account()->update_wallet(*info.asset_wallet, [&](SimAccount::WalletInfoExt &w){
                     w.order_blocked = pos_blocked - _position_blocked;
                 }, true) || ok;
             }
@@ -125,7 +123,7 @@ protected:
 
     void liquidation();
     POrder liquidation_order; 
-
+    void finish_order(POrderData ord);
     
     
 

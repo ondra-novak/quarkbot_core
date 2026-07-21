@@ -122,9 +122,24 @@ public:
 
     template<TradableInstrumentStream T>
     requires(StreamWithParam<T>)
-    EventStream<T> subscribe(typename T::Params params) {
+    EventStream<T> subscribe(typename T::Param params) {
         return _ptr->subscribe<T>(params);
     }
+
+    ///Subscribe market data
+    template<MarketInstrumentStream T>
+    requires(StreamWithoutParam<T> || StreamWithConstantParam<T>)
+    EventStream<T> subscribe() {
+        return _ptr->get_instrument()->subscribe<T>();
+    }
+
+    ///Subscribe market data
+    template<MarketInstrumentStream T>
+    requires(StreamWithParam<T>)
+    EventStream<T> subscribe(typename T::Param params) {
+        return _ptr->get_instrument()->subscribe<T>(params);
+    }
+
 
 };
 

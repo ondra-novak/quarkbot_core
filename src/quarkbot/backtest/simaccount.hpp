@@ -1,6 +1,6 @@
 #pragma once
 
-#include "quarkbot/risk_controller.hpp"
+#include "../common/account_base.hpp"
 #include <quarkbot/account.hpp>
 #include <quarkbot/defs.hpp>
 #include <quarkbot/underlying.hpp>
@@ -12,7 +12,7 @@
 #include <utility>
 namespace quarkbot {
 
-class SimAccount final: public IAccount, public std::enable_shared_from_this<SimAccount> {
+class SimAccount final: public AccountBase, public std::enable_shared_from_this<SimAccount> {
 public:
 
 
@@ -89,18 +89,10 @@ public:
         return iter->second;
     }
 
-    virtual RiskController set_risk_controller(RiskController r) override {
-        return std::exchange(_risk_cntr, r);
-    }
-
-    RiskController &get_risk_controller() {
-        return _risk_cntr;
-    }
 
 protected:    
     std::string _name;
     std::unordered_map<std::string, WalletInfoExt> _wallet;
-    RiskController _risk_cntr;
 };
 
 }

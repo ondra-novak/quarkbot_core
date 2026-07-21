@@ -10,6 +10,7 @@ namespace quarkbot {
     public:
 
         using Wrapper<IRiskController>::Wrapper;
+        using CheckResult = IRiskControl::CheckResult;
 
         template<typename T, typename ... Args>
         requires(std::is_base_of_v<IRiskController, T> && std::is_constructible_v<T, Args...>)
@@ -17,7 +18,7 @@ namespace quarkbot {
             return RiskController(std::make_shared<T>(std::forward<Args>(args)...));
         }
 
-        std::optional<OrderRejectionReason> pre_trade_check(const Order &order) {
+        CheckResult pre_trade_check(const Order &order) {
                         return _ptr->pre_trade_check(order);
                     }
 

@@ -8,18 +8,13 @@
 namespace quarkbot {
 
 ///Object intended to be used by IExchange adapter to support local triggered orders
-class OrderTrigger: public std::enable_shared_from_this<OrderTrigger> {
+class OrderTrigger {
 public:
     using Stream = EventStream<Trade>;
-    static std::shared_ptr<OrderTrigger> create(ExecutionWorker worker) {
-        return std::make_shared<OrderTrigger>(std::move(worker));
-    }
-
-    OrderTrigger(ExecutionWorker worker):_worker(std::move(worker)) {}
 
 
     ///place triggered order with special place request
-    POrder place_order(PTradableInstrument instrument, 
+    static POrder place_order(PTradableInstrument instrument, 
                     const OrderParameters &trig_params, //params reported by order while trigger phase                    
                     POrder order_to_replace, 
                     std::function<Order()> place_request);
@@ -27,15 +22,14 @@ public:
 
 
     ///place ordinary localy triggered order
-    POrder place_order(PTradableInstrument instrument, 
+    static POrder place_order(PTradableInstrument instrument, 
                 const OrderParameters &trig_params,
                 POrder order_to_replace);
 
-    bool convert_params_to_request(const OrderParameters &params, OrderRequest &request);
+    static bool convert_params_to_request(const OrderParameters &params, OrderRequest &request);
 
 
-protected:
-    ExecutionWorker _worker;
+
 
 
 };

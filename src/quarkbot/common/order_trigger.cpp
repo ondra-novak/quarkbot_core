@@ -1,4 +1,5 @@
 #include "order_trigger.hpp"
+#include "quarkbot/execution_worker.hpp"
 #include "quarkbot/order_defs.hpp"
 #include "quarkbot/tradable_instrument.hpp"
 #include <atomic>
@@ -88,22 +89,23 @@ namespace quarkbot {
                     POrder order_to_replace, 
                     std::function<Order()> place_request) {
         
-        auto nword = std::make_shared<TrigOrder>(trig_params,instrument,order_to_replace, _worker.now());              
-        
-        _worker.run(TrigOrder::monitor_order(nword, place_request));
+        ExecutionWorker worker = ExecutionWorker::current().required();
+        auto nword = std::make_shared<TrigOrder>(trig_params,instrument,order_to_replace, worker.now());              
+        worker.run(TrigOrder::monitor_order(nword, place_request));
         return nword;
     }
 
     POrder OrderTrigger::place_order(PTradableInstrument instrument, 
                 const OrderParameters &trig_params, //params reported by order while trigger phase                    
                 POrder order_to_replace) {
+        ExecutionWorker worker = ExecutionWorker::current().required();
         if (trig_params.type == OrderType::alert) {
             return place_order(instrument, trig_params, order_to_replace, {});
         } else {
             OrderRequest req;
             bool b = convert_params_to_request(trig_params, req);
             if (!b) {
-                auto out =  std::make_shared<TrigOrder>(trig_params, instrument,  order_to_replace, _worker.now());
+                auto out =  std::make_shared<TrigOrder>(trig_params, instrument,  order_to_replace, worker.now());
                 out->update(OrderRejectionWithText{OrderRejectionReason::invalid_params, "Not supported by local trigger"});
                 return out;
             } else {
