@@ -49,7 +49,7 @@ public:
     }
 
     ///Attach storage and restore orders
-    bool attach_storage(Storage storage, const StorageConfig &cfg, function_view<void(Order)> restored_orders) {
+    bool attach_storage(Storage storage, const StorageConfig &cfg, function_view<void(const Order &)> restored_orders) {
         return _ptr->attach_storage(storage.get_handle(), cfg, restored_orders);
     }
 
@@ -64,7 +64,7 @@ public:
         @note TO improve performance, the function is not MT safe. You should call this function before the first order is created
         to avoid chance of clash between setting storage and receiving report
     */
-    bool attach_storage(Storage storage, std::string key_prefix, function_view<void(Order)> restored_orders) {
+    bool attach_storage(Storage storage, std::string key_prefix, function_view<void(const Order &)> restored_orders) {
         return _ptr->attach_storage(storage.get_handle(), {
             std::format("{}.fills",key_prefix),
             std::format("{}.trades", key_prefix),

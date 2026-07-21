@@ -24,7 +24,7 @@ public:
     virtual ~ITradableInstrument() = default;
 
     virtual POrder place_order(const OrderRequest &params, POrder order_to_replace, std::size_t param_class_hash) = 0;
-    virtual bool attach_storage(PStorage storage, StorageConfig cfg, function_view<void(Order)> order_callback) = 0;
+    virtual bool attach_storage(PStorage storage, StorageConfig cfg, function_view<void(const Order &)> order_callback) = 0;
     virtual bool cancel_all_orders() = 0;
     virtual PAccount get_account() const = 0;
     virtual awaitable<Position> get_position() const = 0;
@@ -40,7 +40,7 @@ public:
     virtual POrder place_order(const OrderRequest &, POrder , std::size_t ) {
         throw UninitializedException();
     }
-    virtual bool attach_storage(PStorage , StorageConfig , function_view<void(Order)> ) {
+    virtual bool attach_storage(PStorage , StorageConfig , function_view<void(const Order &)> ) {
         return false;
     }
     virtual bool cancel_all_orders() {
