@@ -30,13 +30,14 @@ constexpr auto orderbook_level_max = OrderBookLevel{Decimal::max(), 0};
 constexpr auto orderbook_level_min = OrderBookLevel{0, 0};
 
 struct OrderBookIncrement : OrderBookLevel {
-    struct PMarketInstrumentStream {};    
+    struct MarketInstrumentStream {};    
     Side side = {};
     std::chrono::system_clock::time_point time;
 };
 
 
 struct OrderBook {
+    struct MarketInstrumentStream {};    
     ///bids
     std::span<const OrderBookLevel> bids;
     ///asks
