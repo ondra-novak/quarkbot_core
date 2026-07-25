@@ -51,7 +51,11 @@ namespace quarkbot {
         void update_order(const POrderData &order, OrderOpenStatus &&status);
         void update_order(const POrderData &order, const OrderFillStats &status);
 
-        virtual bool attach_storage(PStorage storage, StorageConfig cfg, function_view<void(Order)> order_callback) override;
+        virtual bool attach_storage(PStorage , StorageConfig , function_view<void(const Order &)> ) override {
+            return false;
+        }
+
+        bool attach_storage_impl(PStorage storage, StorageConfig cfg, function_view<void(const Order &)> order_callback);
 
         ///create order instance - order factory 
         virtual POrderData create_order(const OrderParameters &params, POrder replaced_order, std::size_t class_hash) = 0;

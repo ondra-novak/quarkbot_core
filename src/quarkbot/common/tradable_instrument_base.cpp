@@ -116,7 +116,7 @@ namespace quarkbot {
     }
 
 
-    bool TradableInstrumentBase::attach_storage(PStorage storage, StorageConfig cfg, function_view<void(Order)> order_callback) {
+    bool TradableInstrumentBase::attach_storage_impl(PStorage storage, StorageConfig cfg, function_view<void(const Order &)> order_callback) {
         this->_storage_config = cfg;
         this->_storage = std::move(storage);
 

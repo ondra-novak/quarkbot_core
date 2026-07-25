@@ -104,6 +104,16 @@ public:
     std::chrono::system_clock::time_point get_creation_time() const {
         return _ptr->get_creation_time();
     }
+
+    ///Retrieve ID of the order
+    /**
+        @return string view containing id. 
+        @note Function can return "" after order is send. The value is valid after first report is received
+     */
+    std::string_view get_id() const {
+        return _ptr->get_id();
+    }
+
     void cancel() {
         _ptr->cancel();
     }
