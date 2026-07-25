@@ -1,6 +1,7 @@
 
 
-add_library(quarkbot_impl)
+add_library(quarkbot_impl
+    streaming/orderbook_publisher.hpp)
 add_library(quarkbot::impl ALIAS quarkbot_impl)
 
 target_include_directories(quarkbot_impl INTERFACE "${CMAKE_CURRENT_LIST_DIR}/..")

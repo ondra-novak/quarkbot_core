@@ -71,8 +71,7 @@ namespace quarkbot {
 
 
     protected:
-        LockFreeQueue<ViewType, queue_len> _queue;
-        bool _closed = false;
+        LockFreeQueue<ViewType, queue_len> _queue;        
 
     };
 

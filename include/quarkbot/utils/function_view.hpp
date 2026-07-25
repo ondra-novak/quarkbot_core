@@ -23,9 +23,10 @@ public:
     requires(std::is_invocable_r_v<RetVal, Fn, Args...> )
     FunctionViewImpl(Fn &&fn) {
         _context = &fn;
+        using TFn = std::remove_reference_t<Fn>;
         _callptr = [](const void *ctx, Args && ...  args) {
-            Fn *fptr = const_cast<Fn *>(
-                       static_cast<std::add_const_t<Fn> *>(ctx));
+            TFn *fptr = const_cast<TFn *>(
+                       static_cast<std::add_const_t<TFn> *>(ctx));
             return (*fptr)(std::forward<Args>(args)...);
         };
     }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "orderbook_publisher.hpp"
 #include "quarkbot/stream/auction.hpp"
 #include "quarkbot/stream/closedbar.hpp"
 #include "quarkbot/stream/orderbook.hpp"
@@ -19,8 +20,6 @@ namespace quarkbot {
 template<typename InstrumentRef>
 class AllMarketStreamManager {
 public:
-    static constexpr unsigned int max_orderbook_with = 100;
-    using OrderBookSt = OrderBook<max_orderbook_with>;
 
 
     using QuotePublisher = LockFreePublisher<Quote, 1>;
@@ -30,7 +29,6 @@ public:
     using TickerPublisher = LockFreePublisher<Ticker, 1>;
     using RangedBarPublisher = LockFreePublisher<RangedBar, 1>;
     using AuctionPublisher = LockFreePublisher<Auction, 1>;
-    using OrderbookPublsher = LockFreePublisher<OrderBookSt, 1>;
     
 
     using QuoteStreamMap = SingleStreamMap<InstrumentRef, QuotePublisher>;
@@ -39,7 +37,7 @@ public:
     using TickerStreamMap = SingleStreamMap<InstrumentRef, TickerPublisher>;
     using ClosedBarStreamMap = ParametrizedStreamMap<InstrumentRef, ClosedBarPublisher, ClosedBar::Param>;
     using RangedBarStreamMap = ParametrizedStreamMap<InstrumentRef, RangedBarPublisher, RangedBar::Param>;
-    using OrderBookStreamMap = SingleStreamMap<InstrumentRef, OrderbookPublsher>;
+    using OrderBookStreamMap = SingleStreamMap<InstrumentRef, OrderbookPublisher>;
     using AuctionStreamMap  = SingleStreamMap<InstrumentRef, AuctionPublisher>;
 
 
@@ -52,7 +50,7 @@ public:
             case class_hash<ClosedBar>: return _closed_bars.create_subscriber(instrument, *reinterpret_cast<const ClosedBar::Param *>(param));
             case class_hash<RangedBar>: return _ranged_bars.create_subscriber(instrument, *reinterpret_cast<const RangedBar::Param *>(param));
             case class_hash<Auction>: return _auctions.create_subscriber(instrument);
-            case class_hash<OrderBookView>: return _orderbook.create_subscriber(instrument);
+            case class_hash<OrderBook>: return _orderbook.create_subscriber(instrument);
             default: return {};
         }
     }
@@ -87,24 +85,9 @@ public:
         @param instrument
         @param increment - contains orderbook increment - not whole orderbook - quantities are absolute, but level with quantity 0 is removed
     */
-    bool on_event(const InstrumentRef &instrument, const OrderBookView &increment) {
-        bool b1 = _orderbook.with_publisher(instrument, [&](LockFreePublisher<OrderBookSt,1> &pub){            
-            const OrderBookSt &ref = pub.get_top_value_ref();
-            pub.write([&](OrderBookSt &target) noexcept {
-                ref.apply_to(target, increment);
-                return true;
-            });
-        });
-        return b1;
-    }
-
-    bool on_event_snapshot(const InstrumentRef &instrument, const OrderBookView &increment) {
-        bool b1 = _orderbook.with_publisher(instrument, [&](LockFreePublisher<OrderBookSt,1> &pub){            
-            OrderBookSt ref={};
-            pub.write([&](OrderBookSt &target) noexcept {
-                ref.apply_to(target, increment);
-                return true;
-            });
+    bool on_event(const InstrumentRef &instrument, std::span<const OrderBookLevel> bids, std::span<const OrderBookLevel> asks, std::chrono::system_clock::time_point tp, bool snapshot) {
+        bool b1 = _orderbook.with_publisher(instrument, [&](auto &pub){            
+            pub.publish(bids, asks, tp, snapshot);
         });
         return b1;
     }
