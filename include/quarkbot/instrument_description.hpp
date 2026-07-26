@@ -3,6 +3,7 @@
 #include "quarkbot/decimal.hpp"
 #include "quarkbot/types.hpp"
 #include "quarkbot/underlying.hpp"
+#include "quarkbot/utils/lookup.hpp"
 #include "quarkbot/utils/tagset.hpp"
 namespace quarkbot {
 
@@ -21,6 +22,20 @@ enum class InstrumentCategory {
     Prediction  //prediction markets
 };
 
+template<>
+inline constexpr auto string_lookup<InstrumentCategory> = make_string_lookup_table<InstrumentCategory>({
+    {InstrumentCategory::Equity, "Equity"},
+    {InstrumentCategory::Fund, "Fund"},
+    {InstrumentCategory::Future, "Future"},
+    {InstrumentCategory::Comodity, "Comodity"},
+    {InstrumentCategory::Option, "Option"},
+    {InstrumentCategory::Forex, "Forex"},
+    {InstrumentCategory::Crypto, "Crypto"},
+    {InstrumentCategory::Index, "Index"},
+    {InstrumentCategory::Bond, "Bond"},
+    {InstrumentCategory::Economic, "Economic"},
+    {InstrumentCategory::Prediction, "Prediction"},
+});
 
 struct InstrumentGeometry {
     ///minimal tradable quantity

@@ -1,0 +1,7 @@
+#pragma once
+
+#cmakedefine QUARKBOT_NETWORK
+#cmakedefine QUARKBOT_LEVELDB
+#cmakedefine QUARKBOT_TESTS
+#cmakedefine quarkbot_DEVELOPMENT_MODE
+

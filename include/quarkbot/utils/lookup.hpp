@@ -69,6 +69,7 @@ constexpr LookupTable<A, std::string_view, N> make_string_lookup_table(const std
 }
 
 template<typename A, std::size_t N>
+requires(!std::is_same_v<A, std::string_view>)
 constexpr std::string lookup_available_options(const LookupTable<A, std::string_view, N> &src) {
     std::string out;
     auto b = src.begin();
@@ -79,6 +80,23 @@ constexpr std::string lookup_available_options(const LookupTable<A, std::string_
         while (b != e) {
             out.append(", ");
             out.append(b->second);
+            ++b;
+        }
+    }
+    return out;
+}
+
+template<typename A, std::size_t N>
+constexpr std::string lookup_available_options(const LookupTable<std::string_view,A, N> &src) {
+    std::string out;
+    auto b = src.begin();
+    auto e = src.end();
+    if (b != e) {
+        out.append(b->first);
+        ++b;
+        while (b != e) {
+            out.append(", ");
+            out.append(b->first);
             ++b;
         }
     }

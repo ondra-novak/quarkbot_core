@@ -25,7 +25,7 @@ public:
         return me->subscribe();
     }) {}
 
-    void publish(std::span<OrderBookLevel> bids, std::span<OrderBookLevel> asks, std::chrono::system_clock::time_point tp, bool snapshot) {
+    void publish(std::span<const OrderBookLevel> bids, std::span<const OrderBookLevel> asks, std::chrono::system_clock::time_point tp, bool snapshot) {
         std::scoped_lock _(_mx);
         if (snapshot) {
             create_snapshot(bids, asks, tp);
@@ -199,7 +199,7 @@ protected:
         return new_snp;
 
     }
-    void create_snapshot(std::span<OrderBookLevel> bids, std::span<OrderBookLevel> asks, std::chrono::system_clock::time_point tp) {
+    void create_snapshot(std::span<const OrderBookLevel> bids, std::span<const OrderBookLevel> asks, std::chrono::system_clock::time_point tp) {
         auto new_snp = alloc_snapshot();
 
         new_snp->asks.resize(asks.size());

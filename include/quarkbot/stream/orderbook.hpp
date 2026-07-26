@@ -49,6 +49,7 @@ struct OrderBook {
 
 };
 
+using OrderBookSnapshot = OrderBook;
 
 
 }

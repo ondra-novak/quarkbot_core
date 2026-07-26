@@ -19,6 +19,7 @@ set(BASIC_TESTS
     config.cpp
     tagset.cpp
     strategy_fragment.cpp
+    replay_csv.cpp
 )
 
 

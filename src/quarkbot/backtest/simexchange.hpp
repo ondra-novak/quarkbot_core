@@ -6,6 +6,7 @@
 #include "quarkbot/event_stream.hpp"
 #include "quarkbot/market_instrument.hpp"
 #include "quarkbot/stream/auction.hpp"
+#include "quarkbot/stream/orderbook.hpp"
 #include "quarkbot/types.hpp"
 #include "quarkbot/underlying.hpp"
 #include "quarkbot/abstract/iexchange.hpp"
@@ -64,6 +65,8 @@ public:
     void on_event(const std::string &instrument, Quote qt);
     void on_event(const std::string &instrument, Trade tr);
     void on_event(const std::string &instrument, Auction au);
+    void on_event(const std::string &instrument, const OrderBookSnapshot &sn);
+    void on_event(const std::string &instrument, const OrderBookIncrement &inc);
 
     bool cancel_all_orders(PTradableInstrument instrument );
     void cancel_order(POrder ord);

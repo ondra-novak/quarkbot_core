@@ -48,8 +48,8 @@ public:
     bool operator()(BacktestEvent &ev) {
         while (true) {
             if (!this->_source(ev)) return false;
-            auto iter = this->_map->find(ev.symbol);
-            if (iter != this->_map->end()) {
+            auto iter = this->_map.find(ev.symbol);
+            if (iter != this->_map.end()) {
                 ev.symbol.clear();
                 ev.symbol.append(iter->second);
                 return true;

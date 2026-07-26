@@ -1,5 +1,6 @@
 #include "simexchange.hpp"
 #include "quarkbot/execution_worker.hpp"
+#include "quarkbot/stream/orderbook.hpp"
 #include "quarkbot/stream/quote.hpp"
 #include "siminstrument.hpp"
 #include "simtradableinstrument.hpp"
@@ -75,6 +76,20 @@ void SimExchange::on_event(const std::string &instrument, Auction au) {
     _streams.on_event(instrument, au);
     
 }
+
+void SimExchange::on_event(const std::string &instrument, const OrderBookSnapshot &sn) {
+    auto mi = resolve_instrument(instrument);
+    _streams.on_event(instrument, sn.bids, sn.asks, sn.time, true);
+}
+void SimExchange::on_event(const std::string &instrument, const OrderBookIncrement &inc) {
+    auto mi = resolve_instrument(instrument);
+    if (inc.side == Side::buy) {
+        _streams.on_event(instrument, {static_cast<const OrderBookLevel *>(&inc),1}, {}, inc.time, false);
+    } else {
+        _streams.on_event(instrument, {}, {static_cast<const OrderBookLevel *>(&inc),1},  inc.time, false);
+    }
+}
+
 
 
 PTradableInstrument SimExchange::create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account) {

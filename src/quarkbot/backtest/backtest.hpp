@@ -3,6 +3,7 @@
 #include "quarkbot/context.hpp"
 #include "quarkbot/exchange.hpp"
 #include "quarkbot/strategy_fragment.hpp"
+#include "quarkbot/strategy_main.hpp"
 #include <chrono>
 #include <quarkbot/abstract/backtest_data_source.hpp>
 #include <filesystem>
@@ -91,7 +92,7 @@ public:
     requires(StrategyClass<_Strategy, _Context>)
     void add_strategy(_Context &&context = _Context{}) {
         init_context_basic( context);
-        _strategy_group.add(context.template create_and_start_strategy<_Strategy>(std::move(context)), _worker);
+        _strategy_group.add(create_and_start_strategy<_Strategy>(std::move(context)), _worker);
     }
 
         ///add strategy to the backtest environment and run it (indirectly by using factory)

@@ -1,4 +1,4 @@
-find_package(ZLIB REQUIRED)
+
 
 target_sources(quarkbot_impl PRIVATE
         tardis_data_source.cpp)

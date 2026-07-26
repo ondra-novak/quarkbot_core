@@ -19,7 +19,7 @@ namespace quarkbot {
             @return message stream
         */
         EventStream<Message> subscribe() {
-            if (_shared) return EventStream<Message>(_shared->subscribe());
+            if (_ptr) return EventStream<Message>(_ptr->subscribe());
             else return {};
         }
 
@@ -33,7 +33,7 @@ namespace quarkbot {
         void send_raw(std::string_view target, std::vector<std::uint8_t> payload, 
                 ConversationID conversation_id = {}, 
                 srl::SchemaHash schema = {}) {
-            _shared->send({
+            _ptr->send({
                 MessageType::normal_message,
                 {},
                 std::string(target),
@@ -46,7 +46,7 @@ namespace quarkbot {
         }
 
         void send(const Message &msg) {
-            _shared->send(msg);
+            _ptr->send(msg);
         }
 
 
@@ -58,8 +58,7 @@ namespace quarkbot {
          */
         template<typename T>
         void send(std::string_view target, const T &payload, ConversationID conversation_id = {});
-    protected:
-        std::shared_ptr<IMessageBus> _shared;
+        
     };
 
 

@@ -3,6 +3,7 @@
 #include "quarkbot/order.hpp"
 #include "quarkbot/order_defs.hpp"
 #include "quarkbot/stream/auction.hpp"
+#include "quarkbot/stream/orderbook.hpp"
 #include "quarkbot/stream/quote.hpp"
 #include "quarkbot/stream/trade.hpp"
 #include <chrono>
@@ -29,7 +30,14 @@ struct BacktestEvent {
     ///Time of the event
     std::chrono::system_clock::time_point time;
     ///Data of the event, can be a trade, quote, auction or a custom event
-    std::variant<CustomBacktestEvent, CustomBacktestEventOnExchange, CustomBacktestEventOnAccount, Trade, Quote, Auction> data;
+    std::variant<CustomBacktestEvent,
+                 CustomBacktestEventOnExchange, 
+                 CustomBacktestEventOnAccount, 
+                 Trade, 
+                 Quote, 
+                 Auction, 
+                 OrderBookIncrement, 
+                 OrderBookSnapshot> data;
 };
 
 template<typename T>
