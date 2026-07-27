@@ -10,17 +10,15 @@ namespace quarkbot {
     class stop_awaiter {
     public:
         stop_awaiter(std::stop_token tkn):tkn(std::move(tkn)) {}
-        //awaiter is not movable, it is intended to be created temporarily during co_await and destroyed immediately after resumption, so no need to support move semantics
         stop_awaiter(stop_awaiter &&other) = delete;
         stop_awaiter &operator=(stop_awaiter &&other) = delete;
-        ~stop_awaiter() {/* nothing to delete here, but union requires a destructor*/};
-
+       
         bool await_ready() const {return tkn.stop_requested();}
         void await_suspend(std::coroutine_handle<> h) {
-            std::construct_at(&callback,tkn, CB{h});            
+            callback.emplace(tkn, CB{h});            
         }
         void await_resume() {
-            std::destroy_at(&callback);
+            callback.reset(); //remove callback, it is no longer needed
         }
 
     protected:
@@ -35,10 +33,7 @@ namespace quarkbot {
 
     public:
         std::stop_token tkn;
-        union {
-            //valid only during co_await
-            std::stop_callback<CB> callback;
-        };
+        std::optional<std::stop_callback<CB> >callback;
     };
 
     ///Awaitable stop token that can be co_awaited, resuming the awaiting coroutine when stop is requested
