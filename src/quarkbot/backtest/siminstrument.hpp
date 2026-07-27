@@ -27,7 +27,12 @@ public:
         return _exchange->create_tradable_instrument(shared_from_this(), acc);
     }
 
-     virtual awaitable<bool> receive_snapshot(Snapshot &v, std::stop_token stop_token = {}) override;
+    virtual awaitable<bool> receive_snapshot(Snapshot &v, std::stop_token stop_token = {}) override;
+
+    virtual PHistoryAdapter get_history() override {
+        //todo
+        return nullptr;
+    }
 
     auto get_sim_exchange() const {return _exchange;}
 protected:

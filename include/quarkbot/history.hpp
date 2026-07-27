@@ -27,6 +27,6 @@ public:
         return {};
     }
 
-}
+};
 
 }
