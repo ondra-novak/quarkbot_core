@@ -53,7 +53,7 @@ void test_report() {
     exec->set_time(tp);
 
 
-    auto rep = open_report(out,ExecutionWorker(exec));
+    auto rep = open_report(out);
     auto opst = OrderOpenStatus{"1234",{}};
     auto opst2 = OrderOpenStatus{"2578",{}};
 

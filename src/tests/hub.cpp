@@ -1,9 +1,10 @@
 #include <quarkbot/hub.hpp>
+#include "basic_coro/coroutine.hpp"
 #include "quarkbot/strategy_fragment.hpp"
 #include "check.h"
 
 
-quarkbot::StrategyFragment print_events(quarkbot::Hub<int>  s) {
+coro::coroutine<void> print_events(quarkbot::Hub<int>  s) {
     int v;
     bool r;
     for (int i = 0; i < 5; i++) {
@@ -16,14 +17,14 @@ quarkbot::StrategyFragment print_events(quarkbot::Hub<int>  s) {
     co_return;
 }
 
-quarkbot::StrategyFragment send_events(quarkbot::Hub<int>  s) {
+coro::coroutine<void> send_events(quarkbot::Hub<int>  s) {
     for (int i = 0; i < 5; i++) {
         co_await s.send(i);
     }
     s.close();
 }
     
-quarkbot::StrategyFragment print_events_2(quarkbot::Hub<int>  s) {
+coro::coroutine<void> print_events_2(quarkbot::Hub<int>  s) {
     std::optional<int> v;
     bool r;
     for (int i = 0; i < 5; i++) {
@@ -36,7 +37,7 @@ quarkbot::StrategyFragment print_events_2(quarkbot::Hub<int>  s) {
     co_return;
 }
 
-quarkbot::StrategyFragment send_events_2(quarkbot::Hub<int>  s) {
+coro::coroutine<void> send_events_2(quarkbot::Hub<int>  s) {
     for (int i = 0; i < 5; i++) {
         co_await s.send(std::move(i));
     }

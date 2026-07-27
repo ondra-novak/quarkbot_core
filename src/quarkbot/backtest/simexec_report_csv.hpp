@@ -4,6 +4,7 @@
 #include "quarkbot/abstract/backtest_data_source.hpp"
 #include "quarkbot/abstract/imarket_instrument.hpp"
 #include "quarkbot/abstract/itradable_instrument.hpp"
+#include "quarkbot/execution_worker.hpp"
 #include "quarkbot/order_defs.hpp"
 #include <filesystem>
 #include <format>
@@ -100,11 +101,12 @@ constexpr inline std::string_view to_string(OrderRejectionReason rsn) {
 
 
 template<std::invocable<std::string_view> LineOutput>
-auto open_report(LineOutput line_output, ExecutionWorker worker = ExecutionWorker::current()){
-    worker.required();
+auto open_report(LineOutput line_output){
     line_output("time,event,q,instrument,order,name,side,quantity,type,limit-price,stop-price,fill-price,fill-quantity,note");
-    return [worker, line_output = std::move(line_output), buffer = std::string()]
+    return [line_output = std::move(line_output), buffer = std::string()]
                             (const Order &raw_order, const OrderStatusUpdate &update) mutable{        
+
+        auto worker = ExecutionWorker::current();
         POrderData order = std::dynamic_pointer_cast<OrderInternalData>(raw_order.get_handle());
         const auto &params =order->get_parameters();
         auto iter = std::back_inserter(buffer);
@@ -165,17 +167,17 @@ auto open_report(LineOutput line_output, ExecutionWorker worker = ExecutionWorke
 
 }
 
-inline ReportSink open_report(const std::filesystem::path &output, ExecutionWorker worker = ExecutionWorker::current()) {
+inline ReportSink open_report(const std::filesystem::path &output) {
     auto f = std::make_shared<std::ofstream>(output, std::ios::out|std::ios::trunc);
     if (!(*f)) throw std::runtime_error(std::format("Failed to open {}", output.string()));
     return open_report([f](std::string_view line) mutable{
         (*f) << line << "\n";
-    }, std::move(worker));
+    });
 }
-inline ReportSink open_report(std::ostream &output, ExecutionWorker worker = ExecutionWorker::current()) {
+inline ReportSink open_report(std::ostream &output) {
     return open_report([&output](std::string_view line) mutable{
         output << line << "\n";
-    }, std::move(worker));
+    });
 
 }
 

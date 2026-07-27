@@ -1,9 +1,10 @@
 #include <quarkbot/strategy_publisher.hpp>
 #include <quarkbot/strategy_fragment.hpp>
+#include "basic_coro/coroutine.hpp"
 #include "check.h"
 
 
-quarkbot::StrategyFragment print_events(quarkbot::EventStream<int> s) {
+coro::coroutine<void> print_events(quarkbot::EventStream<int> s) {
     int v;
     bool r;
     for (int i = 0; i < 5; i++) {

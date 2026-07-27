@@ -1,3 +1,4 @@
+#include "config_instrument.hpp"
 #include <charconv>
 #include <chrono>
 #include <filesystem>

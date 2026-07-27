@@ -19,10 +19,13 @@ target_sources(quarkbot_impl PRIVATE
     merged_data_source.cpp
     merged_data_source.hpp
     symbology_mapping.hpp
-    datasource_config.cpp
     replay_csv_file.hpp
     replay_csv_file.cpp
-    instrument_config.hpp
-    instrument_config.cpp
+    config_instrument.hpp
+    config_instrument.cpp
+    config_datasource.hpp
+    config_datasource.cpp
+    config_backtest.cpp
+    config_backtest.hpp
 )
 target_include_directories(quarkbot_impl PRIVATE ${CMAKE_BINARY_DIR}/)

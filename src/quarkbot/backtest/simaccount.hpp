@@ -18,51 +18,19 @@ public:
 
     struct WalletInfoExt : WalletInfo {
         Decimal margin_buys = {};
-        Decimal margin_sells = {};
+        Decimal margin_sells = {};        
+        bool disable_balance_check = true;  //< default is true, but it is set to false if wallet is configured by constructor
     };
 
-    SimAccount(std::string name, std::span<std::pair<UnderlyingCurrency, Decimal> > wallet)
-        :_name(std::move(name))
-    {
-        for (auto &x: wallet) {
-            update_wallet(x.first,[&](WalletInfoExt &w){w.balance = x.second;},true);
-        }
-    }
+    SimAccount(std::string name, std::span<std::pair<UnderlyingCurrency, Decimal> > wallet);
 
+    virtual std::string_view get_name() const override;
+    virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency currency) const override;
+    virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency ) const override;
 
-    virtual std::string_view get_name() const override {
-        return _name;
-    }
-    virtual awaitable<WalletInfo> get_balance(UnderlyingCurrency currency) const override {
-        auto iter = _wallet.find(currency.id);
-        if (iter == _wallet.end()) return std::nullopt;
-        return iter->second;
-    }
+    virtual awaitable<bool> transfer(UnderlyingCurrency currency, PAccount to_account, Decimal amount) override;
 
-    virtual awaitable<WalletInfo> get_total_equity(UnderlyingCurrency ) const override {return std::nullopt;}
-
-
-    virtual awaitable<bool> transfer(UnderlyingCurrency currency, PAccount to_account, Decimal amount) override {
-        auto iter = _wallet.find(currency.id);
-        if (iter == _wallet.end()) return false;
-        if (iter->second.balance < amount) return false;
-        auto to_acc = std::dynamic_pointer_cast<SimAccount>(to_account);
-        if (!to_acc) return false;
-        iter->second.balance -= amount;
-        auto to_iter = to_acc->_wallet.find(currency.id);
-        if (to_iter == to_acc->_wallet.end()) {
-            to_acc->_wallet[currency.id] = WalletInfoExt{{amount}};
-        } else {
-            to_iter->second.balance += amount;
-        }
-        return true;
-    }
-
-    bool check_bankruptcy(const WalletInfo &info) const {
-        return info.balance + info.unrealized_pnl >= info.initial_margin + info.order_blocked;
-    }
-
-
+    static bool check_bankruptcy(const WalletInfoExt &info) ;
 
     ///update wallet
     template<std::invocable<WalletInfoExt &> Callback>
@@ -82,13 +50,7 @@ public:
         return update_wallet(currency.id, std::forward<Callback>(cb), create);
     }
 
-    const WalletInfo &get_wallet(const std::string &id) {
-        static WalletInfo empty;
-        auto iter = _wallet.find(id);
-        if (iter == _wallet.end()) return empty;
-        return iter->second;
-    }
-
+    const WalletInfo &get_wallet(const std::string &id);
 
 protected:    
     std::string _name;

@@ -157,4 +157,9 @@ inline constexpr typename Config<Source>::OptionalValue Config<Source>::Value::o
 }
 
 
+struct ConfigStringReader {
+    std::string_view data;
+    std::string_view operator()() {return std::exchange(data,"");}
+};
+
 }

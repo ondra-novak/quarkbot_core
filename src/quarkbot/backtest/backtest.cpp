@@ -66,7 +66,7 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
             ex->set_reporter(std::get<ReportSink>(sim_params.reporter));
         } else if (std::holds_alternative<std::filesystem::path>(sim_params.reporter)) {
             auto &path = std::get<std::filesystem::path>(sim_params.reporter);
-            ex->set_reporter( open_report(path, ExecutionWorker(wrk)));
+            ex->set_reporter( open_report(path));
         }
         ex->set_slippage(sim_params.slippage);
         ex->set_latency(sim_params.latency);

@@ -1,6 +1,6 @@
 #include "merged_data_source.hpp"
 #include "quarkbot_compile_config.h"
-#include "datasource_config.hpp"
+#include "config_datasource.hpp"
 #include "quarkbot/abstract/backtest_data_source.hpp"
 #include "quarkbot/utils/simple_ini.hpp"
 #include "quarkbot/utils/string_utils.hpp"
