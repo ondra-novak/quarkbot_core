@@ -43,7 +43,7 @@ struct ClosedBar  {
         if (lb != start_time) {
             return {
                 tr.price,tr.price,tr.price,tr.price,
-                tr.size,1,start_time, start_time+std::chrono::seconds(interval)
+                tr.size,1,lb, lb+std::chrono::seconds(interval)
             };
         } else {
             return {
