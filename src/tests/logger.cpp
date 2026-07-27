@@ -1,10 +1,10 @@
 #include "../quarkbot/common/logger.hpp"
 #include "check.h"
 #include "quarkbot/json/json.hpp"
+#include "quarkbot/log.hpp"
 #include <filesystem>
 #include <fstream>
 #include <regex>
-#include <source_location>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -14,13 +14,13 @@ using namespace quarkbot;
 
 std::string prev_line;
 LogLevel prev_log_level =LogLevel::disabled;
-std::source_location prev_source_loc;
+Logger::Location prev_source_loc;
 
 
-void test_logger(LogLevel level, const std::source_location *location, std::string_view content){
+void test_logger(LogLevel level, const Logger::Location &location, std::string_view content){
     prev_line = content;
     prev_log_level = level;
-    prev_source_loc = *location;
+    prev_source_loc = location;
 }
 
 
@@ -38,7 +38,7 @@ struct ParseLogRes {
     unsigned int line = 0;
 };
 
-static auto rg = std::regex(R"regexp(^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} T\d+ debug \[([^\]]+)\] (.*) \{.*[/\\]logger\.cpp:(\d+)\}$)regexp");
+static auto rg = std::regex(R"regexp(^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} debug \[([^\]]+)\] (.*) \{logger\.cpp:(\d+)\}$)regexp");
 
 ParseLogRes extract_log(std::string_view line) {
     ParseLogRes out;
@@ -59,7 +59,6 @@ ParseLogRes extract_log(std::string_view line) {
 
 }
 
-
 int main() {
 
     Logger::instance.cur_level = LogLevel::debug;
@@ -68,7 +67,7 @@ int main() {
     logOutput(LogLevel::debug, "{} {}", "Hello", 42);
     CHECK_EQUAL(prev_line, "Hello 42");
     CHECK(prev_log_level == LogLevel::debug);
-    CHECK(std::string_view(prev_source_loc.file_name()).ends_with("logger.cpp"));
+    CHECK(std::string_view(prev_source_loc.file).ends_with("logger.cpp"));
 
     logOutput(LogLevel::debug, "{}", Json{10,20});
     CHECK_EQUAL(prev_line, "[10,20]");
@@ -87,6 +86,7 @@ int main() {
     logDebug("{}={}", "x",12);
     logDebug("new\nline");
     TesterClass::test_log();
+    logOutputCB(LogLevel::debug, {"logger.cpp","void bbb::function()",123}, []{return "test_callback";});
 
     log_close();
 
@@ -98,19 +98,19 @@ int main() {
     auto ex = extract_log(ln);
     CHECK_EQUAL(ex.context,"-");
     CHECK_EQUAL(ex.payload,"{\"a\":10,\"b\":[1,2,3]}");
-    CHECK_EQUAL(ex.line,87);
+    CHECK_EQUAL(ex.line,86);
 
 
     std::getline(f,ln);
     ex = extract_log(ln);
     CHECK_EQUAL(ex.context,"-");
     CHECK_EQUAL(ex.payload,"x=12");
-    CHECK_EQUAL(ex.line,88);
+    CHECK_EQUAL(ex.line,87);
 
     std::getline(f,ln);
     ex = extract_log(ln);
     CHECK_EQUAL(ex.payload,"new\x7fline");
-    CHECK_EQUAL(ex.line,89);
+    CHECK_EQUAL(ex.line,88);
 
 
     std::getline(f,ln);
@@ -118,6 +118,12 @@ int main() {
     CHECK_EQUAL(ex.context,"TesterClass");
     CHECK_EQUAL(ex.payload,"y=test");
     CHECK_EQUAL(ex.line,30);
+
+    std::getline(f,ln);
+    ex = extract_log(ln);
+    CHECK_EQUAL(ex.context,"bbb");
+    CHECK_EQUAL(ex.payload,"test_callback");
+    CHECK_EQUAL(ex.line,123);
 
 
     std::filesystem::remove(p,ec);

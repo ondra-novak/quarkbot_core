@@ -41,6 +41,17 @@ namespace quarkbot {
 
     ///logger object (singleton)
     struct Logger {
+
+        struct Location {
+            std::string_view file;
+            std::string_view function;
+            uint_least32_t line;
+        };
+
+        static Location from(const std::source_location &loc) {
+            return {loc.file_name(), loc.function_name(), loc.line()};
+        }
+
         ///current log level
         LogLevel cur_level = LogLevel::disabled;
         ///log sink - who processing logs
@@ -51,8 +62,8 @@ namespace quarkbot {
 
         @note default sink is empty, so no log is produced. See redirection functions
         */
-        void (*log_sink)(LogLevel level, const std::source_location *location, std::string_view content)
-             = [](LogLevel , const std::source_location *,  std::string_view ) {/*no logger by default*/};        
+        void (*log_sink)(LogLevel level, const Location &location, std::string_view content)
+             = [](LogLevel , const Location &,  std::string_view ) {/*no logger by default*/};        
     
 
 
@@ -99,17 +110,8 @@ namespace quarkbot {
         char buffer[1024];
         auto res = std::format_to_n<char *, typename LoggerTypeType<Args>::type...>(
                     buffer, sizeof(buffer), format,  LoggerTypeType<Args>()(std::forward<Args>(args))...);
-        Logger::instance.log_sink(level, &format._loc, {buffer, static_cast<std::size_t>(res.size)});
+        Logger::instance.log_sink(level, Logger::from(format._loc), {buffer, static_cast<std::size_t>(res.size)});
         
-    }
-
-    template<typename ... Args>
-    inline void logOutputLoc(LogLevel level, const std::source_location &loc, LogFormatString<Args...> format, Args &&... args ) {
-        if (Logger::instance.cur_level < level) return;        
-        char buffer[1024];
-        auto res = std::format_to_n<char *, typename LoggerTypeType<Args>::type...>(
-                    buffer, sizeof(buffer), format,  LoggerTypeType<Args>()(std::forward<Args>(args))...);
-        Logger::instance.log_sink(level, &loc, {buffer, static_cast<std::size_t>(res.size)});        
     }
 
     
@@ -138,6 +140,16 @@ namespace quarkbot {
     inline void logFatal(LogFormatString<Args...> format, Args &&... args ) {
         logOutput(LogLevel::fatal, format, std::forward<Args>(args)...);
     }
+
+    ///Log output with callback returning the content
+    template<std::invocable<> CB>
+    requires (std::is_convertible_v<std::invoke_result_t<CB>, std::string_view>)
+    inline void logOutputCB(LogLevel level, const Logger::Location &location, CB callback) {
+        if (Logger::instance.cur_level < level) return;        
+        auto ln = callback();
+        Logger::instance.log_sink(level, location, std::string_view(ln));
+    }
+
     template<typename T>
     auto logStreamedItem(const T &val) {
         return [val] {
