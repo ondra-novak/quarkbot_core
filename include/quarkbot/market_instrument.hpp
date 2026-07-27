@@ -3,14 +3,12 @@
 #include "abstract/imarket_instrument.hpp"
 #include "abstract/ipublisher.hpp"
 #include "instrument_description.hpp"
+#include "quarkbot/defs.hpp"
+#include "quarkbot/history.hpp"
 #include "stream/snapshot.hpp"
 #include "utils/wrapper.hpp"
 namespace quarkbot {
 
-template<typename T>
-concept MarketInstrumentStream = requires {
-    typename T::MarketInstrumentStream;
-};
 
 
 class Exchange;
@@ -67,6 +65,12 @@ public:
         return _ptr->receive_snapshot(v, std::move(token));
     }
     
+    ///Retrieve history adapter - this adapter allows to request historical data for this instrument
+    HistoryAdapter get_history() const {
+        PHistoryAdapter h = _ptr->get_history();
+        return h?HistoryAdapter(std::move(h)):HistoryAdapter();
+    }
+
 };
 
 

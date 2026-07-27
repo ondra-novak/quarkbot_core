@@ -22,6 +22,7 @@ class IScheduler;
 class IExecutionWorker;
 class IMessageBus;
 class IOrder;
+class IHistoryAdapter;
 
 
 
@@ -34,6 +35,7 @@ using PExecutionWorker = std::shared_ptr<IExecutionWorker>;
 using coroutine = coro::coroutine<void>;
 using PMessageBus = std::shared_ptr<IMessageBus>;
 using POrder = std::shared_ptr<IOrder>;
+using PHistoryAdapter = std::shared_ptr<IHistoryAdapter>;
 
 
 template<typename _Hub, typename _Val>

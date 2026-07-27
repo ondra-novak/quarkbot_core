@@ -2,10 +2,9 @@
 
 #include "ipublisher.hpp"
 #include "../instrument_description.hpp"
-#include "../underlying.hpp"
 #include "../types.hpp"
-#include "quarkbot/defs.hpp"
-#include "quarkbot/stream/snapshot.hpp"
+#include "../defs.hpp"
+#include "../stream/snapshot.hpp"
 
 namespace quarkbot {
 
@@ -29,6 +28,7 @@ public:
      */
     virtual PTradableInstrument create_tradable_instrument(PAccount account) = 0;
 
+    virtual PHistoryAdapter get_history() = 0;
     
     virtual awaitable<bool> receive_snapshot(Snapshot &v, std::stop_token stop_token = {}) = 0;
 
@@ -38,11 +38,12 @@ public:
 
 class IMarketInstrument::Null final: public IMarketInstrument {
 public:
-    virtual PExchange get_exchange() const {throw UninitializedException();}
-    virtual const Info &get_info() const  {throw UninitializedException();}
-    virtual PTradableInstrument create_tradable_instrument(PAccount ) {throw UninitializedException();}
-    virtual awaitable<bool> receive_snapshot(Snapshot &, std::stop_token  = {}) {throw UninitializedException();}
-    virtual std::shared_ptr<IEventStreamBase> subscribe_stream(std::size_t , const void *) {return nullptr;}
+    virtual PExchange get_exchange() const override {throw UninitializedException();}
+    virtual const Info &get_info() const  override {throw UninitializedException();}
+    virtual PTradableInstrument create_tradable_instrument(PAccount ) override {throw UninitializedException();}
+    virtual awaitable<bool> receive_snapshot(Snapshot &, std::stop_token  = {}) override {throw UninitializedException();}
+    virtual PHistoryAdapter get_history() override {throw UninitializedException();}
+    virtual std::shared_ptr<IEventStreamBase> subscribe_stream(std::size_t , const void *) override {return nullptr;}
 };
 
 

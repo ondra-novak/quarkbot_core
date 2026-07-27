@@ -70,6 +70,8 @@ struct InstrumentDescription : ContractInfo, InstrumentGeometry{
     InstrumentCategory category = {};
     ///various tags (optional)
     TagSet tags = {};
+    ///instrument time zone - can be nullptr for UTC
+    const std::chrono::time_zone *time_zone = {};
     ///instrument unique ID related to given exchange - not always used (optional)
     std::size_t uid = 0;
 

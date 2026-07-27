@@ -1,4 +1,5 @@
 #include <charconv>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -34,7 +35,8 @@ public:
                                std::optional<UnderlyingCurrency> InstrumentDescription::*,
                                InstrumentCategory InstrumentDescription::*,
                                InstrumentType InstrumentDescription::*,
-                               std::size_t InstrumentDescription::*>;
+                               std::size_t InstrumentDescription::*,
+                               const std::chrono::time_zone *InstrumentDescription::*>;
 
     static constexpr auto field_lookup = make_lookup_table<std::string_view, Field>({
         {"quote_currency", &InstrumentDescription::quote_currency},
@@ -54,6 +56,7 @@ public:
         {"leverage",&InstrumentDescription::leverage},
         {"fee_rate_maker",&InstrumentDescription::fee_rate_maker},
         {"fee_rate_taker",&InstrumentDescription::fee_rate_taker},
+        {"time_zone", &InstrumentDescription::time_zone}
     });
 
 
@@ -139,6 +142,10 @@ public:
                             auto res = std::from_chars(row.value.begin(), row.value.end(), id);
                             if (res.ec != std::errc{}) throw std::runtime_error(std::format("Invalid number: {}", row.value));
                             desc.*ptr = id;
+                        },
+                        [&](const std::chrono::time_zone *InstrumentDescription::*ptr) {
+                            auto &tzdb = std::chrono::get_tzdb();
+                            desc.*ptr = tzdb.locate_zone(row.value);                                                        
                         }
                     );
                 

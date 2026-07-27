@@ -49,7 +49,7 @@ public:
     StrategyFragment print_bars(MarketInstrument instrument, EventStream<ClosedBarInterval<300>> s) {
         ClosedBarInterval<300> cb;
         while(co_await s.receive(cb)) {
-            std::cout << cb.interval_begin() << " " << instrument.get_info().name << " ohlc:" 
+            std::cout << cb.start_time << " " << instrument.get_info().name << " ohlc:" 
                 << cb.open.to_double() << ","
                 << cb.high.to_double() << ","
                 << cb.low.to_double() << ","

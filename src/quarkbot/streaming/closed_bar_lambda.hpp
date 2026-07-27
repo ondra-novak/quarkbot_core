@@ -2,6 +2,7 @@
 
 #include "quarkbot/stream/closedbar.hpp"
 #include "quarkbot/stream/quote.hpp"
+#include <chrono>
 namespace quarkbot {
 
     inline auto calculate_closed_bar(const Trade &tr) {
@@ -11,11 +12,11 @@ namespace quarkbot {
                 //calculate new value
                 auto nw = x.add(tr, interval);
                 //test if we creating new candle
-                if (nw.interval_index != x.interval_index) {
+                if (nw.start_time != x.start_time) {
                     //if it is new candle remember new value outside
                     newval = nw;
                     //publish previous candle
-                    return x.interval_index != 0;   //don't publish zero interval candles
+                    return x.start_time != std::chrono::system_clock::time_point{};   //don't publish zero interval candles
                 }
                 //no new candle, update candle
                 x = nw;
@@ -39,7 +40,7 @@ namespace quarkbot {
         return  [&](ClosedBar::Param interval, auto &publisher){
             bool published;
             publisher.write([&](ClosedBar &x) noexcept {
-                published = x.interval_index != x.to_interval_index(qt.time, interval);
+                published = x.start_time != x.interval_lower_bound(qt.time, interval);
                 return published;
             });
             if (published) {

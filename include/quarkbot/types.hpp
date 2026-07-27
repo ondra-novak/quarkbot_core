@@ -277,6 +277,10 @@ public:
     UninitializedException():std::runtime_error("Called a method on uninitialized variable") {}
 };
 
+template<typename T>
+concept MarketInstrumentStream = requires {
+    typename T::MarketInstrumentStream;
+};
 
 
 };
