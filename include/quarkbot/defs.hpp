@@ -71,7 +71,6 @@ concept BasicMathType = std::is_default_constructible_v<T> && std::is_constructi
     {-value} -> std::same_as<T>;
 };
 
-using Timestamp = std::chrono::system_clock::time_point;
 
 
 }
