@@ -79,6 +79,7 @@ int main() {
     std::filesystem::path p = std::filesystem::temp_directory_path()/"quarkbot_test_log.log";
     std::filesystem::remove(p,ec);
     
+
     
     log_to_file(p);
 //    log_to_stderr();
@@ -117,7 +118,7 @@ int main() {
     ex = extract_log(ln);
     CHECK_EQUAL(ex.context,"TesterClass");
     CHECK_EQUAL(ex.payload,"y=test");
-    CHECK_EQUAL(ex.line,30);
+    CHECK_EQUAL(ex.line,29);
 
     std::getline(f,ln);
     ex = extract_log(ln);

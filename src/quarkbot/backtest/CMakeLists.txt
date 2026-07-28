@@ -27,5 +27,7 @@ target_sources(quarkbot_impl PRIVATE
     config_datasource.cpp
     config_backtest.cpp
     config_backtest.hpp
+    cli.hpp
+    cli.cpp
 )
 target_include_directories(quarkbot_impl PRIVATE ${CMAKE_BINARY_DIR}/)

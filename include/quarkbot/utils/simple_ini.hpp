@@ -1,6 +1,7 @@
 
 
 #include <concepts>
+#include <istream>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -162,3 +163,20 @@ protected:
         return txt;
     }
 };
+
+namespace _details {
+
+class IniReaderFromStream_Source {
+    std::istream &s;
+    char buffer[4096];
+public:
+    IniReaderFromStream_Source(std::istream &s):s(s) {}
+    std::string_view operator()() {
+        if (!s) return {};
+        s.read(buffer, sizeof(buffer));
+        return {buffer, static_cast<std::size_t>(s.gcount())};
+    }
+};
+
+}
+using IniReaderFromStream = IniReader<_details::IniReaderFromStream_Source>;

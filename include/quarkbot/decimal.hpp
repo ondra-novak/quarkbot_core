@@ -236,10 +236,17 @@ public:
     Decimal(double value):Decimal(from_double(value)) {}    
 
     static Decimal from_double(double value) {
-        auto b =value < 0;
-        if (b) value = -value;
-        auto lg = std::ceil(std::log10(value));
-        return normalize(static_cast<std::int64_t>((b?-1:1)*std::round(value * std::pow(10,-lg+mantissa_digits))), static_cast<Exponent>(lg));
+        if (value < 0.0) {
+            auto lg = std::ceil(std::log10(-value));
+            return normalize(static_cast<std::int64_t>(-1*std::round(value * std::pow(10,-lg+mantissa_digits))), static_cast<Exponent>(lg));
+
+        } else if (value > 0.0) {
+            auto lg = std::ceil(std::log10(value));
+            return normalize(static_cast<std::int64_t>(std::round(value * std::pow(10,-lg+mantissa_digits))), static_cast<Exponent>(lg));
+
+        } else {
+            return {};
+        }
     }
 
     
@@ -473,6 +480,10 @@ public:
         return Decimal(r);
     }
 
+    friend Decimal sqrt(const Decimal &other) {
+        return Decimal(std::sqrt(other.to_double()));
+    }
+
 
   
     template<typename _Out>
@@ -509,10 +520,12 @@ public:
             auto dm = d.mantissa();
             *out++ = '.';
             if (dm != 0) {
+                int prezero = 0;
+                for (Exponent e = d.exponent(); e < decimals; ++e) {*out++='0'; prezero++;}
                 maxdigits = std::min(decimals, mantissa_digits);
-                m = _decimal_details::divide_pow10(dm,static_cast<unsigned int>(mantissa_digits - maxdigits));
+                m = _decimal_details::divide_pow10(dm,static_cast<unsigned int>(mantissa_digits - maxdigits+prezero));
                 out = out_number(out, m);
-                remain = decimals - mantissa_digits;
+                remain = decimals - mantissa_digits-prezero;
             }
             for (int i = 0; i < remain;++i) *out++ = '0';
         }
@@ -590,6 +603,7 @@ public:
         dec.to_string(iter);
         return stream;
     }
+    
   
 
     

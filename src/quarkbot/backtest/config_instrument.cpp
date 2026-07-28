@@ -170,16 +170,18 @@ public:
         instruments.clear();
         return out;
     }
-    std::vector<InstrumentDescription> configure_instruments(std::filesystem::path ini_config, 
-        const InstrumentDescription &default_values, std::string_view instrument_prefix)  {
-
-            InstrumentCollector coll(instrument_prefix);
-            coll.walk(ini_config, default_values);
-            return coll.build();
-    }
 
 
 
 };
+
+std::vector<InstrumentDescription> configure_instruments(std::filesystem::path ini_config, 
+    const InstrumentDescription &default_values, std::string_view instrument_prefix)  {
+
+        InstrumentCollector coll(instrument_prefix);
+        coll.walk(ini_config, default_values);
+        return coll.build();
+}
+
 
 }

@@ -10,6 +10,9 @@ namespace quarkbot {
 
 class StorageTransaction;
 
+template<typename T>
+class PersistentSerie;
+
 class Storage: public Wrapper<IStorage> {
 public:
 
@@ -86,6 +89,10 @@ public:
         _ptr->add_precommit_hook_connection(conn);
         return conn;
     }
+
+    template<typename T>
+    PersistentSerie<T> get_serie(std::string_view variable_name);
+
 
 
 };

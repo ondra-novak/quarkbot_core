@@ -11,7 +11,7 @@
 namespace quarkbot {
 
     BacktestConfig::Config BacktestConfig::as_config() const {
-        return BacktestConfig::Config({config});
+        return BacktestConfig::Config({config},'#');
     }
 
     std::optional<std::string_view> BacktestConfig::ConfigReader::operator()(const std::string &key) const {

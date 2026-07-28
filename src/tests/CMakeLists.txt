@@ -11,6 +11,7 @@ set(BASIC_TESTS
     merged_source_test.cpp
     serializer.cpp
     signals.cpp
+    ta.cpp
     websocket_binance.cpp
     logger.cpp
     hub.cpp

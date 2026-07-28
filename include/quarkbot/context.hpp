@@ -6,7 +6,6 @@
 #include "quarkbot/storage.hpp"
 #include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
-#include "defs.hpp"
 #include <concepts>
 #include <functional>
 #include <memory>

@@ -1,26 +1,50 @@
 #pragma once
 
+#include "quarkbot/serie.hpp"
 #include <cstddef>
 namespace quarkbot {
 
+namespace ta {
 
-template<typename Number = double>
-class Ema {
+template<IsSerie Serie>
+class EMA {
 public:
-    Ema(Number alpha, Number initial_value):_value(initial_value),_alpha(alpha) {}
-    static Ema from_period(std::size_t period, Number initial_value) {
-        return Ema(Number(2)/(Number(period)+1),initial_value); 
+
+    using SerieType = Serie;
+    using DataPoint = typename Serie::value_type;
+
+    
+    static_assert(BasicMathType<DataPoint>);
+
+
+    EMA(Serie serie, std::size_t interval):_serie(std::move(serie)), 
+        _alpha(2.0/static_cast<double>(interval+1)) {
+
+        _serie.reserve(1);
+        _value = _serie[0];
     }
-    Number update(Number new_value) {
-        _value = _alpha * new_value + (Number(1)-_alpha)*_value;
-       return _value;
+
+    DataPoint update(const DataPoint &new_value) {
+        
+        if (_value.has_value()) {
+            _value = *_value + (new_value -*_value) * static_cast<DataPoint>(_alpha);            
+        } else {
+            _value = new_value;
+        }
+        DataPoint out = *_value;
+        _serie.add(out);
+        return out;    
     }
-    Number value() const {
-        return _value;
-    }   
+
+    explicit operator bool() const {return _value.has_value();}
+
 protected:
-    Number _value = {};
-    Number _alpha;
+
+    Serie _serie;
+    std::optional<DataPoint> _value = {};
+    double _alpha = {};
+
 };
 
+}
 }

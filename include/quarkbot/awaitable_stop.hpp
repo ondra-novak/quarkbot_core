@@ -2,6 +2,7 @@
 
 
 #include <coroutine>
+#include <optional>
 #include <stop_token>
 
 namespace quarkbot {

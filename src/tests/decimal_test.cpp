@@ -96,6 +96,7 @@ static_assert((12.476e+12_dec) == Decimal(1247600000000000LL,14));
 
 static_assert(test_string(1, 0, "1"));
 static_assert(test_string(123, 0, "123"));
+static_assert(test_string(1.01_dec, 2, "1.01")); 
 static_assert(test_string(0.1_dec, 1, "0.1"));
 static_assert(test_string(0.124_dec, 3, "0.124"));
 static_assert(test_string(0.5_dec, 3, "0.500"));
@@ -122,6 +123,9 @@ static_assert(round(-0.00000082_dec) == 0_dec);
 int main() {    
     std::vector<char> buff;
     std::cout << Decimal(-3.141592).to_string() << std::endl;
+    std::cout << Decimal(-3.0141592).to_string() << std::endl;
+    std::cout << (1.01_dec).to_string_fixed(2) << std::endl;
+    std::cout << (0.1_dec).to_string_fixed(1) << std::endl;
     std::cout << Decimal(12887841235.5787456315679).to_string() << std::endl;
     std::cout << Decimal(-1287e53_dec).to_string() << std::endl;
     std::cout << Decimal(-12414658e-5_dec).to_string() << std::endl;
