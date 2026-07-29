@@ -4,9 +4,14 @@
 namespace quarkbot {
 
     ///create and start the strategy
-    template<typename _S, std::derived_from<StrategyContext> _Context>
+    /**
+        @param ctx context object 
+        @param args arguments for main()
+        @return StrategyFragment prepared to be run.
+    */
+    template<typename _S, std::derived_from<StrategyContext> _Context, typename ... Args>
     requires(StrategyClass<_S, _Context>)
-    inline StrategyFragment create_and_start_strategy(_Context ctx) {
+    inline StrategyFragment create_and_start_strategy(_Context ctx, Args && ... args) {
 
         ctx.active_group  = std::make_shared<StrategyFragmentGroup>();
         //retrieve worker
@@ -18,9 +23,10 @@ namespace quarkbot {
         auto active_group = ctx.active_group;
         //create strategy instance
         _S strategy{std::move(ctx)};
+        //wait to start worker (in case of backtest executor)
         co_await worker.schedule();
         //run strategy, wait until exit
-        co_await strategy.main();
+        co_await strategy.main(std::forward<Args>(args)...);
         //wait until context stop
         co_await stop_awaitable;
         //join whole group
