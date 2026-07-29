@@ -23,10 +23,10 @@ namespace quarkbot {
 
     class StrategyContext;
 
-    template<typename T, typename Context>
-    concept StrategyClass = requires(T val, Context ctx) {
+    template<typename T, typename Context, typename ... Args>
+    concept StrategyClass = requires(T val, Context ctx, Args &&... args) {
         {T(std::move(ctx))};
-        {val.main()}->std::same_as<StrategyFragment>;
+        {val.main(std::forward<Args>(args)...)}->std::same_as<StrategyFragment>;
     };
 
 

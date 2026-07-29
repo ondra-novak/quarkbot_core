@@ -40,7 +40,7 @@ int main() {
     };
 
     BacktestEnv bt("backtest",wallet,instruments,{});
-    bt.add_strategy<PrintEventStrategy>();
+    bt.add_strategy<PrintEventStrategy>({}, "example argyment");
     bt.run(std::ref(source));
 
 }
