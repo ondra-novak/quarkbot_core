@@ -28,8 +28,8 @@ namespace quarkbot {
                 //so report that fragment is done
                 this->return_void();
                 //report exception
-                logOutputCB(LogLevel::error, Logger::from(coro_location),
-                     []{return "Strategy fragment unhandled exception";});
+                logOutputCB(LogLevel::error, 
+                     [&]{return std::pair(Logger::from(coro_location),"Strategy fragment unhandled exception");});
                 coro::async_unhandled_exception();
             }
         };
