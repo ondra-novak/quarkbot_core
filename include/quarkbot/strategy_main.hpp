@@ -1,6 +1,7 @@
 #pragma once
 
 #include "context.hpp"
+#include "quarkbot/strategy_fragment.hpp"
 namespace quarkbot {
 
     ///create and start the strategy
@@ -36,4 +37,34 @@ namespace quarkbot {
         co_await worker.schedule();            
         //strategy is destroyed here
     }
+
+
+    ///main function to start strategy
+    /**
+    @tparam _S strategy
+    @tparam Args additional arguments        
+    @param argc argc
+    @param argv argv
+    @param strategy_args optional arguments passed to the strategy main
+    @return main's return
+    */
+
+    template<typename _Strategy,  typename ... Args>
+    requires(StrategyClass<_Strategy, StrategyContext, Args ...>)
+    int strategy_main(int argc, char **argv, Args ...  strategy_args) {
+        return entry_point(argc, argv, [strategy_args...](StrategyContext &&context, StrategyContext::Config &&){
+            return create_and_start_strategy<_Strategy>(std::move(context), std::move(strategy_args)...);
+        });
+    }
+
+    ///Entry point - must be implemented by backtest or live library, not implemented in quarkbot core
+    /**
+        @param argc argc
+        @param argv argv
+        @param start_fn strategy startup function - recommended to call create_and_start_strategy - the function receives context and
+            environment configuration file - backtest or live config. 
+    */
+    int entry_point(int argc, char **argv, std::function<StrategyFragment(StrategyContext &&, StrategyContext::Config &&)> start_fn);
+
+
 }

@@ -21,7 +21,7 @@ constexpr std::pair<std::string_view, std::string_view> data[] = {
 
 
 constexpr auto get_config()  {
-    return quarkbot::Config([](std::string_view key)->std::optional<std::string_view> {
+    return quarkbot::ConfigT([](std::string_view key)->std::optional<std::string_view> {
 
         auto iter = std::find_if(std::begin(data), std::end(data), [&](const auto &v){
             return v.first == key;

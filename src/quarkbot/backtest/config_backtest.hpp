@@ -20,7 +20,7 @@ struct BacktestConfig {
         std::optional<std::string_view> operator()(const std::string &key) const;
     };
 
-    using Config = ::quarkbot::Config<ConfigReader>;
+    using Config = ::quarkbot::ConfigT<ConfigReader>;
 
     ///configuration map (key value)
     ConfigMap config;

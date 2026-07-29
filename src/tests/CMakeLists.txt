@@ -28,7 +28,7 @@ foreach (testFile ${BASIC_TESTS})
     string(REGEX MATCH "([^\/]+$)" filename ${testFile})
     string(REGEX MATCH "[^.]*" executable_name test_${filename})
     add_executable(${executable_name} ${testFile})
-    target_link_libraries(${executable_name} PRIVATE quarkbot::sdk quarkbot::impl)
+    target_link_libraries(${executable_name} PRIVATE quarkbot::sdk quarkbot::backtest)
     target_compile_definitions(${executable_name} PRIVATE
         MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
     )
