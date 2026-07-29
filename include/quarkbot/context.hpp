@@ -22,16 +22,16 @@ namespace quarkbot {
 
     class StrategyContext;
 
-    template<typename T, typename Context>
-    concept StrategyClass = requires(T val, Context ctx) {
+    template<typename T, typename Context, typename ... Args>
+    concept StrategyClass = requires(T val, Context ctx, Args &&... args) {
         {T(std::move(ctx))};
-        {val.main()}->std::same_as<StrategyFragment>;
+        {val.main(std::forward<Args>(args)...)}->std::same_as<StrategyFragment>;
     };
 
 
     class StrategyContext {
     public:
-        using Config = ::quarkbot::Config<std::function<std::optional<std::string_view>(const std::string &)> >;
+        using Config = ConfigT<ConfigBackend>;
 
         ///List of tradable instruments available to the strategy
         /** the strategy can query for accounts and exchanges through the instruments */

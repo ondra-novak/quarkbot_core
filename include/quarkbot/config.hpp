@@ -1,6 +1,8 @@
 #pragma once
 
+#include "quarkbot/utils/refcnt.hpp"
 #include "types.hpp"
+#include <unordered_map>
 namespace quarkbot {
 
 ///Generic configuration class for strategy parameters
@@ -17,15 +19,15 @@ Expected underlying source is key-value store, where keys are strings and values
 */
 template<typename Source>
 requires (std::is_invocable_r_v<std::optional<std::string_view>, Source, const std::string &>)
-class Config {
+class ConfigT {
 public:
 
     ///default constructor, creates empty configuration
-    constexpr Config() = default;
+    constexpr ConfigT() = default;
     ///constructor from source and separator character for sections
-    constexpr Config(Source source, char separator = '/'):_source(std::move(source)), _sepatator(separator) {}
+    constexpr ConfigT(Source source, char separator = '/'):_source(std::move(source)), _sepatator(separator) {}
     ///constructor for creating sub-configurations with prefix
-    constexpr Config(const Config &parent, std::string_view prefix)
+    constexpr ConfigT(const ConfigT &parent, std::string_view prefix)
         :_source(parent._source), _sepatator(parent._sepatator),_prefix(prefix) {}
 
 
@@ -126,16 +128,16 @@ public:
     }
 
     ///create sub-configuration for a section, section name is added as prefix to keys in the sub-configuration
-    constexpr Config operator   /(std::string_view section) {
+    constexpr ConfigT operator   /(std::string_view section) {
         std::string sub;
         build_whole_key(sub, section);
-        return Config(*this, sub);
+        return ConfigT(*this, sub);
     }
 
 
 protected:
 
-    Source _source = [](const std::string &)->std::optional<std::string_view>{return {};};
+    Source _source;
     char _sepatator = '/';
     std::string _prefix = {};
 
@@ -152,7 +154,7 @@ protected:
 
 template<typename Source>
 requires (std::is_invocable_r_v<std::optional<std::string_view>, Source, const std::string &>)
-inline constexpr typename Config<Source>::OptionalValue Config<Source>::Value::operator()(std::nullopt_t) const {
+inline constexpr typename ConfigT<Source>::OptionalValue ConfigT<Source>::Value::operator()(std::nullopt_t) const {
             return {*this};
 }
 
@@ -160,6 +162,36 @@ inline constexpr typename Config<Source>::OptionalValue Config<Source>::Value::o
 struct ConfigStringReader {
     std::string_view data;
     std::string_view operator()() {return std::exchange(data,"");}
+};
+
+
+class IConfigBackend {
+public:
+    virtual std::optional<std::string_view> operator()(const std::string &) const = 0;
+    virtual ~IConfigBackend() = default;
+};
+
+
+class ConfigBackend {
+public:
+    constexpr ConfigBackend() = default;
+    constexpr ConfigBackend(std::shared_ptr<IConfigBackend> backend):_backend(backend) {}
+    constexpr std::optional<std::string_view> operator()(const std::string &key) const {
+        return _backend?_backend->operator()(key):std::nullopt;
+    }
+protected:
+    std::shared_ptr<IConfigBackend> _backend = {};
+};
+
+class ConfigBackendMap final : public IConfigBackend , public std::unordered_map<std::string, std::string>{
+public:
+    using std::unordered_map<std::string, std::string>::unordered_map;
+
+    virtual std::optional<std::string_view> operator()(const std::string &key) const {
+        auto iter = this->find(key);
+        if (iter == this->end()) return std::nullopt;
+        else return iter->second;
+    }
 };
 
 }

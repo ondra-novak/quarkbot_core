@@ -7,3 +7,4 @@ target_link_libraries(print_events_backtest PRIVATE print_events_strategy quarkb
 add_executable(minute2replay minute2replay.cpp)
 add_executable(mean_reversion_trending mean_reversion_trending.cpp)
 target_link_libraries(mean_reversion_trending PRIVATE  quarkbot::impl quarkbot::sdk)
+

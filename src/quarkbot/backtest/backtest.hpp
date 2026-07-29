@@ -51,11 +51,11 @@ public:
 
     @note Thet strategy is not run immediately, it is scheduled to run on the backtest executor. The backtest executor is run by the run() function of the BacktestEnv class.
     */
-    template<typename _Strategy, typename _Context = StrategyContext>
-    requires(StrategyClass<_Strategy, _Context>)
-    void add_strategy(std::span<const std::string_view> instruments , _Context &&context = _Context{}) {
+    template<typename _Strategy, typename _Context = StrategyContext, typename ... Args>
+    requires(StrategyClass<_Strategy, _Context, Args...>)
+    void add_strategy(std::span<const std::string_view> instruments , _Context &&context = _Context{}, Args &&... args) {
         init_context_basic(instruments, context);
-        _strategy_group.add(context.template create_and_start_strategy<_Strategy>(std::move(context)));
+        _strategy_group.add(context.template create_and_start_strategy<_Strategy>(std::move(context), std::forward<Args>(args)...));
     }
 
     ///add strategy to the backtest environment and run it (indirectly by using factory)
@@ -88,11 +88,11 @@ public:
     @note Thet strategy is not run immediately, it is scheduled to run on the backtest executor. The backtest executor is run by the run() function of the BacktestEnv class.
     */
 
-    template<typename _Strategy, typename _Context = StrategyContext>
-    requires(StrategyClass<_Strategy, _Context>)
-    void add_strategy(_Context &&context = _Context{}) {
+    template<typename _Strategy, typename _Context = StrategyContext, typename ... Args>
+    requires(StrategyClass<_Strategy, _Context, Args...>)
+    void add_strategy(_Context &&context = _Context{}, Args &&... args) {
         init_context_basic( context);
-        _strategy_group.add(create_and_start_strategy<_Strategy>(std::move(context)), _worker);
+        _strategy_group.add(create_and_start_strategy<_Strategy>(std::move(context), std::forward<Args>(args)...), _worker);
     }
 
         ///add strategy to the backtest environment and run it (indirectly by using factory)

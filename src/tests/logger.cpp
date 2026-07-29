@@ -80,14 +80,15 @@ int main() {
     std::filesystem::remove(p,ec);
     
 
-    
     log_to_file(p);
 //    log_to_stderr();
     logDebug("{}", Json{{"a",10},{"b",{1,2,3}}});
     logDebug("{}={}", "x",12);
     logDebug("new\nline");
     TesterClass::test_log();
-    logOutputCB(LogLevel::debug, {"logger.cpp","void bbb::function()",123}, []{return "test_callback";});
+    logOutputCB(LogLevel::debug, []{
+        return std::pair(Logger::Location{"logger.cpp","void bbb::function()",123},  "test_callback");
+    });
 
     log_close();
 
