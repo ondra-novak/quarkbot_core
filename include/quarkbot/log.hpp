@@ -141,14 +141,16 @@ namespace quarkbot {
         logOutput(LogLevel::fatal, format, std::forward<Args>(args)...);
     }
 
+
     ///Log output with callback returning the content
     template<std::invocable<> CB>
-    requires (std::is_convertible_v<std::invoke_result_t<CB>, std::string_view>)
-    inline void logOutputCB(LogLevel level, const Logger::Location &location, CB callback) {
+    requires (std::is_convertible_v<std::invoke_result_t<CB>, std::pair<Logger::Location, std::string_view> >)
+    inline void logOutputCB(LogLevel level, CB callback) {
         if (Logger::instance.cur_level < level) return;        
-        auto ln = callback();
-        Logger::instance.log_sink(level, location, std::string_view(ln));
+        auto [location, line] = callback();
+        Logger::instance.log_sink(level, location, std::string_view(line));
     }
+
 
     template<typename T>
     auto logStreamedItem(const T &val) {

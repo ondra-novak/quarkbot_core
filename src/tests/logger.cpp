@@ -79,14 +79,17 @@ int main() {
     std::filesystem::path p = std::filesystem::temp_directory_path()/"quarkbot_test_log.log";
     std::filesystem::remove(p,ec);
     
-    
+
+
     log_to_file(p);
 //    log_to_stderr();
     logDebug("{}", Json{{"a",10},{"b",{1,2,3}}});
     logDebug("{}={}", "x",12);
     logDebug("new\nline");
     TesterClass::test_log();
-    logOutputCB(LogLevel::debug, {"logger.cpp","void bbb::function()",123}, []{return "test_callback";});
+    logOutputCB(LogLevel::debug, []{
+        return std::pair(Logger::Location{"logger.cpp","void bbb::function()",123},  "test_callback");
+    });
 
     log_close();
 
@@ -117,7 +120,7 @@ int main() {
     ex = extract_log(ln);
     CHECK_EQUAL(ex.context,"TesterClass");
     CHECK_EQUAL(ex.payload,"y=test");
-    CHECK_EQUAL(ex.line,30);
+    CHECK_EQUAL(ex.line,29);
 
     std::getline(f,ln);
     ex = extract_log(ln);

@@ -155,8 +155,8 @@ namespace quarkbot {
 
             static void debug_traced_resume(std::coroutine_handle<promise_type> h) {
                 auto &me = h.promise();
-                logOutputCB(LogLevel::trace, Logger::from(me.coro_location), [&]{
-                    return std::format("Fragment is running: {}",me.coro_function_name);
+                logOutputCB(LogLevel::trace, [&]{
+                    return std::pair(Logger::from(me.coro_location),std::format("Fragment is running: {}",me.coro_function_name));
                 });
                 me.old_resume(h);
             }
@@ -166,19 +166,19 @@ namespace quarkbot {
             std::suspend_always initial_suspend(std::source_location loc = std::source_location::current())  noexcept {
                 this->coro_location = loc;
                 coro_function_name = short_name(loc.function_name());
-                logOutputCB(LogLevel::trace, Logger::from(loc), [&]{
+                logOutputCB(LogLevel::trace,  [&]{
                     auto h = std::coroutine_handle<promise_type>::from_promise(*this);
                     auto frame_ptr = reinterpret_cast<void (**)(std::coroutine_handle<promise_type>) >(h.address());
                     old_resume = *frame_ptr;
                     *frame_ptr = &debug_traced_resume;
-                    return std::format("Frame created: {}", coro_function_name);
+                    return std::pair(Logger::from(loc),std::format("Frame created: {}", coro_function_name));
                 });
                 return {};
             }        
 
             ~promise_type() {
-                logOutputCB(LogLevel::trace, Logger::from(coro_location), [&]{
-                    return std::format("Fragment finished: {}", coro_function_name);
+                logOutputCB(LogLevel::trace, [&]{
+                    return std::pair(Logger::from(coro_location),std::format("Fragment finished: {}", coro_function_name));
                 });
             }
 
