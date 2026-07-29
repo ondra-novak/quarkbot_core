@@ -27,7 +27,5 @@ target_sources(quarkbot_backtest PRIVATE
     config_datasource.cpp
     config_backtest.cpp
     config_backtest.hpp
-    cli.hpp
-    cli.cpp
     entry_point.cpp
 )

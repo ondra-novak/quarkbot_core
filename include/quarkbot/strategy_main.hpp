@@ -49,22 +49,28 @@ namespace quarkbot {
     @return main's return
     */
 
+
     template<typename _Strategy,  typename ... Args>
     requires(StrategyClass<_Strategy, StrategyContext, Args ...>)
-    int strategy_main(int argc, char **argv, Args ...  strategy_args) {
-        return entry_point(argc, argv, [strategy_args...](StrategyContext &&context, StrategyContext::Config &&){
+    int strategy_main(std::string_view program_name, std::span<const char * const> args , Args ...  strategy_args) {
+        return entry_point(program_name, args, [strategy_args...](StrategyContext &&context, const StrategyContext::Config &){
             return create_and_start_strategy<_Strategy>(std::move(context), std::move(strategy_args)...);
         });
     }
 
+    template<typename _Strategy,  typename ... Args>
+    requires(StrategyClass<_Strategy, StrategyContext, Args ...>)
+    int strategy_main(int argc, char **argv, Args ...  strategy_args) {
+        return strategy_main<_Strategy>(argv[0],
+             std::span<const char * const>(reinterpret_cast<const char *const *>(argv+1), argc-1), 
+             std::forward<Args>(strategy_args)...);
+    }
+
     ///Entry point - must be implemented by backtest or live library, not implemented in quarkbot core
     /**
-        @param argc argc
-        @param argv argv
-        @param start_fn strategy startup function - recommended to call create_and_start_strategy - the function receives context and
-            environment configuration file - backtest or live config. 
+    
     */
-    int entry_point(int argc, char **argv, std::function<StrategyFragment(StrategyContext &&, StrategyContext::Config &&)> start_fn);
+    int entry_point(std::string_view argv0, std::span<const char *const > args, std::function<StrategyFragment(StrategyContext &&, const StrategyContext::Config &)> start_fn);
 
 
 }

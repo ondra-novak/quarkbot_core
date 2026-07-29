@@ -1,5 +1,6 @@
 #include "config_backtest.hpp"
 #include "../common/logger.hpp"
+#include "quarkbot/config.hpp"
 #include "quarkbot/utils/simple_ini.hpp"
 #include "simexec_report_csv.hpp"
 #include <algorithm>
@@ -11,12 +12,15 @@
 namespace quarkbot {
 
     BacktestConfig::Config BacktestConfig::as_config() const {
-        return BacktestConfig::Config({config},'#');
+        return BacktestConfig::Config(ConfigBackend(
+            std::shared_ptr<const ConfigMap>(&config,[](auto){})
+
+        ),'#');
     }
 
-    std::optional<std::string_view> BacktestConfig::ConfigReader::operator()(const std::string &key) const {
-        auto iter = std::lower_bound(map.begin(), map.end(), std::pair(key, std::string()));
-        if (iter == map.end() || iter->first != key) return std::nullopt;
+    std::optional<std::string_view> BacktestConfig::ConfigMap::operator()(const std::string &key) const {
+        auto iter = std::lower_bound(this->begin(), this->end(), std::pair(key, std::string()));
+        if (iter == this->end() || iter->first != key) return std::nullopt;
         else return {iter->second};
     }
 

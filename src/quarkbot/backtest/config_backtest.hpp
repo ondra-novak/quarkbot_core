@@ -13,14 +13,15 @@ namespace quarkbot {
 ///manages config file for backtest environment
 struct BacktestConfig {
 
-    using ConfigMap = std::vector<std::pair<std::string, std::string> >;
-
-    struct ConfigReader {
-        const ConfigMap &map;
-        std::optional<std::string_view> operator()(const std::string &key) const;
+    class ConfigMap final : public std::vector<std::pair<std::string, std::string> >, public IConfigBackend {;
+    public:
+        using Super = std::vector<std::pair<std::string, std::string> >;
+        using Super::Super;
+        ConfigMap(Super &&other):Super(std::move(other)) {}
+        virtual std::optional<std::string_view> operator()(const std::string &key) const override;
     };
 
-    using Config = ::quarkbot::ConfigT<ConfigReader>;
+    using Config = ::quarkbot::ConfigT<ConfigBackend>;
 
     ///configuration map (key value)
     ConfigMap config;

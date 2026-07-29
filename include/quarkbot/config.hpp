@@ -128,7 +128,7 @@ public:
     }
 
     ///create sub-configuration for a section, section name is added as prefix to keys in the sub-configuration
-    constexpr ConfigT operator   /(std::string_view section) {
+    constexpr ConfigT operator   /(std::string_view section) const {
         std::string sub;
         build_whole_key(sub, section);
         return ConfigT(*this, sub);
@@ -175,12 +175,12 @@ public:
 class ConfigBackend {
 public:
     constexpr ConfigBackend() = default;
-    constexpr ConfigBackend(std::shared_ptr<IConfigBackend> backend):_backend(backend) {}
-    constexpr std::optional<std::string_view> operator()(const std::string &key) const {
+    ConfigBackend(std::shared_ptr<const IConfigBackend> backend):_backend(backend) {}
+    std::optional<std::string_view> operator()(const std::string &key) const {
         return _backend?_backend->operator()(key):std::nullopt;
     }
 protected:
-    std::shared_ptr<IConfigBackend> _backend = {};
+    std::shared_ptr<const IConfigBackend> _backend = {};
 };
 
 class ConfigBackendMap final : public IConfigBackend , public std::unordered_map<std::string, std::string>{
