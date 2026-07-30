@@ -17,7 +17,7 @@ namespace quarkbot {
         if (!f) throw std::runtime_error(std::format("Failed to open: {}", cfg.string()));
         IniReaderFromStream ini(f);
         auto kv = ini.create_kv_map();
-        return {ConfigBackend(std::make_shared<ConfigBackendMap>(kv.begin(), kv.end())),"#"};
+        return {ConfigBackend(std::make_shared<ConfigBackendMap>(kv.begin(), kv.end())),'#'};
     }
 
 

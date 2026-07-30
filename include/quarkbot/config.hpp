@@ -193,11 +193,7 @@ public:
 class ConfigBackend {
 public:
     constexpr ConfigBackend() = default;
-<<<<<<< HEAD
     ConfigBackend(std::shared_ptr<const IConfigBackend> backend):_backend(backend) {}
-=======
-    ConfigBackend(std::shared_ptr<IConfigBackend> backend):_backend(backend) {}
->>>>>>> 12ef716
     std::optional<std::string_view> operator()(const std::string &key) const {
         return _backend?_backend->operator()(key):std::nullopt;
     }

@@ -13,7 +13,7 @@ namespace quarkbot {
 ///manages config file for backtest environment
 struct BacktestConfig {
 
-    class ConfigMap final : public std::vector<std::pair<std::string, std::string> >, public IConfigBackend {;
+    class ConfigMap final : public std::vector<std::pair<std::string, std::string> >, public IConfigBackend {
     public:
         using Super = std::vector<std::pair<std::string, std::string> >;
         using Super::Super;
