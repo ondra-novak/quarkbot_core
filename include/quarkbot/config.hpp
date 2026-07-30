@@ -2,6 +2,8 @@
 
 #include "quarkbot/utils/refcnt.hpp"
 #include "types.hpp"
+#include <cstddef>
+#include <optional>
 #include <unordered_map>
 namespace quarkbot {
 
@@ -26,9 +28,6 @@ public:
     constexpr ConfigT() = default;
     ///constructor from source and separator character for sections
     constexpr ConfigT(Source source, char separator = '/'):_source(std::move(source)), _sepatator(separator) {}
-    ///constructor for creating sub-configurations with prefix
-    constexpr ConfigT(const ConfigT &parent, std::string_view prefix)
-        :_source(parent._source), _sepatator(parent._sepatator),_prefix(prefix) {}
 
 
     struct OptionalValue;
@@ -128,26 +127,45 @@ public:
     }
 
     ///create sub-configuration for a section, section name is added as prefix to keys in the sub-configuration
-    constexpr ConfigT operator   /(std::string_view section) const {
-        std::string sub;
-        build_whole_key(sub, section);
-        return ConfigT(*this, sub);
+    constexpr ConfigT operator/(std::string_view section) const {
+        return ConfigT(*this, _prefix, section);
+    }
+
+        ///create sub-configuration for a section, section name is added as prefix to keys in the sub-configuration
+    constexpr ConfigT section(std::string_view section) const {
+        return ConfigT(*this, _prefix, section);
+    }
+
+    constexpr ConfigT parent() const {
+        return ConfigT(*this, nullptr);
     }
 
 
 protected:
+
+    ///constructor for creating sub-configurations with prefix
+    constexpr ConfigT(const ConfigT &parent, std::string_view cur_prefix, std::string_view new_prefix)
+        :_source(parent._source), _sepatator(parent._sepatator),_prefix(std::format("{}{}{}", cur_prefix, new_prefix, parent._sepatator)) {}
+    constexpr ConfigT(const ConfigT &parent, std::nullptr_t)
+        :_source(parent._source), _sepatator(parent._sepatator),_prefix(get_parent(parent._prefix)) {}
+
 
     Source _source;
     char _sepatator = '/';
     std::string _prefix = {};
 
     constexpr void build_whole_key(std::string &target, std::string_view key) const {
-        target.reserve(key.size()+_prefix.size()+1);   
-        if (!_prefix.empty()) {
-            target.append(_prefix);
-            target.push_back(_sepatator);
-        }        
+        target.reserve(key.size()+_prefix.size());   
+        target.append(_prefix);
         target.append(key);
+    }
+    constexpr std::string get_parent(std::string prefix){
+        if (prefix.empty()) return prefix;
+        char sep = prefix.back();
+        prefix.pop_back();
+        while (!prefix.empty() && prefix.back() != sep) prefix.pop_back();
+        return prefix;
+
     }
 
 };
@@ -175,7 +193,11 @@ public:
 class ConfigBackend {
 public:
     constexpr ConfigBackend() = default;
+<<<<<<< HEAD
     ConfigBackend(std::shared_ptr<const IConfigBackend> backend):_backend(backend) {}
+=======
+    ConfigBackend(std::shared_ptr<IConfigBackend> backend):_backend(backend) {}
+>>>>>>> 12ef716
     std::optional<std::string_view> operator()(const std::string &key) const {
         return _backend?_backend->operator()(key):std::nullopt;
     }
