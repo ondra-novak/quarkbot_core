@@ -64,7 +64,7 @@ namespace quarkbot {
         @param start_fn strategy startup function - recommended to call create_and_start_strategy - the function receives context and
             environment configuration file - backtest or live config. 
     */
-    int entry_point(int argc, char **argv, std::function<StrategyFragment(StrategyContext &&, StrategyContext::Config &&)> start_fn);
+    int entry_point(int argc, char **argv, std::function<StrategyFragment(StrategyContext &&, const StrategyContext::Config &)> start_fn);
 
 
 }
