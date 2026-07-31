@@ -175,8 +175,12 @@ namespace quarkbot {
     };
 
     enum class UpdateLastRevision {
+        ///update last revision
         enable,
-        disable
+        ///do not update last revision
+        disable,
+        ///update last revision and also erase previous revision
+        enable_erase_last
     };
 
     class IStorageTransaction {

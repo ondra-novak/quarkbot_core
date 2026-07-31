@@ -58,7 +58,7 @@ quarkbot::StrategyFragment store_test_2_followup(quarkbot::Storage storage) {
 
 void test1() {
     quarkbot::ExecutionWorker worker ( quarkbot::ThreadExecutor::create());
-    quarkbot::Storage storage (quarkbot::MemStorage<quarkbot::MemStorageBacktestConfig>::create());
+    quarkbot::Storage storage (quarkbot::MemStorage::create());
     coro::sync_await(worker.launch(store_test_1(storage)));
     coro::sync_await(worker.launch(store_test_1_followup(storage)));
 
@@ -67,7 +67,7 @@ void test1() {
 
 void test2() {
     quarkbot::ExecutionWorker worker ( quarkbot::ThreadExecutor::create());
-    quarkbot::Storage storage (quarkbot::MemStorage<quarkbot::MemStorageBacktestConfig>::create());
+    quarkbot::Storage storage (quarkbot::MemStorage::create());
     coro::sync_await(worker.launch(store_test_2(storage)));
     coro::sync_await(worker.launch(store_test_2_followup(storage)));
 }

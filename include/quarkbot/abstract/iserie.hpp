@@ -16,7 +16,6 @@ public:
     virtual void reserve(std::size_t size) = 0;
     virtual std::optional<T> operator[](std::size_t index) const = 0;;
     virtual std::shared_ptr<ISerie<T> > clone_ptr() const = 0;
-    virtual std::size_t size() const = 0;
 
     class Null;
 

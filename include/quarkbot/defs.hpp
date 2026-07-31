@@ -60,7 +60,6 @@ concept IsSerie = requires(T serie, typename T::value_type value, std::size_t in
     {serie.reserve(index)};
     {serie[index]} -> std::same_as<std::optional<typename T::value_type> >;
     {serie.clone()} -> std::same_as<T>;
-    {serie.size()} -> std::same_as<std::size_t>;
 };
 
 template<typename T>

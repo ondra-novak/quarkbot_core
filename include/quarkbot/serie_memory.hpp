@@ -38,11 +38,6 @@ public:
         return std::make_shared<MemorySerie<T> >(clone());
     }
 
-    virtual std::size_t size() const override {
-        return _data.size();
-    }
-
-
 protected:
     std::deque<T> _data;
     std::size_t _size = 0;

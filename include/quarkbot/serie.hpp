@@ -51,9 +51,6 @@ public:
     Serie clone() const {
         return Serie(this->_ptr->clone_ptr());
     }
-    std::size_t size() const {
-        return this->_ptr->size();
-    }
 
 };
 

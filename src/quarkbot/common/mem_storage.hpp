@@ -1,12 +1,11 @@
 #pragma once
 
+#include "quarkbot/abstract/istorage.hpp"
 #include "quarkbot/storage.hpp"
-#include "quarkbot/types.hpp"
 #include "quarkbot/utils/bigendian.hpp"
 #include <algorithm>
 #include <bit>
 #include <chrono>
-#include <concepts>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -18,30 +17,12 @@
 
 namespace quarkbot {
 
-
-template<typename T>
-concept MemStorageConfig = requires() {
-    {T::keep_history}->std::convertible_to<bool>;
-};
-
-struct MemStorageDefaultConfig {
-    ///Default behaviour, full operation
-    static constexpr auto keep_history = true;
-};
-
-struct MemStorageBacktestConfig {
-    ///Will not store history for puts with revisions, revision is set to zero
-    static constexpr auto keep_history = false;
-};
-
-template<MemStorageConfig Config>
 class MemStorage;
 
 
-template<MemStorageConfig Config = MemStorageDefaultConfig>
 class MemStorageTransaction final : public IStorageTransaction {
 public:
-    explicit MemStorageTransaction(std::shared_ptr<MemStorage<Config> > storage) : _storage(storage) {}
+    explicit MemStorageTransaction(std::shared_ptr<MemStorage> storage) : _storage(storage) {}
 
             ///retrieve associated storage of this transaction
     virtual PStorage get_storage() const  override;
@@ -55,22 +36,25 @@ public:
 
 
 private:
-    struct OpPut   { std::string variable; RecordKey key; std::string data; bool update ;};
+    struct OpPut   { std::string variable; RecordKey key; std::string data; UpdateLastRevision mode ;};
     struct OpErase { std::string variable; };
     struct OpEraseRev { std::string variable; RecordKey rev; };
     struct OpPutSchema { srl::SchemaHash hash; std::string schema; };
     using Op = std::variant<OpPut, OpErase, OpEraseRev, OpPutSchema>;
 
     std::vector<Op> _ops;
-    std::shared_ptr<MemStorage<Config> > _storage;
+    std::shared_ptr<MemStorage> _storage;
 
-    friend class MemStorage<Config>;
+    friend class MemStorage;
 };
 
-template<MemStorageConfig Config = MemStorageDefaultConfig>
-class MemStorage final : public IStorage, public std::enable_shared_from_this<MemStorage<Config> > {
-    friend class MemStorageTransaction<Config>;
+class MemStorage final : public IStorage, public std::enable_shared_from_this<MemStorage> {
+    friend class MemStorageTransaction;
 public:
+    enum HistoryMode {
+        keep_history,
+        no_history
+    };
 
         virtual Value get(std::string_view variable_name) const override;
         virtual Value get(std::string_view variable_name, const RecordKey &key) const override;
@@ -82,11 +66,12 @@ public:
             connect(_watcher, consumer);
         }
 
+        MemStorage(HistoryMode mode = keep_history):_no_history_for_simple_variables(mode == no_history) {}
+
         WatcherSlot &get_watcher() {return _watcher;}
 
-
-    static PStorage create() {
-        return std::make_shared<MemStorage>();
+    static PStorage create(HistoryMode mode = keep_history) {
+        return std::make_shared<MemStorage>(mode);
     }
     
 
@@ -94,29 +79,27 @@ private:
     std::map<std::string, std::string, std::less<> > _storage;
     std::map<srl::SchemaHash, std::string> _schemas;
     WatcherSlot _watcher;
-    bool _keep_history;
+    bool _no_history_for_simple_variables = false;
 
-    void apply(const typename MemStorageTransaction<Config>::OpErase &x);
-    void apply(const typename MemStorageTransaction<Config>::OpEraseRev &x);
-    void apply(const typename MemStorageTransaction<Config>::OpPut &x);
-    void apply(const typename MemStorageTransaction<Config>::OpPutSchema &x);
+    void apply(const MemStorageTransaction::OpErase &x);
+    void apply(const MemStorageTransaction::OpEraseRev &x);
+    void apply(const MemStorageTransaction::OpPut &x);
+    void apply(const MemStorageTransaction::OpPutSchema &x);
 
     static std::string wholeKey(std::string_view variable_name, const RecordKey &key);
+    static std::string wholeKey(std::string_view variable_name, const std::string_view &key);
     static std::string record_key_to_string(const RecordKey &key);
     static RecordKey string_to_record_key(std::string_view str);
     static std::uint64_t random_key_counter ;
 
 };
 
-template<MemStorageConfig Config>
-inline  std::uint64_t MemStorage<Config>::random_key_counter ;
+inline  std::uint64_t MemStorage::random_key_counter ;
 
-template<MemStorageConfig Config>
-inline PStorage MemStorageTransaction<Config>::get_storage() const  {
+inline PStorage MemStorageTransaction::get_storage() const  {
     return _storage;
 }
-template<MemStorageConfig Config>
-inline void MemStorageTransaction<Config>::commit(bool) {
+inline void MemStorageTransaction::commit(bool) {
     for (const auto &x: _ops) {
         std::visit([&](const auto &x) {
             _storage->apply(x);
@@ -125,63 +108,50 @@ inline void MemStorageTransaction<Config>::commit(bool) {
 }
 
 
-template<MemStorageConfig Config>
-inline RecordKey MemStorageTransaction<Config>::put(std::string_view variable_name, std::string_view content) {
-    RecordKey rc { static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count()), MemStorage<Config>::random_key_counter++};
-    put(variable_name, rc, content, UpdateLastRevision::enable);
+inline RecordKey MemStorageTransaction::put(std::string_view variable_name, std::string_view content) {
+    RecordKey rc { static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count()), MemStorage::random_key_counter++};
+    MemStorageTransaction::put(variable_name, rc, content, _storage->_no_history_for_simple_variables?UpdateLastRevision::enable_erase_last: UpdateLastRevision::enable);
     return rc;
-
 }
-template<MemStorageConfig Config>
-inline void MemStorageTransaction<Config>::put(std::string_view variable_name, const RecordKey &key, std::string_view content, UpdateLastRevision update) {
-    _ops.push_back(OpPut{std::string(variable_name), key, std::string(content), 
-            update == UpdateLastRevision::enable});
+inline void MemStorageTransaction::put(std::string_view variable_name, const RecordKey &key, std::string_view content, UpdateLastRevision update) {
+    _ops.push_back(OpPut{std::string(variable_name), key, std::string(content), update });
     _storage->get_watcher()(*this, variable_name, key, content);
 
 }
-template<MemStorageConfig Config>
-inline void MemStorageTransaction<Config>::erase(std::string_view variable_name) {
+inline void MemStorageTransaction::erase(std::string_view variable_name) {
     _ops.push_back(OpErase{std::string(variable_name)});
     _storage->get_watcher()(*this, variable_name, RecordKey::min(), std::nullopt);
 }
-template<MemStorageConfig Config>
-inline void MemStorageTransaction<Config>::erase(std::string_view variable_name, const RecordKey &key) {
+inline void MemStorageTransaction::erase(std::string_view variable_name, const RecordKey &key) {
     _ops.push_back(OpEraseRev{std::string(variable_name), key});
     _storage->get_watcher()(*this, variable_name, key, std::nullopt);
 }
-template<MemStorageConfig Config>
-inline void MemStorageTransaction<Config>::put_schema_binary(srl::SchemaHash hash, std::string_view binary) {
+inline void MemStorageTransaction::put_schema_binary(srl::SchemaHash hash, std::string_view binary) {
     _ops.push_back(OpPutSchema{hash, std::string(binary)});
 }
 
-template<MemStorageConfig Config>
-inline MemStorage<Config>::Value MemStorage<Config>::get(std::string_view variable_name) const {    
-    if constexpr (Config::keep_history) {
-        auto iter = _storage.find(variable_name);
-        if (iter == _storage.end() || iter->second.size() != sizeof(RecordKey)) return {{},{},false,{}};
-        std::array<char, sizeof(RecordKey)> buff;
-        std::copy(iter->second.begin(), iter->second.end(), buff.begin());
-        return MemStorage<Config>::get(variable_name, std::bit_cast<RecordKey>(buff));
-    } else {
-        return MemStorage<Config>::get(variable_name, {});
-    }
+inline MemStorage::Value MemStorage::get(std::string_view variable_name) const {
+    auto iter = _storage.find(variable_name);
+    if (iter == _storage.end() || iter->second.size() != sizeof(RecordKey)) return {{},{},false,{}};
+    return MemStorage::get(variable_name, string_to_record_key(iter->second));
     
 }
 
-template<MemStorageConfig Config>
-inline  std::string MemStorage<Config>::wholeKey(std::string_view variable_name, const RecordKey &key) {
+inline std::string MemStorage::wholeKey(std::string_view variable_name, const std::string_view &key) {
     std::string whole_key;
-    whole_key.resize(variable_name.size()+sizeof(RecordKey)+1);
+    whole_key.resize(variable_name.size()+key.size()+1);
     auto iter = std::copy(variable_name.begin(), variable_name.end(), whole_key.begin());
     *iter++ = '\0';
-    auto bin = record_key_to_string(key);
-    std::copy(bin.begin(), bin.end(), iter);
+    std::copy(key.begin(), key.end(), iter);
     return whole_key;
+}
+
+inline  std::string MemStorage::wholeKey(std::string_view variable_name, const RecordKey &key) {
+    return wholeKey(variable_name, record_key_to_string(key));
 
 }
 
-template<MemStorageConfig Config>
-inline typename MemStorage<Config>::Value MemStorage<Config>::get(std::string_view variable_name, const RecordKey &key) const {
+inline MemStorage::Value MemStorage::get(std::string_view variable_name, const RecordKey &key) const {
     Value out = { {}, {}, {} , key};
     auto iter = _storage.find(wholeKey(variable_name, key));
     if (iter != _storage.end()) {
@@ -192,8 +162,7 @@ inline typename MemStorage<Config>::Value MemStorage<Config>::get(std::string_vi
 
 
 }
-template<MemStorageConfig Config>
-inline typename MemStorage<Config>::Enumerator MemStorage<Config>::get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const  {
+inline MemStorage::Enumerator MemStorage::get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const  {
     auto beg = wholeKey(variable_name, since);
     auto end = wholeKey(variable_name, until);
     // +1 skips the '\0' separator between variable_name and the big-endian RecordKey bytes
@@ -226,8 +195,7 @@ inline typename MemStorage<Config>::Enumerator MemStorage<Config>::get_enumerato
         return [](ValueView &){return false;};
     }
 }
-template<MemStorageConfig Config>
-inline std::vector<std::string> MemStorage<Config>::list(std::string_view prefix ) const {
+inline std::vector<std::string> MemStorage::list(std::string_view prefix ) const {
     std::string root;
     std::vector<std::string> out;
     for (auto iter = prefix.empty()?_storage.begin():_storage.lower_bound(prefix); iter != _storage.end(); ++iter) {
@@ -245,21 +213,18 @@ inline std::vector<std::string> MemStorage<Config>::list(std::string_view prefix
     }
     return out;
 }
-template<MemStorageConfig Config>
-inline typename MemStorage<Config>::Value MemStorage<Config>::get_schema_binary(srl::SchemaHash h) const {
+inline MemStorage::Value MemStorage::get_schema_binary(srl::SchemaHash h) const {
     auto iter = _schemas.find(h);
     if (iter == _schemas.end()) {
         return {{},{},false,{}};
     }
     return {{}, iter->second, true, {}};
 }
-template<MemStorageConfig Config>
-inline PStorageTransaction MemStorage<Config>::write() {
-    return std::make_unique<MemStorageTransaction<Config> >(this->shared_from_this());
+inline PStorageTransaction MemStorage::write() {
+    return std::make_unique<MemStorageTransaction>(shared_from_this());
 }
 
-template<MemStorageConfig Config>
-inline void MemStorage<Config>::apply(const MemStorageTransaction<Config>::OpErase &x) {
+inline void MemStorage::apply(const MemStorageTransaction::OpErase &x) {
     _storage.erase(x.variable);
     std::string beg = x.variable + '\0';
     std::string end = x.variable + '\x01';
@@ -270,27 +235,25 @@ inline void MemStorage<Config>::apply(const MemStorageTransaction<Config>::OpEra
         iter = _storage.erase(iter);
     }
 }
-template<MemStorageConfig Config>
-inline void MemStorage<Config>::apply(const MemStorageTransaction<Config>::OpEraseRev &x) {
+inline void MemStorage::apply(const MemStorageTransaction::OpEraseRev &x) {
     _storage.erase(wholeKey(x.variable, x.rev));
 }
-template<MemStorageConfig Config>
-inline void MemStorage<Config>::apply(const MemStorageTransaction<Config>::OpPut &x) {
-    if constexpr(Config::keep_history) {
-        auto tmp = std::bit_cast<std::array<char, sizeof(RecordKey)> >(x.key);
-        if (x.update) _storage[x.variable] = std::string(tmp.begin(), tmp.end());
-        _storage[wholeKey(x.variable, x.key)] = x.data;
-    } else {
-        _storage[wholeKey(x.variable, RecordKey{})] = x.data;
+inline void MemStorage::apply(const MemStorageTransaction::OpPut &x) {
+    auto tmp = record_key_to_string(x.key);
+    if (x.mode != UpdateLastRevision::disable) {
+        auto &currev = _storage[x.variable];
+        if (x.mode == UpdateLastRevision::enable_erase_last && !currev.empty()) {
+            _storage.erase(wholeKey(x.variable, currev));
+        }
+        currev = tmp;
     }
+    _storage[wholeKey(x.variable, tmp)] = x.data;
 }
-template<MemStorageConfig Config>
-inline void MemStorage<Config>::apply(const MemStorageTransaction<Config>::OpPutSchema &x) {
+inline void MemStorage::apply(const MemStorageTransaction::OpPutSchema &x) {
     _schemas[x.hash] = x.schema;
 }
 
-template<MemStorageConfig Config>
-inline std::string MemStorage<Config>::record_key_to_string(const RecordKey &key) {
+inline std::string MemStorage::record_key_to_string(const RecordKey &key) {
     std::string out;
     auto iter = std::back_inserter(out);
     big_endian_binarize(key.ordered, iter);
@@ -298,11 +261,10 @@ inline std::string MemStorage<Config>::record_key_to_string(const RecordKey &key
     return out;
 }
 
-template<MemStorageConfig Config>
-inline RecordKey MemStorage<Config>::string_to_record_key(std::string_view str) {
+inline RecordKey MemStorage::string_to_record_key(std::string_view str) {
     RecordKey key;
     auto iter = str.begin();
-    big_endian_unbinarize(key.ordered, iter);
+    iter = big_endian_unbinarize(key.ordered, iter);
     big_endian_unbinarize(key.random, iter);
     return key;
 }
