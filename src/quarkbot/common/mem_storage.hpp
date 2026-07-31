@@ -61,7 +61,7 @@ public:
 
         virtual Value get(std::string_view variable_name) const override;
         virtual Value get(std::string_view variable_name, const RecordKey &key) const override;
-        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const override;
+        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &from, const RecordKey &to, RangeDirection dir) const override;
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
         virtual Value get_schema_binary(srl::SchemaHash h) const override;
         virtual PStorageTransaction write() override;
@@ -148,9 +148,18 @@ inline MemStorage::Value MemStorage::get(std::string_view variable_name, const R
 
 
 }
-inline MemStorage::Enumerator MemStorage::get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const  {
-    auto beg = wholeKey(variable_name, since);
-    auto end = wholeKey(variable_name, until);
+inline MemStorage::Enumerator MemStorage::get_enumerator(std::string_view variable_name,
+        const RecordKey &from, const RecordKey &to, RangeDirection dir) const  {
+
+    constexpr auto empty = [](ValueView &){return false;};
+    const bool ascending = dir == RangeDirection::ascending;
+    //the direction only restates the order of the bounds - a disagreement is a mistake
+    //on the caller's side, not a request to iterate the other way
+    if (ascending ? !(from < to) : !(from > to)) return empty;
+
+    //bounds of the half-open range [lower, upper), computed once for both directions
+    auto b = _storage.lower_bound(wholeKey(variable_name, ascending?from:to));
+    auto e = _storage.lower_bound(wholeKey(variable_name, ascending?to:from));
     // +1 skips the '\0' separator between variable_name and the big-endian RecordKey bytes
     auto sz = variable_name.size() + 1;
 
@@ -159,40 +168,21 @@ inline MemStorage::Enumerator MemStorage::get_enumerator(std::string_view variab
             w.data = iter->second;
     };
 
-    if (beg < end) {
-        auto iter = _storage.lower_bound(beg);
-        auto end_iter = _storage.lower_bound(end);
-        return [load, iter, end_iter, sz](ValueView &w)mutable -> bool {
-            if (iter == end_iter) return false;
-            load(w, iter, sz);
-            ++iter;
-            return true;
-        };
-    } else if (beg > end) {
-        // upper_bound lands above beg, stepping back gives the largest key <= beg -
-        // that is what an inclusive `since` means when there is no record exactly at it.
-        // Termination compares keys against `end` instead of stopping at lower_bound(end),
-        // which would drop one record whenever `end` has no exact record of its own.
-        // The same comparison also stops the scan at the variable boundary, because every
-        // key below it sorts before <variable_name> '\0'.
-        auto first = _storage.begin();
-        auto iter = _storage.upper_bound(beg);
-        bool done = (iter == first);
-        if (!done) --iter;
-        return [load, iter, first, end, sz, done, advance = false](ValueView &w) mutable -> bool {
-            if (done) return false;
-            if (advance) {
-                //never decrement past the first element
-                if (iter == first) {done = true; return false;}
-                --iter;
-            }
-            advance = true;
-            if (iter->first <= end) {done = true; return false;}
-            load(w, iter, sz);
+    if (ascending) {
+        return [load, b, e, sz](ValueView &w)mutable -> bool {
+            if (b == e) return false;
+            load(w, b, sz);
+            ++b;
             return true;
         };
     } else {
-        return [](ValueView &){return false;};
+        //e walks down to b; decrementing is safe because e != b implies e != begin()
+        return [load, b, e, sz](ValueView &w) mutable -> bool {
+            if (e == b) return false;
+            --e;
+            load(w, e, sz);
+            return true;
+        };
     }
 }
 inline std::vector<std::string> MemStorage::list(std::string_view prefix ) const {

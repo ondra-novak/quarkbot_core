@@ -8,6 +8,7 @@
 #include <leveldb/options.h>
 #include <leveldb/status.h>
 #include <string>
+#include <limits>
 #include <vector>
 
 using namespace quarkbot;
@@ -258,22 +259,22 @@ void test_select_range() {
         wr.commit();
     }
 
-    std::uint64_t p = 10;
+    std::int64_t p = 10;
     for (auto v: storage.select_range("data", {10,0}, {20,0})) {
-        CHECK_EQUAL(v.key.ordered, p);
+        CHECK_EQUAL(static_cast<std::int64_t>(v.key.ordered), p);
         CHECK_EQUAL(v.data, "v" + std::to_string(p));
         ++p;
     }
-    CHECK_EQUAL(p, 20u);
+    CHECK_EQUAL(p, 20);
 
-    // reversed range iterates backwards, since inclusive, until exclusive
-    p = 50;
-    for (auto v: storage.select_range("data", {50,0}, {0,0})) {
-        CHECK_EQUAL(v.key.ordered, p);
+    // descending over the same half-open interval [0,50)
+    p = 49;
+    for (auto v: storage.select_range("data", {50,0}, {0,0}, RangeDirection::descending)) {
+        CHECK_EQUAL(static_cast<std::int64_t>(v.key.ordered), p);
         CHECK_EQUAL(v.data, "v" + std::to_string(p));
         --p;
     }
-    CHECK_EQUAL(p, 0u);
+    CHECK_EQUAL(p, -1);
 
     // empty range
     int count = 0;
@@ -281,35 +282,90 @@ void test_select_range() {
     CHECK_EQUAL(count, 0);
 }
 
-static void check_range(const Storage &storage, const RecordKey &since, const RecordKey &until,
-        const std::vector<std::string> &expected) {
+static constexpr auto asc = RangeDirection::ascending;
+static constexpr auto desc = RangeDirection::descending;
+
+static_assert(RecordKey::first(5) == RecordKey{5,0});
+static_assert(RecordKey::after(5) == RecordKey{6,0});
+static_assert(RecordKey::after(std::numeric_limits<std::uint64_t>::max()) == RecordKey::max(),
+        "after() must saturate instead of wrapping the range inside out");
+
+static void check_range(const Storage &storage, const RecordKey &from, const RecordKey &to,
+        RangeDirection dir, const std::vector<std::string> &expected) {
     std::vector<std::string> got;
-    for (auto v: storage.select_range("data", since, until)) got.emplace_back(v.data);
+    for (auto v: storage.select_range("data", from, to, dir)) got.emplace_back(v.data);
     CHECK_EQUAL(got.size(), expected.size());
     for (std::size_t i = 0; i < expected.size() && i < got.size(); ++i) {
         CHECK_EQUAL(got[i], expected[i]);
     }
 }
 
-///same expectations as mem_storage_test::test_reverse_range_edges - both backends
-///must answer identically, otherwise a strategy behaves differently when persisted
-void test_reverse_range_edges() {
-    TempDB tmp("reverse_edges");
+///The bounds always delimit [lower, upper) - lower included, upper excluded - so a
+///range selects the same records whichever way it is traversed. LevelDBStorage must
+///agree with the other backend on every case here.
+void test_range_direction() {
+    TempDB tmp("range_direction");
     auto mgr = open_fresh(tmp.path);
     Storage storage = mgr.get_storage("s");
-
     auto tx = storage.write();
     for (std::uint64_t i = 10; i <= 50; i += 10) tx.put("data", {i,0}, "v" + std::to_string(i));
     tx.commit();
 
-    check_range(storage, {50,0}, {20,0}, {"v50","v40","v30"});
-    check_range(storage, {45,0}, {15,0}, {"v40","v30","v20"});
-    check_range(storage, {35,0}, {5,0}, {"v30","v20","v10"});
-    check_range(storage, {50,0}, {0,0}, {"v50","v40","v30","v20","v10"});
-    check_range(storage, {99,0}, {40,0}, {"v50"});
-    check_range(storage, {5,0}, {0,0}, {});
-    check_range(storage, {20,0}, {50,0}, {"v20","v30","v40"});
-    check_range(storage, {15,0}, {45,0}, {"v20","v30","v40"});
+    // lower bound included, upper excluded - in both directions
+    check_range(storage, {10,0}, {50,0}, asc,  {"v10","v20","v30","v40"});
+    check_range(storage, {50,0}, {10,0}, desc, {"v40","v30","v20","v10"});
+
+    // bounds without an exact record land on the same interval
+    check_range(storage, {15,0}, {45,0}, asc,  {"v20","v30","v40"});
+    check_range(storage, {45,0}, {15,0}, desc, {"v40","v30","v20"});
+
+    // the idiom for "ordered value in <a,b>", written once and read either way
+    check_range(storage, RecordKey::first(10), RecordKey::after(50), asc,
+            {"v10","v20","v30","v40","v50"});
+    check_range(storage, RecordKey::after(50), RecordKey::first(10), desc,
+            {"v50","v40","v30","v20","v10"});
+
+    // whole variable
+    check_range(storage, RecordKey::min(), RecordKey::max(), asc,
+            {"v10","v20","v30","v40","v50"});
+    check_range(storage, RecordKey::max(), RecordKey::min(), desc,
+            {"v50","v40","v30","v20","v10"});
+
+    // a direction contradicting the bounds is a mistake, not a reversal
+    check_range(storage, {10,0}, {50,0}, desc, {});
+    check_range(storage, {50,0}, {10,0}, asc,  {});
+
+    // equal bounds are empty whichever direction is declared
+    check_range(storage, {30,0}, {30,0}, asc,  {});
+    check_range(storage, {30,0}, {30,0}, desc, {});
+
+    // ranges outside the data
+    check_range(storage, {60,0}, {99,0}, asc,  {});
+    check_range(storage, {99,0}, {60,0}, desc, {});
+    check_range(storage, {0,0},  {5,0},  asc,  {});
+    check_range(storage, {5,0},  {0,0},  desc, {});
+}
+
+///Only `ordered` is meaningfully ordered - `random` merely disambiguates records
+///sharing it. A range therefore has to be expressed at `ordered` granularity, which
+///is what RecordKey::after() is for.
+void test_records_sharing_ordered_value() {
+    TempDB tmp("shared_ordered");
+    auto mgr = open_fresh(tmp.path);
+    Storage storage = mgr.get_storage("s");
+    auto tx = storage.write();
+    tx.put("data", {30, 0}, "a");
+    tx.put("data", {30, 7}, "b");
+    tx.put("data", {40, 0}, "c");
+    tx.commit();
+
+    // after(30) reaches past every record at 30, so all of them are included
+    check_range(storage, RecordKey::first(30), RecordKey::after(30), asc,  {"a","b"});
+    check_range(storage, RecordKey::after(30), RecordKey::first(30), desc, {"b","a"});
+
+    // stopping at {30,0} would silently drop the sibling records
+    check_range(storage, RecordKey::first(30), RecordKey::first(31), asc, {"a","b"});
+    check_range(storage, {30,0}, {40,0}, desc, {});
 }
 
 void test_update_last_revision() {
@@ -553,7 +609,8 @@ int main() {
     test_erase_single_revision();
     test_list_prefix();
     test_select_range();
-    test_reverse_range_edges();
+    test_range_direction();
+    test_records_sharing_ordered_value();
     test_update_last_revision();
     test_schema_binary();
     test_persistence();

@@ -12,6 +12,16 @@ namespace quarkbot {
     class IStorageTransaction;
     using PStorageTransaction =  std::unique_ptr<IStorageTransaction> ;
 
+    ///Direction in which a record range is traversed
+    /** The bounds of the range are given in the order of travel, so the direction
+        restates them. A mismatch yields an empty range - see IStorage::get_enumerator */
+    enum class RangeDirection {
+        ///from the lower bound up; requires from < to
+        ascending,
+        ///from the upper bound down; requires from > to
+        descending
+    };
+
     class IStorage {
     public:
         
@@ -124,17 +134,30 @@ namespace quarkbot {
         */
         virtual Value get(std::string_view variable_name, const RecordKey &key) const = 0;
 
-        ///Retrieve iterator 
+        ///Retrieve iterator
         /**
-        @param variable_name name of variable to iteratoe
-        @param since start record (inclusive)
-        @param until end record (exclusive)
+        @param variable_name name of variable to iterate
+        @param from first bound, in the order of travel
+        @param to second bound, in the order of travel
+        @param dir direction of travel, which must agree with the order of the bounds
         @return iterator (never returns empty)
+
+        @note The bounds always delimit the half-open range [lower, upper) - the lower
+        bound is included and the upper one excluded regardless of direction. Iterating
+        descending therefore excludes `from` and includes `to`. This keeps a range
+        selecting the same set of records in both directions, and lets a range over
+        ordered values <a,b> be written as [RecordKey::first(a), RecordKey::after(b))
+        whichever way it is traversed.
+
+        @note `dir` restates what the order of the bounds already says. If the two
+        disagree - or the bounds are equal - the range is empty rather than silently
+        iterating the other way.
+
         @note Use ranges, see select_range
-        @note if since and until are reversed, performs reverse iteration
         @see select_range
          */
-        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const =0;
+        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &from,
+                const RecordKey &to, RangeDirection dir) const =0;
         
         
         ///List all existing variables
@@ -295,7 +318,7 @@ namespace quarkbot {
         virtual Value get(std::string_view , const RecordKey &key) const override{
             return {{},{}, false, key};
         }
-        virtual Enumerator get_enumerator(std::string_view , const RecordKey &, const RecordKey &) const override{
+        virtual Enumerator get_enumerator(std::string_view , const RecordKey &, const RecordKey &, RangeDirection) const override{
             return [](ValueView &){return false;};
         }
         virtual std::vector<std::string> list(std::string_view ) const override{

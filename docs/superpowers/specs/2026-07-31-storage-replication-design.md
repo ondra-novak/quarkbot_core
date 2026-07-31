@@ -72,6 +72,11 @@ prefix and keeps schemas in a separate `std::map<srl::SchemaHash, std::string>`.
    backend compares keys against `until` directly and is correct. A strategy
    would therefore see different data once its state was persisted.
 
+   Fixing the divergence exposed the deeper issue: the rule itself - first bound
+   inclusive, second exclusive, direction inferred from their order - cannot express
+   a range over `ordered` values correctly when traversed backwards. See the design
+   section on range bounds.
+
 8. **`LevelDBStorageManager::find_storage` reads `v[0]` of a possibly empty
    directory record**, which yields `'\0'` and resolves the storage to keyspace
    0 — silently aliasing whichever storage owns that keyspace.
@@ -140,19 +145,50 @@ view then stays valid exactly as long as `ValueView` promises — until the next
 iteration step — with no extra copy. Both directions carry an `advance` flag
 that is false on the first call.
 
-### Reverse iteration, aligned across backends
+### Range bounds: always [lower, upper), direction declared explicitly
 
-`MemStorage::get_enumerator` starts a backward scan at `upper_bound(since)`
-stepped back once — the largest key at or below `since` — and terminates by
-comparing each key against `until` rather than against a precomputed iterator.
-That matches what the LevelDB backend already does. The comparison also stops
-the scan at the variable boundary for free, because every key below it sorts
-before `<variable_name> '\0'`. A guard keeps the iterator from being
-decremented past `begin()`.
+`RecordKey` pairs `ordered` (meaningful order, typically a timestamp) with `random`
+(a disambiguator - an exchange transaction id, a fill hash - with no meaningful
+order). A record range can therefore only be expressed at `ordered` granularity:
+"fills with timestamp in <a,b>" is the key range `[{a,0}, {b+1,0})`.
 
-Both backends are covered by the same table of edge cases (`since` and `until`
-with and without an exact record, ranges reaching past either end of the data,
-and an empty range), so a divergence fails a test.
+That settles the inclusive/exclusive question. The bounds delimit the half-open
+range `[lower, upper)` - lower included, upper excluded - **regardless of
+direction**. The old rule (first bound inclusive, second exclusive, direction
+inferred from their order) got the descending case wrong at both ends: it dropped
+a record sitting exactly at `{a,0}` and admitted one at `{b+1,0}`. Neither is
+hypothetical, because both backends generate `random` from a counter starting at
+zero, so `random == 0` is the first auto-keyed record every process writes.
+
+`RecordKey::first(ordered)` and `RecordKey::after(ordered)` name the two bounds;
+`after` saturates at `max()` rather than wrapping.
+
+Direction is now an explicit `RangeDirection` argument rather than being inferred:
+
+```cpp
+enum class RangeDirection { ascending, descending };
+```
+
+The bounds are still given in the order of travel, so the enum restates them. That
+redundancy is the point: if the two disagree - or the bounds are equal - the range
+is empty. A swapped pair of bounds is a mistake, not a request to iterate the other
+way. `Storage::select_range` defaults to `ascending`, so existing forward callers
+are unaffected.
+
+Both implementations collapse as a result. The interval is computed once,
+direction-independently, and each direction is a plain walk with no
+"is the endpoint present" special case:
+
+```cpp
+// std::map
+auto b = _storage.lower_bound(lower), e = _storage.lower_bound(upper);
+// ascending: b -> e ;  descending: --e each step until e == b
+
+// leveldb
+// ascending:  Seek(lower),  stop when key >= upper
+// descending: Seek(upper) then one Prev() (SeekToLast() if Seek fell off the end),
+//             stop when key < lower
+```
 
 ### Directory robustness
 
@@ -209,10 +245,13 @@ Cases (leveldb_storage_test.cpp unless noted):
     (a) a different keyspace of a second database and (b) a `MemStorage`,
     schemas included. Covers fix 4.
 
-11. **reverse range edges** — the same table of ranges runs against both
-    backends (here and in `mem_storage_test.cpp`), with `since` and `until`
-    each present and absent, ranges reaching past either end of the data, and
-    an empty range. Covers fix 7 and pins the two backends together.
+11. **range direction** — the same table of ranges runs against both backends
+    (here and in `mem_storage_test.cpp`): bounds with and without an exact
+    record, `first()`/`after()` idiom read both ways, whole-variable sweeps,
+    ranges outside the data, equal bounds, and a direction contradicting its
+    bounds. Covers fix 7 and pins the two backends together.
+    A companion case covers several records sharing one `ordered` value, which
+    is what forces bounds onto `ordered` granularity in the first place.
 12. **truncated directory entry** — a forged empty directory record must not
     resolve to keyspace 0 and alias an existing storage. Covers fix 8.
 

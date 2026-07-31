@@ -173,6 +173,28 @@ struct RecordKey {
         return {mx,mx};
     }
 
+    ///lowest key with given ordered value - inclusive lower bound of that value
+    /**
+        Only `ordered` carries a meaningful order; `random` merely disambiguates
+        records sharing it, so a range can only be expressed at `ordered`
+        granularity. Records with ordered value in <a,b> are exactly the
+        half-open key range [first(a), after(b)).
+    */
+    static constexpr RecordKey first(std::uint64_t ordered) {
+        return {ordered, 0};
+    }
+
+    ///lowest key above every key with given ordered value - exclusive upper bound
+    /**
+        Saturates at max() so that after(max_ordered) does not wrap around to
+        the beginning and silently turn the range inside out.
+        @see first
+    */
+    static constexpr RecordKey after(std::uint64_t ordered) {
+        auto mx = std::numeric_limits<std::uint64_t>::max();
+        return ordered == mx ? max() : RecordKey{ordered + 1, 0};
+    }
+
 };
 
 

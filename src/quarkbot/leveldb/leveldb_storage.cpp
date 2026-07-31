@@ -184,43 +184,52 @@ LevelDBStorage::Value LevelDBStorage::get(std::string_view variable_name, const 
     return out;
 }
 
-LevelDBStorage::Enumerator LevelDBStorage::get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const {
+LevelDBStorage::Enumerator LevelDBStorage::get_enumerator(std::string_view variable_name,
+        const RecordKey &from, const RecordKey &to, RangeDirection dir) const {
+
+    const bool ascending = dir == RangeDirection::ascending;
+    //the direction only restates the order of the bounds - a disagreement is a mistake
+    //on the caller's side, not a request to iterate the other way
+    if (ascending ? !(from < to) : !(from > to)) return [](ValueView &){return false;};
+
+    //bounds of the half-open range [lower, upper), computed once for both directions
+    auto lo = build_key(_keyspace_id, variable_name, ascending?from:to);
+    auto hi = build_key(_keyspace_id, variable_name, ascending?to:from);
     auto iter = std::shared_ptr<leveldb::Iterator>(_proxy->NewIterator({}));
-    auto beg = build_key(_keyspace_id, variable_name, since);
-    auto end = build_key(_keyspace_id, variable_name, until);
+    auto sz = variable_name.size()+2;
+
     // The iterator is advanced lazily, at the beginning of the next call - never right
     // after filling ValueView. leveldb::DBIter::value() may point into a buffer owned by
     // the iterator (saved_value_ while iterating backwards, or the current block of an
     // SST file), and advancing invalidates it. Lazy advance keeps the view valid exactly
     // as long as ValueView promises: until the next iteration step.
-    if (beg < end) {
-        iter->Seek(beg);
-        return [iter, end, sz = variable_name.size()+2, advance = false](ValueView &w)mutable -> bool {
+    if (ascending) {
+        iter->Seek(lo);
+        return [iter, hi, sz, advance = false](ValueView &w)mutable -> bool {
             if (advance) iter->Next();
-            advance = true;
-            if (!iter->Valid() || slice2string_view(iter->key()) >= end) return false;
-            w.key = extract_key(slice2string_view(iter->key()).substr(sz));
-            w.data = slice2string_view(iter->value());
-            return true;
-        };
-    } else if (beg > end) {
-        iter->Seek(beg);
-        // Seek lands at first >= beg; step back if it overshot so we start inclusive at beg
-        if (!iter->Valid() || slice2string_view(iter->key()) > beg) iter->Prev();
-        return [iter, end, sz = variable_name.size()+2, advance = false](ValueView &w)mutable -> bool {
-            if (advance) iter->Prev();
             advance = true;
             if (!iter->Valid()) return false;
             auto key = slice2string_view(iter->key());
-            if (key <= end) return false;
+            if (key >= hi) return false;
             w.key = extract_key(key.substr(sz));
             w.data = slice2string_view(iter->value());
             return true;
         };
     } else {
-        return [](ValueView &){return false;};
+        //land on the largest key below the exclusive upper bound
+        iter->Seek(hi);
+        if (iter->Valid()) iter->Prev(); else iter->SeekToLast();
+        return [iter, lo, sz, advance = false](ValueView &w)mutable -> bool {
+            if (advance) iter->Prev();
+            advance = true;
+            if (!iter->Valid()) return false;
+            auto key = slice2string_view(iter->key());
+            if (key < lo) return false;
+            w.key = extract_key(key.substr(sz));
+            w.data = slice2string_view(iter->value());
+            return true;
+        };
     }
-
 }
 std::vector<std::string> LevelDBStorage::list(std::string_view str_prefix) const {
     //we search for all keys in format <kid 1b><name><0><recordkey 16b>

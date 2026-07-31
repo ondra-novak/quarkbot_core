@@ -43,13 +43,32 @@ public:
     ///Creates range object to iterate range of values
     /**
     @param variable_name name of variable to iterate
-    @param since start record (inclusive)
-    @param until end record (exclusive)
-    @note if since and until are reversed, performs reverse iteration
-    @return range object - even empty if variable doesn't exists or range is not defined
+    @param from first bound, in the order of travel
+    @param to second bound, in the order of travel
+    @param dir direction of travel, which must agree with the order of the bounds
+    @return range object - empty if the variable doesn't exist or the range selects nothing
+
+    @note The bounds always delimit the half-open range [lower, upper): the lower bound
+    is included and the upper one excluded, whichever direction is used. A descending
+    range therefore excludes `from` and includes `to`, and the same pair of bounds
+    selects the same records both ways round.
+
+    @note Only RecordKey::ordered carries a meaningful order - RecordKey::random merely
+    disambiguates records sharing it - so bounds belong on `ordered` granularity. Use
+    RecordKey::first() and RecordKey::after() to say "ordered value in <a,b>":
+    @code
+    storage.select_range("fills", RecordKey::first(a), RecordKey::after(b));
+    storage.select_range("fills", RecordKey::after(b), RecordKey::first(a),
+                         RangeDirection::descending);
+    @endcode
+
+    @note `dir` restates what the order of the bounds already says. If the two disagree,
+    or the bounds are equal, the range is empty - a swapped pair of bounds is a mistake,
+    not a request to iterate the other way.
     */
-    auto select_range(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const {
-        auto en= _ptr->get_enumerator(variable_name, since, until);
+    auto select_range(std::string_view variable_name, const RecordKey &from, const RecordKey &to,
+            RangeDirection dir = RangeDirection::ascending) const {
+        auto en= _ptr->get_enumerator(variable_name, from, to, dir);
         return std::ranges::subrange(Iterator(std::move(en)), Iterator());
     }
 

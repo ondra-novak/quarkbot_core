@@ -21,8 +21,8 @@ namespace quarkbot {
         virtual Value get(std::string_view variable_name, const RecordKey &key) const override {
             return _root->get(add_prefix(variable_name),key);
         }
-        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const override {
-            return _root->get_enumerator(add_prefix(variable_name), since, until);
+        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &from, const RecordKey &to, RangeDirection dir) const override {
+            return _root->get_enumerator(add_prefix(variable_name), from, to, dir);
         }
         virtual std::vector<std::string> list(std::string_view prefix ) const override {
             auto r = _root->list(add_prefix(prefix));

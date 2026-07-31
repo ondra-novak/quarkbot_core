@@ -71,7 +71,7 @@ namespace quarkbot {
 
         virtual Value get(std::string_view variable_name) const override;
         virtual Value get(std::string_view variable_name, const RecordKey &key) const override;
-        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const override;
+        virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &from, const RecordKey &to, RangeDirection dir) const override;
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
         virtual Value get_schema_binary(srl::SchemaHash h) const override;
         virtual PStorageTransaction write() override;
