@@ -80,6 +80,7 @@ int main() {
     std::filesystem::remove(p,ec);
     
 
+    
     log_to_file(p);
 //    log_to_stderr();
     logDebug("{}", Json{{"a",10},{"b",{1,2,3}}});
