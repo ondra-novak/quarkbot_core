@@ -169,12 +169,26 @@ inline MemStorage::Enumerator MemStorage::get_enumerator(std::string_view variab
             return true;
         };
     } else if (beg > end) {
-        auto iter(_storage.lower_bound(beg));
-        auto end_iter(_storage.lower_bound(end));
-        return [load, iter, end_iter, sz](ValueView &w) mutable -> bool {
-            if (iter == end_iter) return false;
+        // upper_bound lands above beg, stepping back gives the largest key <= beg -
+        // that is what an inclusive `since` means when there is no record exactly at it.
+        // Termination compares keys against `end` instead of stopping at lower_bound(end),
+        // which would drop one record whenever `end` has no exact record of its own.
+        // The same comparison also stops the scan at the variable boundary, because every
+        // key below it sorts before <variable_name> '\0'.
+        auto first = _storage.begin();
+        auto iter = _storage.upper_bound(beg);
+        bool done = (iter == first);
+        if (!done) --iter;
+        return [load, iter, first, end, sz, done, advance = false](ValueView &w) mutable -> bool {
+            if (done) return false;
+            if (advance) {
+                //never decrement past the first element
+                if (iter == first) {done = true; return false;}
+                --iter;
+            }
+            advance = true;
+            if (iter->first <= end) {done = true; return false;}
             load(w, iter, sz);
-            --iter;
             return true;
         };
     } else {

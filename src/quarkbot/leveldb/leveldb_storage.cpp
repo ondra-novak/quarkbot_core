@@ -46,7 +46,7 @@ static bool check_status(const leveldb::Status &st) {
 
 
 void LevelDBStorageManager::set_default_options(const leveldb::Options &ops) {
-    _default_options = std::move(ops);
+    _default_options = ops;
 }
 LevelDBStorageManager LevelDBStorageManager::open_db(const std::filesystem::path &path) {
     return open_db(path, _default_options);
@@ -92,7 +92,9 @@ static RecordKey extract_key(std::string_view s) {
 std::uint8_t LevelDBStorageManager::find_storage(std::string_view name) {
     std::string v;
     bool found = check_status(_db->Get({}, build_key(directory_id, name), &v));
-    if (!found) return directory_id;
+    //an empty record carries no keyspace id - treat it as missing, so the storage
+    //gets a fresh keyspace instead of silently aliasing keyspace 0
+    if (!found || v.empty()) return directory_id;
     else return static_cast<std::uint8_t>(v[0]);
 }
 std::uint8_t LevelDBStorageManager::create_storage(std::string_view name) {
@@ -102,14 +104,16 @@ std::uint8_t LevelDBStorageManager::create_storage(std::string_view name) {
     iter->Seek(k);
     while (iter->Valid()) {
         if (!iter->key().starts_with(k)) break;
-        std::uint8_t val = static_cast<std::uint8_t>(iter->value().data()[0]);
-        if (val < used.size()) used.set(val);
+        if (!iter->value().empty()) {
+            std::uint8_t val = static_cast<std::uint8_t>(iter->value().data()[0]);
+            if (val < used.size()) used.set(val);
+        }
         iter->Next();
     }
     for (std::size_t i = 0; i < static_cast<std::size_t>(max_storage_count); ++i) {
         if (!used.test(i)) {
             auto id = static_cast<std::uint8_t>(i);
-            _db->Put({}, build_key(directory_id, name), build_key(id, ""));
+            check_status(_db->Put({}, build_key(directory_id, name), build_key(id, "")));
             return id;
         }
     }

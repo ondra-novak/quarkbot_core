@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <leveldb/options.h>
+#include <leveldb/status.h>
 #include <string>
 #include <vector>
 
@@ -30,8 +31,15 @@ static LevelDBStorageManager open_existing(const std::filesystem::path &path) {
 
 static int keyspace_of(const PStorage &s) {
     auto p = std::dynamic_pointer_cast<LevelDBStorage>(s);
-    CHECK(p != nullptr);
+    if (!p) {
+        std::cerr << "FAILED: not a LevelDBStorage" << std::endl;
+        exit(1);
+    }
     return p->get_keyspace_id();
+}
+
+static void check_ok(const leveldb::Status &st) {
+    CHECK(st.ok());
 }
 
 ///RAII guard removing the database directory on scope exit
@@ -78,6 +86,34 @@ void test_delete_storage() {
     auto alpha2 = mgr.get_storage("alpha");
     CHECK(!alpha2->get("var").exists);
     CHECK_EQUAL(alpha2->list().size(), 0u);
+}
+
+///a directory record whose value is empty must not resolve to keyspace 0 and
+///silently alias an unrelated storage
+void test_truncated_directory_entry() {
+    TempDB tmp("corrupt_dir");
+    auto mgr = open_fresh(tmp.path);
+
+    auto good = mgr.get_storage("good");
+    auto tx = good->write();
+    tx->put("var", "belongs_to_good");
+    tx->commit();
+
+    // forge a truncated directory record, as a partial write could leave behind
+    std::string key;
+    key.push_back(static_cast<char>(LevelDBStorageManager::directory_id));
+    key.append("broken");
+    check_ok(mgr.get_db()->Put({}, key, ""));
+
+    auto broken = mgr.get_storage("broken");
+    CHECK_NOT_EQUAL(keyspace_of(broken), keyspace_of(good));
+    CHECK(!broken->get("var").exists);
+
+    tx = broken->write();
+    tx->put("var", "belongs_to_broken");
+    tx->commit();
+    CHECK_EQUAL(good->get("var").data, "belongs_to_good");
+    CHECK_EQUAL(broken->get("var").data, "belongs_to_broken");
 }
 
 void test_put_get() {
@@ -243,6 +279,37 @@ void test_select_range() {
     int count = 0;
     for (auto v: storage.select_range("data", {5,0}, {5,0})) {(void)v; ++count;}
     CHECK_EQUAL(count, 0);
+}
+
+static void check_range(const Storage &storage, const RecordKey &since, const RecordKey &until,
+        const std::vector<std::string> &expected) {
+    std::vector<std::string> got;
+    for (auto v: storage.select_range("data", since, until)) got.emplace_back(v.data);
+    CHECK_EQUAL(got.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size() && i < got.size(); ++i) {
+        CHECK_EQUAL(got[i], expected[i]);
+    }
+}
+
+///same expectations as mem_storage_test::test_reverse_range_edges - both backends
+///must answer identically, otherwise a strategy behaves differently when persisted
+void test_reverse_range_edges() {
+    TempDB tmp("reverse_edges");
+    auto mgr = open_fresh(tmp.path);
+    Storage storage = mgr.get_storage("s");
+
+    auto tx = storage.write();
+    for (std::uint64_t i = 10; i <= 50; i += 10) tx.put("data", {i,0}, "v" + std::to_string(i));
+    tx.commit();
+
+    check_range(storage, {50,0}, {20,0}, {"v50","v40","v30"});
+    check_range(storage, {45,0}, {15,0}, {"v40","v30","v20"});
+    check_range(storage, {35,0}, {5,0}, {"v30","v20","v10"});
+    check_range(storage, {50,0}, {0,0}, {"v50","v40","v30","v20","v10"});
+    check_range(storage, {99,0}, {40,0}, {"v50"});
+    check_range(storage, {5,0}, {0,0}, {});
+    check_range(storage, {20,0}, {50,0}, {"v20","v30","v40"});
+    check_range(storage, {15,0}, {45,0}, {"v20","v30","v40"});
 }
 
 void test_update_last_revision() {
@@ -479,12 +546,14 @@ void test_replication_to_mem_storage() {
 int main() {
     test_manager_directory();
     test_delete_storage();
+    test_truncated_directory_entry();
     test_put_get();
     test_keyspace_isolation();
     test_erase_variable();
     test_erase_single_revision();
     test_list_prefix();
     test_select_range();
+    test_reverse_range_edges();
     test_update_last_revision();
     test_schema_binary();
     test_persistence();

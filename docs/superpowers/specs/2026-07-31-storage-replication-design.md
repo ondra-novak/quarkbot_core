@@ -65,6 +65,20 @@ prefix and keeps schemas in a separate `std::map<srl::SchemaHash, std::string>`.
    Forward iteration is unsafe for the same reason as soon as `Next()` crosses
    an SST block boundary.
 
+7. **`MemStorage::get_enumerator` disagrees with the LevelDB one when iterating
+   backwards.** It starts at `lower_bound(since)`, which sits *above* `since`
+   whenever no record exists exactly at it, and it stops at `lower_bound(until)`,
+   which drops one record whenever `until` has no exact record. The LevelDB
+   backend compares keys against `until` directly and is correct. A strategy
+   would therefore see different data once its state was persisted.
+
+8. **`LevelDBStorageManager::find_storage` reads `v[0]` of a possibly empty
+   directory record**, which yields `'\0'` and resolves the storage to keyspace
+   0 — silently aliasing whichever storage owns that keyspace.
+   `create_storage` has the matching problem on `iter->value().data()[0]`, where
+   an empty Slice means dereferencing a null pointer. Both also drop the status
+   of their writes.
+
 ## Design
 
 ### ReplicatorEvent gains a Kind and drops the keyspace byte
@@ -126,6 +140,27 @@ view then stays valid exactly as long as `ValueView` promises — until the next
 iteration step — with no extra copy. Both directions carry an `advance` flag
 that is false on the first call.
 
+### Reverse iteration, aligned across backends
+
+`MemStorage::get_enumerator` starts a backward scan at `upper_bound(since)`
+stepped back once — the largest key at or below `since` — and terminates by
+comparing each key against `until` rather than against a precomputed iterator.
+That matches what the LevelDB backend already does. The comparison also stops
+the scan at the variable boundary for free, because every key below it sorts
+before `<variable_name> '\0'`. A guard keeps the iterator from being
+decremented past `begin()`.
+
+Both backends are covered by the same table of edge cases (`since` and `until`
+with and without an exact record, ranges reaching past either end of the data,
+and an empty range), so a divergence fails a test.
+
+### Directory robustness
+
+`find_storage` treats an empty directory record as missing, so the storage is
+assigned a fresh keyspace instead of aliasing keyspace 0. `create_storage`
+skips empty records when collecting used ids and checks the status of its
+write.
+
 ### Unchanged
 
 `StorageNamespace` keeps forwarding `add_replicator` and `put(event)` to the
@@ -149,7 +184,7 @@ off even under `QUARKBOT_TESTS`, unlike network/tardis/trth). The test opens a
 database under a unique directory in the system temp path and removes it on
 entry and exit.
 
-Cases:
+Cases (leveldb_storage_test.cpp unless noted):
 
 1. **manager** — distinct names get distinct keyspace ids; repeated
    `get_storage(name)` returns the same id; `list()` reports both names;
@@ -174,6 +209,20 @@ Cases:
     (a) a different keyspace of a second database and (b) a `MemStorage`,
     schemas included. Covers fix 4.
 
+11. **reverse range edges** — the same table of ranges runs against both
+    backends (here and in `mem_storage_test.cpp`), with `since` and `until`
+    each present and absent, ranges reaching past either end of the data, and
+    an empty range. Covers fix 7 and pins the two backends together.
+12. **truncated directory entry** — a forged empty directory record must not
+    resolve to keyspace 0 and alias an existing storage. Covers fix 8.
+
 Fixes 2 and 3 are covered by extending `src/tests/mem_storage_test.cpp` with a
 cascade case (MemStorage -> MemStorage -> MemStorage) and an erase-replication
 case.
+
+## Still open
+
+- `csv_reader.h` misses `#include <cstdint>`; any freshly configured build tree
+  fails on it, independently of this work.
+- Replication is at-most-once and has no origin marker, as described above.
+  Bidirectional replication is not supported.

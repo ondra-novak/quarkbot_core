@@ -5,6 +5,7 @@
 #include <quarkbot/storage_namespace.hpp>
 #include <memory>
 #include <vector>
+#include <string>
 
 using namespace quarkbot;
 
@@ -175,6 +176,55 @@ void test_namespaces() {
 }
 
 
+///collects the ordered values of a range, so backends can be compared record by record
+static std::vector<std::string> collect_range(const Storage &storage, std::string_view name,
+        const RecordKey &since, const RecordKey &until) {
+    std::vector<std::string> out;
+    for (auto v: storage.select_range(name, since, until)) out.emplace_back(v.data);
+    return out;
+}
+
+static void check_range(const Storage &storage, const RecordKey &since, const RecordKey &until,
+        const std::vector<std::string> &expected) {
+    auto got = collect_range(storage, "data", since, until);
+    CHECK_EQUAL(got.size(), expected.size());
+    for (std::size_t i = 0; i < expected.size() && i < got.size(); ++i) {
+        CHECK_EQUAL(got[i], expected[i]);
+    }
+}
+
+void test_reverse_range_edges() {
+    Storage storage = MemStorage::create();
+    auto tx = storage.write();
+    for (std::uint64_t i = 10; i <= 50; i += 10) tx.put("data", {i,0}, "v" + std::to_string(i));
+    tx.commit();
+    // stored keys: 10, 20, 30, 40, 50
+
+    // since is inclusive: an exact hit starts right at it
+    check_range(storage, {50,0}, {20,0}, {"v50","v40","v30"});
+
+    // since has no exact record: iteration must start at the nearest lower key,
+    // never above the requested one
+    check_range(storage, {45,0}, {15,0}, {"v40","v30","v20"});
+
+    // until is exclusive and has no exact record: the key just above it belongs
+    // to the range
+    check_range(storage, {35,0}, {5,0}, {"v30","v20","v10"});
+
+    // range reaching below every record yields all of them
+    check_range(storage, {50,0}, {0,0}, {"v50","v40","v30","v20","v10"});
+
+    // range entirely above the data starts at the topmost record
+    check_range(storage, {99,0}, {40,0}, {"v50"});
+
+    // range entirely below the data is empty
+    check_range(storage, {5,0}, {0,0}, {});
+
+    // forward direction for comparison: since inclusive, until exclusive
+    check_range(storage, {20,0}, {50,0}, {"v20","v30","v40"});
+    check_range(storage, {15,0}, {45,0}, {"v20","v30","v40"});
+}
+
 ///forwards every committed change of `from` into `to`, one transaction per event
 static IStorage::Replicator::Connection forward(const PStorage &from, const PStorage &to) {
     auto conn = IStorage::Replicator::create_connection(
@@ -249,6 +299,7 @@ int main() {
     test_plain_get_all_keys();
     test_sequences();
     test_namespaces();
+    test_reverse_range_edges();
     test_replication_cascade();
     test_erase_replicates_as_erase();
     return 0;
