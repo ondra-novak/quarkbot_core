@@ -4,6 +4,7 @@
 #include "quarkbot/storage_srl.hpp"   // IWYU pragma: keep - template definitions
 #include <quarkbot/storage_namespace.hpp>
 #include <memory>
+#include <vector>
 
 using namespace quarkbot;
 
@@ -174,12 +175,82 @@ void test_namespaces() {
 }
 
 
+///forwards every committed change of `from` into `to`, one transaction per event
+static IStorage::Replicator::Connection forward(const PStorage &from, const PStorage &to) {
+    auto conn = IStorage::Replicator::create_connection(
+        [to](IStorage::ReplicatorEvent ev) noexcept {
+            auto tx = to->write();
+            tx->put(ev);
+            tx->commit();
+        });
+    from->add_replicator(conn);
+    return conn;
+}
+
+void test_replication_cascade() {
+    auto a = MemStorage::create();
+    auto b = MemStorage::create();
+    auto c = MemStorage::create();
+    auto ab = forward(a, b);
+    auto bc = forward(b, c);
+
+    auto tx = a->write();
+    tx->put("var", {1,0}, "v1");
+    tx->put("var", {2,0}, "v2");
+    tx->put_schema_binary(srl::SchemaHash{0x1234}, "schema-blob");
+    tx->commit();
+
+    // b is a direct replica, c is a replica of a replica
+    for (const auto &s: {b, c}) {
+        CHECK_EQUAL(s->get("var").data, "v2");
+        CHECK_EQUAL(s->get("var", RecordKey{1,0}).data, "v1");
+        CHECK_EQUAL(s->get_schema_binary(srl::SchemaHash{0x1234}).data, "schema-blob");
+        CHECK_EQUAL(s->list().size(), 1u);
+    }
+
+    tx = a->write();
+    tx->erase("var");
+    tx->commit();
+
+    for (const auto &s: {b, c}) {
+        CHECK(!s->get("var").exists);
+        CHECK(!s->get("var", RecordKey{1,0}).exists);
+        CHECK(!s->get("var", RecordKey{2,0}).exists);
+    }
+}
+
+void test_erase_replicates_as_erase() {
+    auto storage = MemStorage::create();
+    std::vector<bool> erase_flags;
+    auto conn = IStorage::Replicator::create_connection(
+        [&](IStorage::ReplicatorEvent ev) noexcept {
+            erase_flags.push_back(ev.erase);
+        });
+    storage->add_replicator(conn);
+
+    auto tx = storage->write();
+    tx->put("var", {1,0}, "v1");
+    tx->commit();
+    erase_flags.clear();
+
+    tx = storage->write();
+    tx->erase("var");
+    tx->commit();
+
+    // the data record and the last-revision pointer, both as deletions
+    CHECK_EQUAL(erase_flags.size(), 2u);
+    for (bool f: erase_flags) CHECK(f);
+}
+
+
 int main() {
     test_put_get();
     test_erase();
     test_plain_get_all_keys();
     test_sequences();
     test_namespaces();
+    test_replication_cascade();
+    test_erase_replicates_as_erase();
     return 0;
 }
 

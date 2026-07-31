@@ -59,6 +59,10 @@ LevelDBStorageManager LevelDBStorageManager::open_db(const std::filesystem::path
     return PDB(ptr);
 }
 
+static inline std::string_view slice2string_view(const leveldb::Slice &s) {
+    return std::string_view(s.data(), s.size());
+}
+
 static std::string build_key(uint8_t id, std::string_view var, std::string_view key ) {
     std::string s;
     s.push_back(static_cast<char>(id));
@@ -139,8 +143,25 @@ void LevelDBStorageManager::delete_storage(std::string_view name) {
 
     delete_prefix(id);
     b.Delete(build_key(directory_id, name));
-    _db->Write({}, &b);   
+    check_status(_db->Write({}, &b));
 }
+
+std::vector<std::string> LevelDBStorageManager::list() {
+    std::vector<std::string> out;
+    auto iter = std::unique_ptr<leveldb::Iterator>(_db->NewIterator({}));
+    auto prefix = build_key(directory_id, "");
+    iter->Seek(prefix);
+    while (iter->Valid()) {
+        if (!iter->key().starts_with(prefix)) break;
+        out.emplace_back(slice2string_view(iter->key()).substr(prefix.size()));
+        iter->Next();
+    }
+    return out;
+}
+
+LevelDBStorage::LevelDBStorage(PDB db, uint8_t instance_id)
+    :_proxy(std::move(db))
+    ,_keyspace_id(instance_id) {}
 
 LevelDBStorage::Value LevelDBStorage::get(std::string_view variable_name) const {
     std::string v;
@@ -159,34 +180,37 @@ LevelDBStorage::Value LevelDBStorage::get(std::string_view variable_name, const 
     return out;
 }
 
-static inline std::string_view slice2string_view(const leveldb::Slice &s) {
-    return std::string_view(s.data(), s.size());
-}
-
 LevelDBStorage::Enumerator LevelDBStorage::get_enumerator(std::string_view variable_name, const RecordKey &since, const RecordKey &until) const {
     auto iter = std::shared_ptr<leveldb::Iterator>(_proxy->NewIterator({}));
     auto beg = build_key(_keyspace_id, variable_name, since);
     auto end = build_key(_keyspace_id, variable_name, until);
+    // The iterator is advanced lazily, at the beginning of the next call - never right
+    // after filling ValueView. leveldb::DBIter::value() may point into a buffer owned by
+    // the iterator (saved_value_ while iterating backwards, or the current block of an
+    // SST file), and advancing invalidates it. Lazy advance keeps the view valid exactly
+    // as long as ValueView promises: until the next iteration step.
     if (beg < end) {
         iter->Seek(beg);
-        return [iter, end, sz = variable_name.size()+2](ValueView &w)mutable -> bool {
+        return [iter, end, sz = variable_name.size()+2, advance = false](ValueView &w)mutable -> bool {
+            if (advance) iter->Next();
+            advance = true;
             if (!iter->Valid() || slice2string_view(iter->key()) >= end) return false;
             w.key = extract_key(slice2string_view(iter->key()).substr(sz));
             w.data = slice2string_view(iter->value());
-            iter->Next();
             return true;
         };
     } else if (beg > end) {
         iter->Seek(beg);
         // Seek lands at first >= beg; step back if it overshot so we start inclusive at beg
         if (!iter->Valid() || slice2string_view(iter->key()) > beg) iter->Prev();
-        return [iter, end, sz = variable_name.size()+2](ValueView &w)mutable -> bool {
+        return [iter, end, sz = variable_name.size()+2, advance = false](ValueView &w)mutable -> bool {
+            if (advance) iter->Prev();
+            advance = true;
             if (!iter->Valid()) return false;
             auto key = slice2string_view(iter->key());
             if (key <= end) return false;
             w.key = extract_key(key.substr(sz));
             w.data = slice2string_view(iter->value());
-            iter->Prev();
             return true;
         };
     } else {
@@ -232,6 +256,9 @@ uint8_t LevelDBStorage::get_keyspace_id() const {return _keyspace_id;}
 LevelDBStorage::PDB LevelDBStorage::get_db() const {return _proxy;}
 
 
+LevelDBTransaction::LevelDBTransaction(std::shared_ptr<LevelDBStorage> storage)
+    :_storage(std::move(storage)) {}
+
 PStorage LevelDBTransaction::get_storage() const {
     return _storage;
 }
@@ -273,8 +300,8 @@ void LevelDBTransaction::put(std::string_view variable_name, const RecordKey &ke
 }
 void LevelDBTransaction::erase(std::string_view variable_name) {
     auto iter =std::unique_ptr<leveldb::Iterator>( _storage->get_db()->NewIterator({}));
-    iter->Seek({variable_name.data(), variable_name.size()});
     char kid = static_cast<char>(_storage->get_keyspace_id());
+    iter->Seek(build_key(_storage->get_keyspace_id(), variable_name));
     auto sz = variable_name.size();
     while (iter->Valid()) {
         auto k = slice2string_view(iter->key());
@@ -300,33 +327,39 @@ void LevelDBStorage::add_replicator(Replicator::Connection consumer) {
 }
 
 void LevelDBTransaction::put(const IStorage::ReplicatorEvent &event) {
+    //the event key is logical - prepend the keyspace this transaction writes into
+    auto kid = event.kind == IStorage::ReplicatorEvent::Kind::schema
+                    ? LevelDBStorage::schema_keyspace
+                    : _storage->get_keyspace_id();
+    auto key = build_key(kid, event.key);
     if (event.erase) {
-        _batch.Delete({event.key.data(), event.key.size()});
+        _batch.Delete(key);
     } else {
-        _batch.Put({event.key.data(), event.key.size()}, {event.value.data(), event.value.size()});
+        _batch.Put(key, {event.value.data(), event.value.size()});
     }
 }
 
 void LevelDBStorage::ReplicatorHandler::Put(const leveldb::Slice& key, const leveldb::Slice& value) {
-    repl(ReplicatorEvent{
-        std::string_view(key.data(), key.size()),
-        std::string_view(value.data(), value.size()),
-        false
-    });
-
+    emit(key, slice2string_view(value), false);
 }
 void LevelDBStorage::ReplicatorHandler::Delete(const leveldb::Slice& key) {
-    repl(ReplicatorEvent{
-        std::string_view(key.data(), key.size()),
-        {},
-        true
-    });
+    emit(key, {}, true);
+}
 
+void LevelDBStorage::ReplicatorHandler::emit(const leveldb::Slice &key, std::string_view value, bool erase) {
+    auto k = slice2string_view(key);
+    if (k.empty()) return;
+    auto kid = static_cast<std::uint8_t>(k[0]);
+    ReplicatorEvent::Kind kind;
+    if (kid == schema_keyspace) kind = ReplicatorEvent::Kind::schema;
+    else if (kid == keyspace_id) kind = ReplicatorEvent::Kind::data;
+    else return;    //a batch only ever touches its own keyspace and the schema keyspace
+    repl(ReplicatorEvent{k.substr(1), value, erase, kind});
 }
 
 
 LevelDBStorage::ReplicatorHandler LevelDBStorage::get_replicator()  {
-    return {_watcher};
+    return {_watcher, _keyspace_id};
 }
 
 

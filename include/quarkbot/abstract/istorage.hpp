@@ -15,10 +15,27 @@ namespace quarkbot {
     class IStorage {
     public:
         
+        ///Describes single record change performed by a committed transaction
+        /**
+            The event carries a *logical* key - it never contains any backend specific
+            keyspace or instance prefix. This makes events portable: they can be applied
+            to a different backend, or to a different logical keyspace of the same backend,
+            via IStorageTransaction::put(const ReplicatorEvent &).
+        */
         struct ReplicatorEvent {
+
+            enum class Kind {
+                ///key is <variable_name> '\0' <RecordKey>, or <variable_name> alone
+                ///for the last-revision pointer (whose value is the encoded RecordKey)
+                data,
+                ///key is the binary srl::SchemaHash, value is the schema blob
+                schema
+            };
+
             std::string_view key;
             std::string_view value;
             bool erase;
+            Kind kind = Kind::data;
         };
 
         using Buffer = std::string;    

@@ -80,14 +80,24 @@ namespace quarkbot {
         uint8_t get_keyspace_id() const;
         PDB get_db() const;
 
+        ///Turns records of a committed WriteBatch into ReplicatorEvents
+        /**
+            Physical keys carry a leading keyspace byte, which is stripped here: events
+            must expose logical keys only, so they stay applicable to a different keyspace
+            or a different backend. The keyspace byte also tells data records apart from
+            schema records, which share the batch but live in schema_keyspace.
+        */
         class ReplicatorHandler final: public leveldb::WriteBatch::Handler {
         public:
-            ReplicatorHandler(Replicator &repl):repl(repl) {}
+            ReplicatorHandler(Replicator &repl, std::uint8_t keyspace_id)
+                :repl(repl), keyspace_id(keyspace_id) {}
             virtual void Put(const leveldb::Slice& key, const leveldb::Slice& value) override;
             virtual void Delete(const leveldb::Slice& key) override;
         protected:
             Replicator &repl;
+            std::uint8_t keyspace_id;
 
+            void emit(const leveldb::Slice &key, std::string_view value, bool erase);
         };
 
         ReplicatorHandler get_replicator();

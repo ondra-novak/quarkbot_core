@@ -50,3 +50,12 @@ target_compile_definitions(test_somodule_test PRIVATE
 add_dependencies(test_somodule_test test_somodule_plugin)
 add_test(NAME "tests/somodule_test" COMMAND test_somodule_test)
 
+# --- LevelDB storage test ---
+# QUARKBOT_LEVELDB stays OFF even under QUARKBOT_TESTS (it needs libleveldb-dev),
+# so this test is registered only when the component is actually built.
+if (QUARKBOT_LEVELDB)
+    add_executable(test_leveldb_storage_test leveldb_storage_test.cpp)
+    target_link_libraries(test_leveldb_storage_test PRIVATE quarkbot::sdk quarkbot::impl ${LEVELDB_LIBRARIES})
+    add_test(NAME "tests/leveldb_storage_test" COMMAND test_leveldb_storage_test)
+endif()
+

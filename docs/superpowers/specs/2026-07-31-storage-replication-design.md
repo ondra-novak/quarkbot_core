@@ -50,6 +50,21 @@ prefix and keeps schemas in a separate `std::map<srl::SchemaHash, std::string>`.
    so `MemStorage` cannot route them to `_schemas` — the missing class-hash
    table replication.
 
+5. **Three declared-but-undefined functions** (found by the test, which was the
+   first binary ever to link the LevelDB backend): `LevelDBStorage::LevelDBStorage`,
+   `LevelDBTransaction::LevelDBTransaction` and `LevelDBStorageManager::list()`.
+   `quarkbot_impl` is a static library, so nothing complained until a test
+   pulled the object file in.
+
+6. **`get_enumerator` hands out a `ValueView` that aliases the leveldb
+   iterator's own buffer, then advances it.** `leveldb::DBIter::value()` returns
+   `iter_->value()` only while iterating forwards; after `Prev()` it returns a
+   Slice into `DBIter::saved_value_`, a member string that every further `Prev()`
+   overwrites. The enumerator filled `w.data` and immediately called
+   `Prev()`/`Next()`, so the consumer read the value of the neighbouring record.
+   Forward iteration is unsafe for the same reason as soon as `Next()` crosses
+   an SST block boundary.
+
 ## Design
 
 ### ReplicatorEvent gains a Kind and drops the keyspace byte
@@ -102,6 +117,14 @@ replicate out of MemStorage too.
 back to `srl::SchemaHash` via `std::bit_cast`) and `Kind::data` into
 `_storage`. The event is re-emitted using the stored copies, not moved-from
 ones.
+
+### Lazy iterator advance
+
+`LevelDBStorage::get_enumerator` advances the underlying iterator at the
+*beginning* of the next call instead of right after filling `ValueView`. The
+view then stays valid exactly as long as `ValueView` promises — until the next
+iteration step — with no extra copy. Both directions carry an `advance` flag
+that is false on the first call.
 
 ### Unchanged
 
