@@ -8,7 +8,7 @@
 using namespace quarkbot;
 
 void test_put_get() {
-    auto storage = quarkbot::MemStorage::create();
+    auto storage = quarkbot::MemStorage<>::create();
 
     // key not present → exists=false, rev=0
     auto v = storage->get("foo");
@@ -50,7 +50,7 @@ void test_put_get() {
 }
 
 void test_erase() {
-    auto storage = quarkbot::MemStorage::create();
+    auto storage = quarkbot::MemStorage<>::create();
     auto tx = storage->write();
     auto r1 = tx->put("key", "value");
     tx->commit();
@@ -72,7 +72,7 @@ void test_erase() {
   }
 
 void test_plain_get_all_keys() {
-    auto storage = quarkbot::MemStorage::create();
+    auto storage = quarkbot::MemStorage<>::create();
     auto tx = storage->write();
     tx->put("order:1", "a");
     tx->put("order:2", "b");
@@ -104,7 +104,7 @@ void test_plain_get_all_keys() {
 }
 
 void test_sequences() {
-    Storage storage = MemStorage::create();
+    Storage storage = MemStorage<>::create();
 
     for (int i = 0; i < 100; ++i) {
         auto wr = storage.write();
@@ -136,7 +136,7 @@ void test_sequences() {
 }
 
 void test_namespaces() {
-    auto storage = quarkbot::MemStorage::create();
+    auto storage = quarkbot::MemStorage<>::create();
     auto ns1 = storage->create_namespace(storage, "ns1/");
     auto ns2 = storage->create_namespace(storage, "ns2/");
     

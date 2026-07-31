@@ -62,7 +62,7 @@ namespace quarkbot {
     requires(StrategyClass<_Strategy, StrategyContext, Args ...>)
     int strategy_main(int argc, char **argv, Args ...  strategy_args) {
         return strategy_main<_Strategy>(argv[0],
-             std::span<const char * const>(reinterpret_cast<const char *const *>(argv+1), argc-1), 
+             std::span<const char * const>(reinterpret_cast<const char *const *>(argv+1), static_cast<std::size_t>(argc-1)), 
              std::forward<Args>(strategy_args)...);
     }
 

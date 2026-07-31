@@ -46,13 +46,13 @@ public:
     DataPoint update(DataPoint value) {
         if (_cur_len < _interval) {
             _sum += value;
-            _serie.add(value);
+            _serie.put(value);
             ++_cur_len;
         } else {
             DataPoint last = _serie[_interval-1].value_or(DataPoint{});
         
             _sum += value - last;
-            _serie.add(value);
+            _serie.put(value);
         }
         return _sum/static_cast<DataPoint>(_cur_len);
     }

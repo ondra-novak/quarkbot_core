@@ -32,7 +32,7 @@ public:
             _value = new_value;
         }
         DataPoint out = *_value;
-        _serie.add(out);
+        _serie.put(out);
         return out;    
     }
 

@@ -21,6 +21,7 @@ set(BASIC_TESTS
     tagset.cpp
     strategy_fragment.cpp
     replay_csv.cpp
+    persistent.cpp
 )
 
 

@@ -39,11 +39,11 @@ public:
             wma_sum += k * new_price;
             
             DataPoint divisor = static_cast<DataPoint>(k * (k + 1)) / 2.0;
-            window.add(new_price);
+            window.put(new_price);
             return wma_sum / divisor;
         } else {
             DataPoint old_price = window[period-1].value_or(DataPoint{});
-            window.add(new_price);
+            window.put(new_price);
 
             wma_sum = wma_sum + (period * new_price) - current_sma_sum;
 

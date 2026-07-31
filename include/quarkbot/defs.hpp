@@ -56,10 +56,11 @@ concept HubReceiver = requires(_Hub hub, _Val &val) {
 
 template<typename T>
 concept IsSerie = requires(T serie, typename T::value_type value, std::size_t index) {
-    {serie.add(value)};
+    {serie.put(value)};
     {serie.reserve(index)};
     {serie[index]} -> std::same_as<std::optional<typename T::value_type> >;
     {serie.clone()} -> std::same_as<T>;
+    {serie.size()} -> std::same_as<std::size_t>;
 };
 
 template<typename T>

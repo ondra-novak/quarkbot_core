@@ -15,7 +15,7 @@ public:
     MemorySerie()  = default;
     MemorySerie(std::size_t sz): _size(sz) {};
 
-    virtual void add(T value) override {
+    virtual void put(T value) override {
         _data.push_front(std::move(value));
         if (_size) while (_data.size() > _size) _data.pop_back();
     }
@@ -37,6 +37,11 @@ public:
     virtual std::shared_ptr<ISerie<T> > clone_ptr() const override {
         return std::make_shared<MemorySerie<T> >(clone());
     }
+
+    virtual std::size_t size() const override {
+        return _data.size();
+    }
+
 
 protected:
     std::deque<T> _data;

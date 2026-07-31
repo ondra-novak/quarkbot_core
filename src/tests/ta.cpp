@@ -27,7 +27,7 @@ void test_sma() {
 
 //same SMA, but backed by a persistent (Storage) serie - must produce identical results
 void test_sma_persistent() {
-    Storage stor (std::make_shared<MemStorage>());
+    Storage stor (MemStorage<>::create());
 
     ta::SMA<PersistentSerie<Decimal> > sma({stor, "sma"}, 5);
     Decimal results[] = {0,0.5_dec, 1, 1.5_dec,2,3,4,5,6,7};
@@ -40,7 +40,7 @@ void test_sma_persistent() {
 
 void test_ema() {
     //test with storage
-    Storage stor (std::make_shared<MemStorage>());
+    Storage stor (MemStorage<>::create());
 
     ta::EMA<PersistentSerie<Decimal> > ema({stor, "key"}, 4);
     Decimal results[] = {0,0.4_dec, 1.04_dec, 1.824_dec,2.6944_dec,
@@ -111,7 +111,7 @@ void test_wma() {
     }
 
     //identical behaviour on a persistent serie
-    Storage stor (std::make_shared<MemStorage>());
+    Storage stor (MemStorage<>::create());
     ta::WMA<PersistentSerie<Decimal> > wma2({stor, "wma"}, 3);
     for (int i = 0; i < 10; ++i) {
         CHECK_EQUAL(wma2.update(i+1), results[i]);
@@ -181,7 +181,7 @@ void test_warmup_flags() {
 //warm restart: an indicator built on top of a persistent serie that already
 //holds values must resume from the stored state instead of starting cold.
 void test_warm_restart() {
-    Storage stor (std::make_shared<MemStorage>());
+    Storage stor (MemStorage<>::create());
 
     //--- SMA ---
     {

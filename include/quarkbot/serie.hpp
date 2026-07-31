@@ -15,7 +15,7 @@ public:
 
 
     ///add data point
-    void add(T val) {
+    void put(T val) {
         this->_ptr->add(std::move(val));
     }
     ///retrieve data point
@@ -50,6 +50,9 @@ public:
     */
     Serie clone() const {
         return Serie(this->_ptr->clone_ptr());
+    }
+    std::size_t size() const {
+        return this->_ptr->size();
     }
 
 };
