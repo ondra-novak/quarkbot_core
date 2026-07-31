@@ -22,7 +22,8 @@ public:
     using ValueView = IStorage::ValueView;
     using Iterator = IStorage::Iterator;
     using Enumerator = IStorage::Enumerator;
-    using WatcherSlot = IStorage::WatcherSlot;
+    using Replicator = IStorage::Replicator;
+    using ReplicatorEvent = IStorage::ReplicatorEvent;
 
     ///get latest value of the variable
     /** 
@@ -83,10 +84,10 @@ public:
         else return *this;
     }
 
-    template<std::invocable<const IStorageTransaction &, const std::string_view &, const RecordKey &, std::optional<std::string_view>  > Fn>
-    WatcherSlot::Connection add_precommit_hook( Fn &&consumer) {
-        auto conn = WatcherSlot::create_connection(std::move(consumer));
-        _ptr->add_precommit_hook_connection(conn);
+    template<std::invocable<ReplicatorEvent > Fn>
+    Replicator::Connection add_replicator(Fn &&consumer) {
+        auto conn = Replicator::create_connection(std::move(consumer));
+        _ptr->add_replicator(conn);
         return conn;
     }
 

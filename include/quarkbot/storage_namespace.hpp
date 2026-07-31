@@ -34,8 +34,8 @@ namespace quarkbot {
         virtual Value get_schema_binary(srl::SchemaHash h) const override {
             return _root->get_schema_binary(h);
         }
-        virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) override {
-            _root->add_precommit_hook_connection(std::move(consumer));
+        virtual void add_replicator(Replicator::Connection consumer) override {
+            _root->add_replicator(std::move(consumer));
         }
         virtual PStorageTransaction write() override;
             
@@ -81,6 +81,9 @@ namespace quarkbot {
         }
         virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override {
             _root_tx->put_schema_binary(hash, binary);
+        }
+        virtual void put(const IStorage::ReplicatorEvent &event) override {
+            _root_tx->put(event);
         }
     protected:
         std::shared_ptr<StorageNamespace> _storage;

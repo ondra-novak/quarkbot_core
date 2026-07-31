@@ -10,5 +10,6 @@ target_sources(quarkbot_impl PRIVATE
     order_internal_defs.hpp
     account_base.cpp
     tradable_instrument_base.cpp
+    storage_common.cpp
 
 )

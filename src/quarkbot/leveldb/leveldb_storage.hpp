@@ -75,15 +75,27 @@ namespace quarkbot {
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
         virtual Value get_schema_binary(srl::SchemaHash h) const override;
         virtual PStorageTransaction write() override;
-        virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) override;
+        virtual void add_replicator(Replicator::Connection consumer) override;
 
         uint8_t get_keyspace_id() const;
         PDB get_db() const;
-        WatcherSlot &get_watcher() {return _watcher;}
+
+        class ReplicatorHandler final: public leveldb::WriteBatch::Handler {
+        public:
+            ReplicatorHandler(Replicator &repl):repl(repl) {}
+            virtual void Put(const leveldb::Slice& key, const leveldb::Slice& value) override;
+            virtual void Delete(const leveldb::Slice& key) override;
+        protected:
+            Replicator &repl;
+
+        };
+
+        ReplicatorHandler get_replicator();
+
     protected:
         PDB _proxy;
         uint8_t _keyspace_id;
-        WatcherSlot _watcher;
+        Replicator _watcher;
     };
 
 
@@ -101,6 +113,7 @@ public:
     virtual void erase(std::string_view variable_name) override;
     virtual void erase(std::string_view variable_name, const RecordKey &key) override;
     virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override;
+    virtual void put(const IStorage::ReplicatorEvent &event) override;
 
 protected:
     leveldb::WriteBatch _batch;    

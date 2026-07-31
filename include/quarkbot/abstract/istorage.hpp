@@ -15,8 +15,14 @@ namespace quarkbot {
     class IStorage {
     public:
         
-        using Buffer = std::string;
-        using WatcherSlot = signals::SignalSlot<void(IStorageTransaction &tx, const std::string_view &variable, const RecordKey &key, std::optional<std::string_view> content)>;
+        struct ReplicatorEvent {
+            std::string_view key;
+            std::string_view value;
+            bool erase;
+        };
+
+        using Buffer = std::string;    
+        using Replicator = signals::SignalSlot<void(ReplicatorEvent)>;
 
         struct Extractor {
 
@@ -139,7 +145,8 @@ namespace quarkbot {
         */
         virtual PStorage get_root_storage() const {return  {};}
 
-        virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) = 0;
+        virtual void add_replicator(Replicator::Connection replicator) = 0;
+        
 
 
         virtual ~IStorage() = default;
@@ -227,7 +234,8 @@ namespace quarkbot {
         ///Puts schema to database as binary
         virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) = 0;
 
-
+        ///Replicate from different database
+        virtual void put(const IStorage::ReplicatorEvent &event) = 0;
         ///Serialize value, store schema
         /**
             @param val value to serialize - must be serializable
@@ -282,7 +290,7 @@ namespace quarkbot {
         virtual PStorageTransaction write() override{
             throw std::runtime_error("Cannot open transaction:  Storage is read only");            
         }
-        virtual void add_precommit_hook_connection(WatcherSlot::Connection) override {
+        virtual void add_replicator(Replicator::Connection) override {
             //read only, do nothing
         }
     };

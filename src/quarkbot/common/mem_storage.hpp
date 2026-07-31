@@ -1,6 +1,7 @@
 #pragma once
 
 #include "quarkbot/abstract/istorage.hpp"
+#include "quarkbot/common/storage_common.hpp"
 #include "quarkbot/storage.hpp"
 #include "quarkbot/utils/bigendian.hpp"
 #include <algorithm>
@@ -30,6 +31,7 @@ public:
     virtual RecordKey put(std::string_view variable_name, std::string_view content) override;
     virtual void put(std::string_view variable_name, const RecordKey &key, std::string_view content,
         UpdateLastRevision update) override;
+    virtual void put(const IStorage::ReplicatorEvent &event) override;
     virtual void erase(std::string_view variable_name) override;
     virtual void erase(std::string_view variable_name, const RecordKey &key) override;
     virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override;
@@ -38,9 +40,10 @@ public:
 private:
     struct OpPut   { std::string variable; RecordKey key; std::string data; UpdateLastRevision mode ;};
     struct OpErase { std::string variable; };
+    struct OpReplicate { std::string key; std::string value ; bool erase;};
     struct OpEraseRev { std::string variable; RecordKey rev; };
     struct OpPutSchema { srl::SchemaHash hash; std::string schema; };
-    using Op = std::variant<OpPut, OpErase, OpEraseRev, OpPutSchema>;
+    using Op = std::variant<OpPut, OpErase, OpEraseRev, OpPutSchema, OpReplicate>;
 
     std::vector<Op> _ops;
     std::shared_ptr<MemStorage> _storage;
@@ -62,13 +65,13 @@ public:
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
         virtual Value get_schema_binary(srl::SchemaHash h) const override;
         virtual PStorageTransaction write() override;
-        virtual void add_precommit_hook_connection(WatcherSlot::Connection consumer) override {
+        virtual void add_replicator(Replicator::Connection consumer) override {
             connect(_watcher, consumer);
         }
 
         MemStorage(HistoryMode mode = keep_history):_no_history_for_simple_variables(mode == no_history) {}
 
-        WatcherSlot &get_watcher() {return _watcher;}
+        Replicator &get_watcher() {return _watcher;}
 
     static PStorage create(HistoryMode mode = keep_history) {
         return std::make_shared<MemStorage>(mode);
@@ -78,18 +81,16 @@ public:
 private:    
     std::map<std::string, std::string, std::less<> > _storage;
     std::map<srl::SchemaHash, std::string> _schemas;
-    WatcherSlot _watcher;
+    Replicator _watcher;
     bool _no_history_for_simple_variables = false;
 
-    void apply(const MemStorageTransaction::OpErase &x);
-    void apply(const MemStorageTransaction::OpEraseRev &x);
-    void apply(const MemStorageTransaction::OpPut &x);
-    void apply(const MemStorageTransaction::OpPutSchema &x);
+    void apply(MemStorageTransaction::OpErase &&x);
+    void apply(MemStorageTransaction::OpEraseRev &&x);
+    void apply(MemStorageTransaction::OpPut &&x);
+    void apply(MemStorageTransaction::OpPutSchema &&x);
+    void apply(MemStorageTransaction::OpReplicate &&x);
+    
 
-    static std::string wholeKey(std::string_view variable_name, const RecordKey &key);
-    static std::string wholeKey(std::string_view variable_name, const std::string_view &key);
-    static std::string record_key_to_string(const RecordKey &key);
-    static RecordKey string_to_record_key(std::string_view str);
     static std::uint64_t random_key_counter ;
 
 };
@@ -100,11 +101,12 @@ inline PStorage MemStorageTransaction::get_storage() const  {
     return _storage;
 }
 inline void MemStorageTransaction::commit(bool) {
-    for (const auto &x: _ops) {
-        std::visit([&](const auto &x) {
-            _storage->apply(x);
+    for (auto &x: _ops) {
+        std::visit([&](auto &x) {
+            _storage->apply(std::move(x));
         }, x);
     }
+    _ops.clear();
 }
 
 
@@ -115,16 +117,13 @@ inline RecordKey MemStorageTransaction::put(std::string_view variable_name, std:
 }
 inline void MemStorageTransaction::put(std::string_view variable_name, const RecordKey &key, std::string_view content, UpdateLastRevision update) {
     _ops.push_back(OpPut{std::string(variable_name), key, std::string(content), update });
-    _storage->get_watcher()(*this, variable_name, key, content);
 
 }
 inline void MemStorageTransaction::erase(std::string_view variable_name) {
     _ops.push_back(OpErase{std::string(variable_name)});
-    _storage->get_watcher()(*this, variable_name, RecordKey::min(), std::nullopt);
 }
 inline void MemStorageTransaction::erase(std::string_view variable_name, const RecordKey &key) {
     _ops.push_back(OpEraseRev{std::string(variable_name), key});
-    _storage->get_watcher()(*this, variable_name, key, std::nullopt);
 }
 inline void MemStorageTransaction::put_schema_binary(srl::SchemaHash hash, std::string_view binary) {
     _ops.push_back(OpPutSchema{hash, std::string(binary)});
@@ -137,19 +136,6 @@ inline MemStorage::Value MemStorage::get(std::string_view variable_name) const {
     
 }
 
-inline std::string MemStorage::wholeKey(std::string_view variable_name, const std::string_view &key) {
-    std::string whole_key;
-    whole_key.resize(variable_name.size()+key.size()+1);
-    auto iter = std::copy(variable_name.begin(), variable_name.end(), whole_key.begin());
-    *iter++ = '\0';
-    std::copy(key.begin(), key.end(), iter);
-    return whole_key;
-}
-
-inline  std::string MemStorage::wholeKey(std::string_view variable_name, const RecordKey &key) {
-    return wholeKey(variable_name, record_key_to_string(key));
-
-}
 
 inline MemStorage::Value MemStorage::get(std::string_view variable_name, const RecordKey &key) const {
     Value out = { {}, {}, {} , key};
@@ -224,50 +210,55 @@ inline PStorageTransaction MemStorage::write() {
     return std::make_unique<MemStorageTransaction>(shared_from_this());
 }
 
-inline void MemStorage::apply(const MemStorageTransaction::OpErase &x) {
+inline void MemStorage::apply(MemStorageTransaction::OpErase &&x) {
     _storage.erase(x.variable);
+    _watcher(ReplicatorEvent{x.variable,{}, false});
     std::string beg = x.variable + '\0';
     std::string end = x.variable + '\x01';
     auto beg_iter = _storage.lower_bound(beg);
     auto end_iter = _storage.lower_bound(end);
     auto iter = beg_iter;
     while (iter != end_iter ) {
+    _watcher(ReplicatorEvent{iter->first,{}, true});
         iter = _storage.erase(iter);
     }
 }
-inline void MemStorage::apply(const MemStorageTransaction::OpEraseRev &x) {
-    _storage.erase(wholeKey(x.variable, x.rev));
+inline void MemStorage::apply(MemStorageTransaction::OpEraseRev &&x) {
+    std::string key = wholeKey(x.variable, x.rev);
+    _storage.erase(key);
+    _watcher(ReplicatorEvent{key,{}, true});
+
 }
-inline void MemStorage::apply(const MemStorageTransaction::OpPut &x) {
+inline void MemStorage::apply(MemStorageTransaction::OpPut &&x) {
     auto tmp = record_key_to_string(x.key);
     if (x.mode != UpdateLastRevision::disable) {
         auto &currev = _storage[x.variable];
         if (x.mode == UpdateLastRevision::enable_erase_last && !currev.empty()) {
-            _storage.erase(wholeKey(x.variable, currev));
+            std::string key = wholeKey(x.variable, currev);
+            _storage.erase(key);
+            _watcher(ReplicatorEvent{key,{}, true});
         }
         currev = tmp;
+        _watcher(ReplicatorEvent{x.variable,tmp, false});
     }
-    _storage[wholeKey(x.variable, tmp)] = x.data;
+    std::string key = wholeKey(x.variable, tmp);    
+    auto &ref =_storage[key] = std::move(x.data);
+    _watcher(ReplicatorEvent{key, ref, false});
 }
-inline void MemStorage::apply(const MemStorageTransaction::OpPutSchema &x) {
-    _schemas[x.hash] = x.schema;
-}
-
-inline std::string MemStorage::record_key_to_string(const RecordKey &key) {
-    std::string out;
-    auto iter = std::back_inserter(out);
-    big_endian_binarize(key.ordered, iter);
-    big_endian_binarize(key.random, iter);
-    return out;
+inline void MemStorage::apply(MemStorageTransaction::OpPutSchema &&x) {
+    _schemas[x.hash] = std::move(x.schema);
+    //schemas are not replicated in this database - too much work with no benefit
 }
 
-inline RecordKey MemStorage::string_to_record_key(std::string_view str) {
-    RecordKey key;
-    auto iter = str.begin();
-    iter = big_endian_unbinarize(key.ordered, iter);
-    big_endian_unbinarize(key.random, iter);
-    return key;
+
+inline void MemStorage::apply(MemStorageTransaction::OpReplicate &&x) {
+    if (x.erase) _storage.erase(x.key);        
+    else _storage[std::move(x.key)] = std::move(x.value);
+    _watcher(ReplicatorEvent{x.key,x.value, x.erase});
 }
 
+inline void MemStorageTransaction::put(const IStorage::ReplicatorEvent &event) {
+    _ops.push_back(OpReplicate{std::string(event.key), std::string(event.value), event.erase});
+}
 
 }
