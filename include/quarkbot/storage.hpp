@@ -10,8 +10,6 @@ namespace quarkbot {
 
 class StorageTransaction;
 
-template<typename T>
-class PersistentSerie;
 
 class Storage: public Wrapper<IStorage> {
 public:
@@ -110,9 +108,6 @@ public:
         return conn;
     }
 
-    template<typename T>
-    PersistentSerie<T> get_serie(std::string_view variable_name);
-
 
 
 };
@@ -172,7 +167,9 @@ public:
     void put_schema_binary(srl::SchemaHash hash, std::string_view binary) {
         _ptr->put_schema_binary(hash, binary);
     }
-
+    void put(const Storage::ReplicatorEvent &ev) {
+        _ptr->put(ev);
+    }
 
     ///Serialize value, store schema
     /**

@@ -40,7 +40,7 @@ public:
 private:
     struct OpPut   { std::string variable; RecordKey key; std::string data; UpdateLastRevision mode ;};
     struct OpErase { std::string variable; };
-    struct OpReplicate { std::string key; std::string value ; bool erase; IStorage::ReplicatorEvent::Kind kind;};
+    struct OpReplicate { std::string key; std::string value ; bool erase; bool is_schema;};
     struct OpEraseRev { std::string variable; RecordKey rev; };
     struct OpPutSchema { srl::SchemaHash hash; std::string schema; };
     using Op = std::variant<OpPut, OpErase, OpEraseRev, OpPutSchema, OpReplicate>;
@@ -216,21 +216,21 @@ inline PStorageTransaction MemStorage::write() {
 
 inline void MemStorage::apply(MemStorageTransaction::OpErase &&x) {
     _storage.erase(x.variable);
-    _watcher(ReplicatorEvent{x.variable,{}, true});
+    _watcher(ReplicatorEvent{x.variable,{}, true, false});
     std::string beg = x.variable + '\0';
     std::string end = x.variable + '\x01';
     auto beg_iter = _storage.lower_bound(beg);
     auto end_iter = _storage.lower_bound(end);
     auto iter = beg_iter;
     while (iter != end_iter ) {
-    _watcher(ReplicatorEvent{iter->first,{}, true});
+    _watcher(ReplicatorEvent{iter->first,{}, true, false});
         iter = _storage.erase(iter);
     }
 }
 inline void MemStorage::apply(MemStorageTransaction::OpEraseRev &&x) {
     std::string key = wholeKey(x.variable, x.rev);
     _storage.erase(key);
-    _watcher(ReplicatorEvent{key,{}, true});
+    _watcher(ReplicatorEvent{key,{}, true, false});
 
 }
 inline void MemStorage::apply(MemStorageTransaction::OpPut &&x) {
@@ -240,14 +240,14 @@ inline void MemStorage::apply(MemStorageTransaction::OpPut &&x) {
         if (x.mode == UpdateLastRevision::enable_erase_last && !currev.empty()) {
             std::string key = wholeKey(x.variable, currev);
             _storage.erase(key);
-            _watcher(ReplicatorEvent{key,{}, true});
+            _watcher(ReplicatorEvent{key,{}, true, false});
         }
         currev = tmp;
-        _watcher(ReplicatorEvent{x.variable,tmp, false});
+        _watcher(ReplicatorEvent{x.variable,tmp, false, false});
     }
     std::string key = wholeKey(x.variable, tmp);    
     auto &ref =_storage[key] = std::move(x.data);
-    _watcher(ReplicatorEvent{key, ref, false});
+    _watcher(ReplicatorEvent{key, ref, false, false});
 }
 ///the logical key of a schema record is the binary SchemaHash
 inline std::array<char, sizeof(srl::SchemaHash)> schema_hash_to_key(srl::SchemaHash h) {
@@ -264,34 +264,34 @@ inline std::optional<srl::SchemaHash> schema_key_to_hash(std::string_view key) {
 inline void MemStorage::apply(MemStorageTransaction::OpPutSchema &&x) {
     auto &ref = _schemas[x.hash] = std::move(x.schema);
     auto key = schema_hash_to_key(x.hash);
-    _watcher(ReplicatorEvent{{key.data(), key.size()}, ref, false, ReplicatorEvent::Kind::schema});
+    _watcher(ReplicatorEvent{{key.data(), key.size()}, ref, false, true});
 }
 
 
 inline void MemStorage::apply(MemStorageTransaction::OpReplicate &&x) {
     //the event is re-emitted from the stored copies, never from moved-from members,
     //so that cascaded replication (A -> B -> C) forwards the real content
-    if (x.kind == ReplicatorEvent::Kind::schema) {
+    if (x.is_schema) {
         auto h = schema_key_to_hash(x.key);
         if (!h) return;     //malformed schema key - nothing sensible to store
         if (x.erase) {
             _schemas.erase(*h);
-            _watcher(ReplicatorEvent{x.key, {}, true, x.kind});
+            _watcher(ReplicatorEvent{x.key, {}, true, x.is_schema});
         } else {
             auto &ref = _schemas[*h] = std::move(x.value);
-            _watcher(ReplicatorEvent{x.key, ref, false, x.kind});
+            _watcher(ReplicatorEvent{x.key, ref, false, x.is_schema});
         }
     } else if (x.erase) {
         _storage.erase(x.key);
-        _watcher(ReplicatorEvent{x.key, {}, true, x.kind});
+        _watcher(ReplicatorEvent{x.key, {}, true, x.is_schema});
     } else {
         auto [iter, ins] = _storage.insert_or_assign(std::move(x.key), std::move(x.value));
-        _watcher(ReplicatorEvent{iter->first, iter->second, false, x.kind});
+        _watcher(ReplicatorEvent{iter->first, iter->second, false, x.is_schema});
     }
 }
 
 inline void MemStorageTransaction::put(const IStorage::ReplicatorEvent &event) {
-    _ops.push_back(OpReplicate{std::string(event.key), std::string(event.value), event.erase, event.kind});
+    _ops.push_back(OpReplicate{std::string(event.key), std::string(event.value), event.erase, event.schema_hash});
 }
 
 }

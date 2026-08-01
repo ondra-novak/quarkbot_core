@@ -224,9 +224,9 @@ public:
                 config["reversal_multiplier"],
                 config["max_loss"]
             },
-            {context.storage.get_serie<Decimal>(std::string(name)+"_pricebb"), config["price_bb_mean"], config["price_bb_mean"]},
-            {context.storage.get_serie<Decimal>(std::string(name)+"_ema"), config["trend_ema"]},
-            {context.storage.get_serie<Decimal>(std::string(name)+"_ema2"), config["trend_ema2"]},
+            {{context.storage,std::string(name)+"_pricebb"}, config["price_bb_mean"], config["price_bb_mean"]},
+            {{context.storage,std::string(name)+"_ema"}, config["trend_ema"]},
+            {{context.storage,std::string(name)+"_ema2"}, config["trend_ema2"]},
             std::move(quote_stream),
             instrument,
             instrument.get_info()

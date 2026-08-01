@@ -4,6 +4,7 @@
 
 #include "../serializer/schema_fwd.hpp"
 #include "quarkbot/log.hpp"
+#include "quarkbot/utils/refcnt.hpp"
 
 
 namespace quarkbot {
@@ -82,17 +83,19 @@ namespace quarkbot {
         ///message type
         MessageType type = MessageType::normal_message;
         ///Send of this message
-        std::string sender = {};
+        std::string_view sender = {};
         ///Target or topic
-        std::string target = {};
+        std::string_view target = {};
         ///Message payload
-        std::vector<std::uint8_t> payload ={};
+        std::span<const std::uint8_t> payload ={};
         ///Conversation id
         ConversationID conversation_id ={};
         ///Schema hash of payload
         srl::SchemaHash schema = {};
         ///time on send side
         std::chrono::system_clock::time_point send_time = {};
+        ///holds reference to snapshot to keep lifetime 
+        RefCountPtr<RefCountInstanceWithDeleter> snapshot_ptr = {};
 
         ///Extract value to type, function checks for schema
         /**

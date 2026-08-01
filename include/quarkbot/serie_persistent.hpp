@@ -7,15 +7,16 @@
 #include <memory>
 #include <optional>
 #include <type_traits>
+#include "persistent.hpp"
 
 namespace quarkbot {
 
-template<typename T>
+template<typename T, CommitStrategy cs = CommitStrategy::delayed>
 class PersistentSerie;
 
-template<typename T>
+template<typename T, CommitStrategy cs>
 requires (std::is_trivially_copyable_v<T>)
-class PersistentSerie<T> final: public ISerie<T> {
+class PersistentSerie<T,cs> final: public ISerie<T> {
 public:
 
     using value_type = T;
@@ -30,17 +31,28 @@ public:
         }
     }
 
+    PersistentSerie(const PersistentNamespace &ns, std::string_view subkey, std::size_t size = 0, std::uint64_t section = 0)
+        :PersistentSerie(ns.get_storage(), ns.sub_ns(subkey).get_name(), size, section) {}
+
+
     virtual void reserve(std::size_t sz) override {
         this->_size = std::max<std::size_t>(this->_size,sz);
     }
 
     virtual void put(T value) override {
-        auto trn = _storage.write();
         auto binary = std::bit_cast<std::array<char, sizeof(T)> >(value);
         ++_rev.ordered;
-        trn.put(_key, _rev, std::string_view(binary.data(), binary.size()));
-        if (_size) trn.erase(_key, {_rev.ordered-_size, _rev.random});
-        trn.commit();
+
+        if constexpr(cs == CommitStrategy::delayed) {
+            auto &trn = shared_transaction(_storage);
+            trn.put(_key, _rev, std::string_view(binary.data(), binary.size()));
+            if (_size) trn.erase(_key, {_rev.ordered-_size, _rev.random});
+        } else {
+            auto trn = _storage.write();
+            trn.put(_key, _rev, std::string_view(binary.data(), binary.size()));
+            if (_size) trn.erase(_key, {_rev.ordered-_size, _rev.random});
+            trn.commit(cs == CommitStrategy::immediately_sync);
+        }
     }
 
     virtual std::optional<T> operator[](std::size_t index) const override {
@@ -72,10 +84,6 @@ protected:
 
 static_assert(IsSerie<PersistentSerie<int> >);
 
-template<typename T>
-inline PersistentSerie<T> Storage::get_serie(std::string_view variable_name) {
-    return PersistentSerie<T>(*this, std::string(variable_name));
-}
 
 
 }

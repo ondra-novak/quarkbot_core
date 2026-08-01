@@ -34,18 +34,11 @@ namespace quarkbot {
         */
         struct ReplicatorEvent {
 
-            enum class Kind {
-                ///key is <variable_name> '\0' <RecordKey>, or <variable_name> alone
-                ///for the last-revision pointer (whose value is the encoded RecordKey)
-                data,
-                ///key is the binary srl::SchemaHash, value is the schema blob
-                schema
-            };
 
             std::string_view key;
             std::string_view value;
             bool erase;
-            Kind kind = Kind::data;
+            bool schema_hash;
         };
 
         using Buffer = std::string;    

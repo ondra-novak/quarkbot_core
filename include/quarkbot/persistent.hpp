@@ -10,13 +10,32 @@
 #include <type_traits>
 namespace quarkbot {
 
+
+enum class CommitStrategy {
+    ///delayed commit strategy -
+    /** commited to storage later by using separate task, fastest, but writes need to be in an active Execution worker 
+        Writes are not immediately visible in storage.
+    */
+    delayed,
+    ///Immediately write
+    /**
+        Write to this variable is immediately stored into the storage. Use it if you need to write 
+        outside of Execution worker. The write can be slower than delayed 
+    */
+    immediately,
+    ///Imeddiately write and enforce synchronization with the storage
+    /**
+        Slowest, but ensures, that write is stored on the disk
+    */
+    immediately_sync
+};
 ///persistent variable
 /**
     @tparam type of variable. Currently only trivial and strings are supported,
     this can be subject of change in future versions    
     
 */
-template<typename T>
+template<typename T, CommitStrategy cs = CommitStrategy::delayed>
 class Persistent;
 
 
@@ -80,9 +99,9 @@ protected:
 };
 
 
-template<typename T>
+template<typename T, CommitStrategy cs>
 requires (std::is_trivially_copyable_v<T>)
-class Persistent<T> {
+class Persistent<T,cs> {
 public:
 
     ///Construct persistent variable with default value
@@ -186,14 +205,21 @@ protected:
     }
 
     void store() {        
-        auto &trn = shared_transaction(group.get_storage());
-        auto bin = std::bit_cast<std::array<char, sizeof(T)> >(value);
-        trn.put(group.get_name(), std::string_view(bin.begin(), bin.end()));
+        if constexpr(cs == CommitStrategy::delayed) {
+            auto &trn = shared_transaction(group.get_storage());
+            auto bin = std::bit_cast<std::array<char, sizeof(T)> >(value);
+            trn.put(group.get_name(), std::string_view(bin.begin(), bin.end()));
+        } else {
+            auto trn = group.get_storage().write();
+            auto bin = std::bit_cast<std::array<char, sizeof(T)> >(value);
+            trn.put(group.get_name(), std::string_view(bin.begin(), bin.end()));
+            trn.commit(cs == CommitStrategy::immediately_sync);
+        }
     }
 };
 
-template<>
-class Persistent<std::string> {
+template<CommitStrategy cs>
+class Persistent<std::string, cs> {
 public:
     Persistent(Storage storage, std::string name, std::string def_value)
         :group(std::move(storage), std::move(name)), value (std::move(def_value)) {
@@ -269,8 +295,14 @@ protected:
     }
 
     void store() {
-        auto &trn = shared_transaction(group.get_storage());
-        trn.put(group.get_name(), value);
+        if constexpr(cs == CommitStrategy::delayed) {
+            auto &trn = shared_transaction(group.get_storage());
+            trn.put(group.get_name(), value);
+        } else {
+            auto trn = group.get_storage().write();
+            trn.put(group.get_name(), value);
+            trn.commit(cs == CommitStrategy::immediately_sync);
+        }
     }
 };
 

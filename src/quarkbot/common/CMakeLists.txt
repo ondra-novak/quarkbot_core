@@ -11,5 +11,7 @@ target_sources(quarkbot_impl PRIVATE
     account_base.cpp
     tradable_instrument_base.cpp
     storage_common.cpp
+    storage_msgbus_replicator.hpp
+    storage_msgbus_replicator.cpp
 
 )

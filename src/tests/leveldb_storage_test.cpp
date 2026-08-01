@@ -447,7 +447,7 @@ struct CapturedEvent {
     std::string key;
     std::string value;
     bool erase;
-    IStorage::ReplicatorEvent::Kind kind;
+    bool is_schema;
 };
 
 class EventLog {
@@ -455,7 +455,7 @@ public:
     IStorage::Replicator::Connection attach(const PStorage &storage) {
         auto conn = IStorage::Replicator::create_connection(
             [this](IStorage::ReplicatorEvent ev) noexcept {
-                events.push_back({std::string(ev.key), std::string(ev.value), ev.erase, ev.kind});
+                events.push_back(CapturedEvent{std::string(ev.key), std::string(ev.value), ev.erase, ev.schema_hash});
             });
         storage->add_replicator(conn);
         return conn;
@@ -464,7 +464,7 @@ public:
     void replay_into(const PStorage &target) const {
         auto tx = target->write();
         for (const auto &ev: events) {
-            tx->put(IStorage::ReplicatorEvent{ev.key, ev.value, ev.erase, ev.kind});
+            tx->put(IStorage::ReplicatorEvent{ev.key, ev.value, ev.erase, ev.is_schema});
         }
         tx->commit();
     }
@@ -549,7 +549,7 @@ void test_replicated_key_is_logical() {
 
     int schemas = 0;
     for (const auto &ev: log.events) {
-        if (ev.kind == IStorage::ReplicatorEvent::Kind::schema) {
+        if (ev.is_schema) {
             ++schemas;
             CHECK_EQUAL(ev.value, "schema-blob");
             CHECK_EQUAL(ev.key.size(), sizeof(srl::SchemaHash));

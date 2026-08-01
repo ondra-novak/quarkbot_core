@@ -341,9 +341,7 @@ void LevelDBStorage::add_replicator(Replicator::Connection consumer) {
 
 void LevelDBTransaction::put(const IStorage::ReplicatorEvent &event) {
     //the event key is logical - prepend the keyspace this transaction writes into
-    auto kid = event.kind == IStorage::ReplicatorEvent::Kind::schema
-                    ? LevelDBStorage::schema_keyspace
-                    : _storage->get_keyspace_id();
+    auto kid = event.schema_hash? LevelDBStorage::schema_keyspace: _storage->get_keyspace_id();
     auto key = build_key(kid, event.key);
     if (event.erase) {
         _batch.Delete(key);
@@ -363,11 +361,8 @@ void LevelDBStorage::ReplicatorHandler::emit(const leveldb::Slice &key, std::str
     auto k = slice2string_view(key);
     if (k.empty()) return;
     auto kid = static_cast<std::uint8_t>(k[0]);
-    ReplicatorEvent::Kind kind;
-    if (kid == schema_keyspace) kind = ReplicatorEvent::Kind::schema;
-    else if (kid == keyspace_id) kind = ReplicatorEvent::Kind::data;
-    else return;    //a batch only ever touches its own keyspace and the schema keyspace
-    repl(ReplicatorEvent{k.substr(1), value, erase, kind});
+    bool is_schema = kid == schema_keyspace;
+    repl(ReplicatorEvent{k.substr(1), value, erase, is_schema});
 }
 
 

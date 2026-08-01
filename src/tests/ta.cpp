@@ -1,6 +1,7 @@
 #include "check.h"
 #include "quarkbot/common/mem_storage.hpp"
 #include "quarkbot/decimal.hpp"
+#include "quarkbot/persistent.hpp"
 #include "quarkbot/serie_persistent.hpp"
 #include "quarkbot/serie_memory.hpp"
 #include "quarkbot/storage.hpp"
@@ -13,6 +14,9 @@
 
 
 using namespace quarkbot;
+
+template<typename T>
+using TestPersistentSerie = PersistentSerie<T, CommitStrategy::immediately>;
 
 void test_sma() {
 
@@ -29,7 +33,7 @@ void test_sma() {
 void test_sma_persistent() {
     Storage stor (std::make_shared<MemStorage>(MemStorage::no_history));
 
-    ta::SMA<PersistentSerie<Decimal> > sma({stor, "sma"}, 5);
+    ta::SMA<TestPersistentSerie<Decimal> > sma({stor, "sma"}, 5);
     Decimal results[] = {0,0.5_dec, 1, 1.5_dec,2,3,4,5,6,7};
 
     for (int i = 0; i < 10; ++i) {
@@ -42,7 +46,7 @@ void test_ema() {
     //test with storage
     Storage stor (std::make_shared<MemStorage>(MemStorage::no_history));
 
-    ta::EMA<PersistentSerie<Decimal> > ema({stor, "key"}, 4);
+    ta::EMA<TestPersistentSerie<Decimal> > ema({stor, "key"}, 4);
     Decimal results[] = {0,0.4_dec, 1.04_dec, 1.824_dec,2.6944_dec,
         3.61664_dec,4.569984_dec,5.5419904_dec,6.52519424_dec,7.515116544_dec};
 
@@ -112,7 +116,7 @@ void test_wma() {
 
     //identical behaviour on a persistent serie
     Storage stor (std::make_shared<MemStorage>(MemStorage::no_history));
-    ta::WMA<PersistentSerie<Decimal> > wma2({stor, "wma"}, 3);
+    ta::WMA<TestPersistentSerie<Decimal> > wma2({stor, "wma"}, 3);
     for (int i = 0; i < 10; ++i) {
         CHECK_EQUAL(wma2.update(i+1), results[i]);
     }
@@ -185,19 +189,19 @@ void test_warm_restart() {
 
     //--- SMA ---
     {
-        ta::SMA<PersistentSerie<Decimal> > sma({stor, "sk"}, 5);
+        ta::SMA<TestPersistentSerie<Decimal> > sma({stor, "sk"}, 5);
         for (int i = 0; i < 10; ++i) sma.update(i);     //last window: 5,6,7,8,9
     }
-    ta::SMA<PersistentSerie<Decimal> > sma2({stor, "sk"}, 5);
+    ta::SMA<TestPersistentSerie<Decimal> > sma2({stor, "sk"}, 5);
     CHECK(static_cast<bool>(sma2));                     //restored as full window
     CHECK_EQUAL(sma2.update(10), 8_dec);                //avg of 6,7,8,9,10
 
     //--- WMA (this path was broken: it read a moved-from serie) ---
     {
-        ta::WMA<PersistentSerie<Decimal> > wma({stor, "wk"}, 3);
+        ta::WMA<TestPersistentSerie<Decimal> > wma({stor, "wk"}, 3);
         for (int i = 1; i <= 10; ++i) wma.update(i);    //last window: 8,9,10
     }
-    ta::WMA<PersistentSerie<Decimal> > wma2({stor, "wk"}, 3);
+    ta::WMA<TestPersistentSerie<Decimal> > wma2({stor, "wk"}, 3);
     CHECK(static_cast<bool>(wma2));                     //restored as full window
     //continue with 11: window 9,10,11 -> (9*1+10*2+11*3)/6 = 62/6
     CHECK_EQUAL(wma2.update(11), 62_dec/6_dec);
