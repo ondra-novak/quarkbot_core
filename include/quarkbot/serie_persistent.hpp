@@ -2,8 +2,8 @@
 
 #include "quarkbot/abstract/iserie.hpp"
 #include "storage.hpp"
+#include "storage_srl.hpp"
 #include "types.hpp"
-#include <bit>
 #include <memory>
 #include <optional>
 #include <type_traits>
@@ -40,16 +40,15 @@ public:
     }
 
     virtual void put(T value) override {
-        auto binary = std::bit_cast<std::array<char, sizeof(T)> >(value);
         ++_rev.ordered;
 
         if constexpr(cs == CommitStrategy::delayed) {
             auto &trn = shared_transaction(_storage);
-            trn.put(_key, _rev, std::string_view(binary.data(), binary.size()));
+            trn.store(_key, _rev, value);
             if (_size) trn.erase(_key, {_rev.ordered-_size, _rev.random});
         } else {
             auto trn = _storage.write();
-            trn.put(_key, _rev, std::string_view(binary.data(), binary.size()));
+            trn.store(_key, _rev, value);
             if (_size) trn.erase(_key, {_rev.ordered-_size, _rev.random});
             trn.commit(cs == CommitStrategy::immediately_sync);
         }
@@ -59,10 +58,9 @@ public:
         RecordKey rc{_rev.ordered-index, _rev.random};
         auto val = _storage.get(_key, rc);
         std::optional<T> out;
-        if (val.exists) {
-            std::array<char, sizeof(T)> buff;
-            std::copy(val.data.begin(), val.data.end(), buff.begin());
-            out.emplace(std::bit_cast<T>(buff));
+        T v;
+        if (val.extract(v)) {
+            out = v;
         }
         return out;
     }

@@ -79,15 +79,8 @@ public:
     */
     std::vector<std::string> list(std::string_view prefix = {}) const {return _ptr->list(prefix);}
 
-    ///Retrieve binary version of schema
-    Value get_schema_binary(srl::SchemaHash h) const {return _ptr->get_schema_binary(h);}
-
-    /**
-    @param h schema hash. This hash can be retrieved as last 8 bytes of the value
-    @return schema if exists        
-    @note to call this method you need to include companion header storage_srl.hpp
-    */
-    auto get_schema(srl::SchemaHash h) const;
+    ///Retrieve schema - schema is stored as JSON string
+    Value get_schema(srl::SchemaHash h) const {return _ptr->get_schema_binary(h);}
 
     StorageTransaction write();
 

@@ -34,7 +34,7 @@ public:
     virtual void put(const IStorage::ReplicatorEvent &event) override;
     virtual void erase(std::string_view variable_name) override;
     virtual void erase(std::string_view variable_name, const RecordKey &key) override;
-    virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override;
+    virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override;    
 
 
 private:
@@ -67,6 +67,9 @@ public:
         virtual PStorageTransaction write() override;
         virtual void add_replicator(Replicator::Connection consumer) override {
             connect(_watcher, consumer);
+        }
+        virtual bool is_schema_stored(srl::SchemaHash h) const override {
+            return _schemas.contains(h);
         }
 
         MemStorage(HistoryMode mode = keep_history):_no_history_for_simple_variables(mode == no_history) {}

@@ -28,4 +28,6 @@ target_sources(quarkbot_backtest PRIVATE
     config_backtest.cpp
     config_backtest.hpp
     entry_point.cpp
+    persistent_reporter.hpp
+    persistent_reporter.cpp
 )

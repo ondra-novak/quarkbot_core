@@ -53,7 +53,7 @@ namespace quarkbot {
         
         ///start strategy fragment and add it to fragment group ensuring that strategy will not be destroyed until fragment is finished        
         void run(StrategyFragment fragment) {
-            active_group->add(std::move(fragment), exec_worker);
+            active_group->run(std::move(fragment), exec_worker);
         }
 
 

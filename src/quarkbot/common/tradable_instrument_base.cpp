@@ -2,10 +2,13 @@
 #include "order_internal_defs.hpp"
 #include "quarkbot/order.hpp"
 #include "quarkbot/order_defs.hpp"
+#include "quarkbot/serializer/serialize.hpp"
 #include "quarkbot/storage_srl.hpp"
 #include "quarkbot/types.hpp"
 #include <chrono>
 #include <memory>
+
+
 
 
 namespace quarkbot {
@@ -90,7 +93,7 @@ namespace quarkbot {
         std::string id;
         OrderParameters params;        
         std::vector<unsigned char> serialized;
-        void serialize(this auto &self, auto &arch) {
+        constexpr void serialize(this auto &self, auto &arch) {
             arch(self.id, "id");
             arch(self.params, "params");
             arch(self.serialized, "data");

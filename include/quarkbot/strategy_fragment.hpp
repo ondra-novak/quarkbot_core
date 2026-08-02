@@ -45,13 +45,13 @@ namespace quarkbot {
     public:
 
         ///Add fragment o group, the fragment is started, and becomes part of the group
-        void add(StrategyFragment frag) {            
-            add(std::move(frag), ExecutionWorker::current().required());
+        void run(StrategyFragment frag) {            
+            run(std::move(frag), ExecutionWorker::current().required());
         }
 
 
         ///Add fragment o group, the fragment is started, and becomes part of the group
-        void add(StrategyFragment frag, ExecutionWorker &worker) {
+        void run(StrategyFragment frag, ExecutionWorker &worker) {
             std::lock_guard _(_mx);
             if (--next_gc == 0) {
                 for (auto iter = _pending_list.begin(); iter != _pending_list.end();) {

@@ -3,7 +3,6 @@
 
 
 
-
 int main(int argc, char **argv) {
     return quarkbot::strategy_main<MeanRevTrendingStrategy>(argc, argv);
 }

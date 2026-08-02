@@ -1,5 +1,6 @@
 #pragma once
 
+#include "quarkbot/serializer/schema_fwd.hpp"
 #include "quarkbot/storage.hpp"
 #include <cstdint>
 #include <leveldb/db.h>
@@ -10,6 +11,7 @@
 #include <filesystem>
 #include <memory>
 #include <leveldb/options.h>
+#include <unordered_set>
 
 
 namespace quarkbot {
@@ -67,6 +69,10 @@ namespace quarkbot {
 
         constexpr static std::uint8_t schema_keyspace  = LevelDBStorageManager::schema_keyspace;
 
+        mutable std::mutex _set_mutex;
+        mutable std::unordered_set<srl::SchemaHash> _stored_schemas = {};
+
+
         LevelDBStorage(PDB db, uint8_t instance_id);
 
         virtual Value get(std::string_view variable_name) const override;
@@ -76,6 +82,7 @@ namespace quarkbot {
         virtual Value get_schema_binary(srl::SchemaHash h) const override;
         virtual PStorageTransaction write() override;
         virtual void add_replicator(Replicator::Connection consumer) override;
+        virtual bool is_schema_stored(srl::SchemaHash hash) const override;
 
         uint8_t get_keyspace_id() const;
         PDB get_db() const;

@@ -47,7 +47,7 @@ namespace quarkbot {
         auto data_source = configure_datasources(backtest_config_path);
 
         StrategyContext ctx;
-        ctx.storage = Storage(std::make_shared<MemStorage>());
+        ctx.storage = MemStorage::create(MemStorage::no_history);        
         ctx.config = loadStrategyConfig(strategy_config_path);;        
         bt.add_strategy([start_fn = std::move(start_fn), config = cfg.as_config()](StrategyContext &&context){
             return start_fn(std::move(context), config);

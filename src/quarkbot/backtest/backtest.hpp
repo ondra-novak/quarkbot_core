@@ -19,7 +19,8 @@ struct SimulationParams {
     double slippage = {};
     ///How long the order will take to be executed, default is 0 (no latency), for example 100ms means that the order will be executed after 100ms
     /** simulates how long the order travels through wires to the exchange and back. It is total round-trip time */
-    std::chrono::system_clock::duration latency = {};    
+    std::chrono::system_clock::duration latency = {};   
+    
 };
 
 ///Backtest environment 
@@ -55,7 +56,7 @@ public:
     requires(StrategyClass<_Strategy, _Context, Args...>)
     void add_strategy(std::span<const std::string_view> instruments , _Context &&context = _Context{}, Args &&... args) {
         init_context_basic(instruments, context);
-        _strategy_group.add(context.template create_and_start_strategy<_Strategy>(std::move(context), std::forward<Args>(args)...));
+        _strategy_group.run(context.template create_and_start_strategy<_Strategy>(std::move(context), std::forward<Args>(args)...));
     }
 
     ///add strategy to the backtest environment and run it (indirectly by using factory)
@@ -73,7 +74,7 @@ public:
     requires(std::is_invocable_r_v<StrategyFragment, _StrategyFactory, _Context &&>)
     void add_strategy(_StrategyFactory &&strategy, std::span<const std::string_view> instruments , _Context &&context = _Context{}) {
         init_context_basic(instruments, context);
-        _strategy_group.add(std::invoke(std::forward<_StrategyFactory>(strategy), std::move(context)));
+        _strategy_group.run(std::invoke(std::forward<_StrategyFactory>(strategy), std::move(context)));
     }
 
     ///add strategy to the backtest environment and run it
@@ -92,7 +93,7 @@ public:
     requires(StrategyClass<_Strategy, _Context, Args...>)
     void add_strategy(_Context &&context = _Context{}, Args &&... args) {
         init_context_basic( context);
-        _strategy_group.add(create_and_start_strategy<_Strategy>(std::move(context), std::forward<Args>(args)...), _worker);
+        _strategy_group.run(create_and_start_strategy<_Strategy>(std::move(context), std::forward<Args>(args)...), _worker);
     }
 
         ///add strategy to the backtest environment and run it (indirectly by using factory)
@@ -109,7 +110,7 @@ public:
     requires(std::is_invocable_r_v<StrategyFragment, _StrategyFactory, _Context &&>)
     void add_strategy(_StrategyFactory &&strategy, _Context &&context = _Context{}) {
         init_context_basic( context);
-        _strategy_group.add(std::invoke(std::forward<_StrategyFactory>(strategy), std::move(context)));
+        _strategy_group.run(std::invoke(std::forward<_StrategyFactory>(strategy), std::move(context)));
     }
 
     ///run backtest with given data source
@@ -136,7 +137,7 @@ public:
     
     ///Launch custom fragment in context of backtest (not strategy)
     void launch(StrategyFragment fragment) {
-        _strategy_group.add(std::move(fragment));
+        _strategy_group.run(std::move(fragment));
     }
     
     void stop() {

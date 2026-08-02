@@ -3,6 +3,7 @@
 #include "quarkbot/abstract/istorage.hpp"
 #include "quarkbot/execution_worker.hpp"
 #include "quarkbot/storage.hpp"
+#include "quarkbot/storage_srl.hpp"
 #include "quarkbot/strategy_fragment.hpp"
 #include <array>
 #include <bit>
@@ -195,24 +196,18 @@ protected:
 
     void init() {
         auto val = group.get_storage().get(group.get_name());
-        if (val.exists) {
-            if (val.data.size() == sizeof(T)) {
-                std::array<char, sizeof(T)> bin;
-                std::copy(val.data.begin(), val.data.end(), bin.begin());
-                value = std::bit_cast<T>(bin);                
-            }
-        }
+        val.extract(value);
     }
 
     void store() {        
         if constexpr(cs == CommitStrategy::delayed) {
             auto &trn = shared_transaction(group.get_storage());
             auto bin = std::bit_cast<std::array<char, sizeof(T)> >(value);
-            trn.put(group.get_name(), std::string_view(bin.begin(), bin.end()));
+            trn.store(group.get_name(), std::string_view(bin.begin(), bin.end()));
         } else {
             auto trn = group.get_storage().write();
             auto bin = std::bit_cast<std::array<char, sizeof(T)> >(value);
-            trn.put(group.get_name(), std::string_view(bin.begin(), bin.end()));
+            trn.store(group.get_name(), std::string_view(bin.begin(), bin.end()));
             trn.commit(cs == CommitStrategy::immediately_sync);
         }
     }
@@ -297,10 +292,10 @@ protected:
     void store() {
         if constexpr(cs == CommitStrategy::delayed) {
             auto &trn = shared_transaction(group.get_storage());
-            trn.put(group.get_name(), value);
+            trn.store(group.get_name(), value);
         } else {
             auto trn = group.get_storage().write();
-            trn.put(group.get_name(), value);
+            trn.store(group.get_name(), value);
             trn.commit(cs == CommitStrategy::immediately_sync);
         }
     }

@@ -12,6 +12,7 @@
 #include <leveldb/status.h>
 #include <leveldb/write_batch.h>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -370,7 +371,16 @@ LevelDBStorage::ReplicatorHandler LevelDBStorage::get_replicator()  {
     return {_watcher, _keyspace_id};
 }
 
-
+bool LevelDBStorage::is_schema_stored(srl::SchemaHash hash) const {
+    std::scoped_lock _(_set_mutex);
+    if (_stored_schemas.contains(hash)) return true;
+    auto r = get_schema_binary(hash);
+    if (r.exists) {
+        _stored_schemas.insert(hash);
+        return true;
+    }
+    return false;
+}
 
 }
 

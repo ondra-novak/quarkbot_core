@@ -3,8 +3,12 @@
 #include "quarkbot/abstract/ieventstream.hpp"
 #include "quarkbot/context.hpp"
 #include "quarkbot/event_stream.hpp"
+#include "quarkbot/order.hpp"
 #include "quarkbot/order_defs.hpp"
+#include "quarkbot/persistent.hpp"
+#include "quarkbot/round_policy.hpp"
 #include "quarkbot/serie_persistent.hpp"
+#include "quarkbot/somodule.hpp"
 #include "quarkbot/strategy_fragment.hpp"
 #include "quarkbot/stream/quote.hpp"
 #include "quarkbot/timer.hpp"
@@ -15,6 +19,7 @@
 #include "quarkbot/ta/ema.hpp"
 #include "quarkbot/types.hpp"
 #include <chrono>
+#include <memory>
 
 namespace {
     using namespace quarkbot;
@@ -31,223 +36,247 @@ public:
     MeanRevTrendingStrategy(StrategyContext &&context):context(std::move(context)) {}
 
 
+
+    struct SingleInstrumentStrategy {
+    public:
+        //configuration
+
+        MeanRevTrendingStrategy &owner;
+        TradableInstrument instrument;
+        std::size_t trend_detect_interval_min;
+        std::size_t mean_rev_interval_min;
+        double bbema_band_multiplier;
+        double reversal_multiplier;
+        double initial_budget;
+        double initial_pos_percent;
+        double max_loss_percent;
+
+        //indicators
+        ta::BollingerBandsGen<ta::EMA<PersistentSerie<double> > > bbema;
+        ta::EMA<PersistentSerie<double> > fast_ema;
+        ta::EMA<PersistentSerie<double> > slow_ema;
+      
+        //state variables
+        Persistent<Decimal> position;
+        Persistent<Decimal> last_trade_price;
+        Persistent<double> total_loss;
+        Persistent<double> calc_loss;
+        Persistent<Decimal> last_trend_check_price;
+        Persistent<double> benchmark_profit;
+        Persistent<double> current_profit;
+        Persistent<int> center_band_index;
+
+        //orders
+        Order upper = {};
+        Order lower = {};
+        Timer timer = {};
+
+        //shared calculations
+        double bbema_mean = {};
+        double bbema_dev = {};
+
+        //sync                
+        StrategyFragmentGroup sync = {};
+
+        std::pair<double, double> calculate_loss(Decimal cur_price) const {
+            const auto &info = instrument.get_info();
+            double pnl = info.calc_pnl(last_trade_price, cur_price, position).to_double();            
+            double new_loss = std::max(total_loss - pnl,0.0);
+            double new_calc_loss = std::min(std::max(calc_loss - (pnl > 0?1.0:2.0)*pnl , 0.0), new_loss);
+            return {new_loss, new_calc_loss};
+        }    
+
+
+        void process_fill(const Fill &fill) {
+            current_profit = current_profit + fill.contract.calc_pnl(last_trade_price, fill.price, position).to_double();
+            auto loss = calculate_loss(fill.price);
+            auto pos_change = fill.quantity * static_cast<int>(fill.side) ;
+            position = position + pos_change;
+            last_trade_price = fill.price;
+            total_loss = loss.first;
+            calc_loss = loss.second;
+        }
+
+        Decimal calc_new_pos(Decimal new_price, int side) const {
+            auto new_loss = calculate_loss(new_price);
+            return (new_loss.second * reversal_multiplier / new_price) *side;
+        }
+
+        Decimal calc_order_diff(Decimal new_price, int side) const {
+            return calc_new_pos(new_price,side) - position;
+        }
+
+        Order &select_mean_rev_order(Side side) {
+            return side == Side::buy?lower:upper;;
+        }
+        double select_mean_rev_price(Side side) const {
+            return bbema_mean + bbema_dev * bbema_band_multiplier * (center_band_index - static_cast<int>(side));
+        }
+        void recalculate_bands(Side side) {
+            center_band_index = center_band_index - static_cast<int>(side);
+        }
+
+        StrategyFragment follow_mean_rev_order(Order order) {
+            OrderReport rpt;
+            while (co_await order.receive(rpt)) {
+                for (auto &f: rpt.fills) process_fill(f);
+            }
+            auto side = order.get_parameters().side;
+            if (rpt.status == OrderStatus::filled) {
+                recalculate_bands(side);
+            }
+            if (select_mean_rev_order(side) == order) {
+                place_mean_rev_order(select_mean_rev_price(side), side, {});
+            }
+        }
+
+
+        void place_mean_rev_order(Decimal new_price, Side side, Order replace_order) {
+            int dir = sgn(position);
+            if (dir == 0) dir = static_cast<int>(side);
+            Decimal diff = calc_order_diff(new_price, dir);
+            Decimal adj_diff = abs(diff * static_cast<int>(side));
+            Order &cur_order = select_mean_rev_order(side);
+            cur_order = instrument.place_order(OrderRequest{
+                .label={},
+                .side=side,
+                .type=OrderType::limit, 
+                .quantity={adj_diff, RoundStrategy::aggressive},
+                .limit_price={new_price, RoundStrategy::defensive},
+            }, replace_order);
+            sync.run(follow_mean_rev_order(cur_order));
+        }
+
+        StrategyFragment trend_detection_period(Decimal price) {
+            OrderReport rpt;
+            do {
+                const auto &info = instrument.get_info();
+                double fema = fast_ema.update(price.to_double());
+                double sema = slow_ema.update(fema);
+                double diff = fema - sema;
+                int dir = diff >= 0?1:-1;
+                if (dir == sgn(position.get())) co_return;  //in direction, no need to do anything
+
+                double initial_pos_cur = (initial_budget + benchmark_profit) * initial_pos_percent * 0.01;
+                Decimal oracle_position = dir * initial_pos_cur / last_trend_check_price.get();
+                auto pnl = info.calc_pnl(last_trend_check_price, price, oracle_position).to_double();
+                if (total_loss > calc_loss && pnl > 0) pnl = 0; //failed benchmark we are on risk
+                benchmark_profit = benchmark_profit + pnl;
+                total_loss = total_loss - pnl;  //move oracle profit into loss of mean reversion;
+                
+                auto quant = calc_order_diff(price, dir);
+                upper.cancel();
+                lower.cancel();
+                upper = {};
+                lower = {};
+                Order rev_order = instrument.place_order(OrderRequest{
+                    .side = static_cast<Side>(sgn(quant)),
+                    .type = OrderType::market,
+                    .quantity = abs(quant)
+                });
+                while (rev_order.receive(rpt)) {
+                    for (auto &f: rpt.fills) {
+                        process_fill(f);
+                    }
+                }
+                if (rpt.status != OrderStatus::filled) {
+                    if (!co_await timer.sleep_for(std::chrono::seconds(30))) co_return;
+                }
+                
+            } while (rpt.status == OrderStatus::filled);
+        }
+
+        StrategyFragment quit() {
+            upper.cancel();
+            lower.cancel();
+            timer.cancel();
+            co_await sync.join();
+        }
+
+        StrategyFragment fast_interval(EventStream<Quote> stream) {
+            auto nx = interval_upper_bound(timer.now(), std::chrono::minutes(mean_rev_interval_min));
+            while (co_await(timer.sleep_until(nx))) {
+                 nx = interval_upper_bound(timer.now(), std::chrono::minutes(mean_rev_interval_min));
+                 Quote qt;
+                 stream.current(qt);
+                 double dp = qt.mid().to_double();
+                 auto r = bbema.update(dp);
+                 bbema_mean = r.mean;
+                 bbema_mean = r.dev;
+                 place_mean_rev_order(select_mean_rev_price(Side::buy), Side::buy, lower);
+                 place_mean_rev_order(select_mean_rev_price(Side::sell), Side::sell, upper);
+            }
+        }
+
+        StrategyFragment slow_interval(EventStream<Quote> stream) {
+            auto nx = interval_upper_bound(timer.now(), std::chrono::minutes(trend_detect_interval_min));
+            while (co_await(timer.sleep_until(nx))) {
+                 nx = interval_upper_bound(timer.now(), std::chrono::minutes(mean_rev_interval_min));
+                 Quote qt;
+                 stream.current(qt);
+                 trend_detection_period(qt.mid());
+            }
+        }
+
+
+    };
+
+    StrategyFragment run_instrument(TradableInstrument instrument, StrategyContext::Config cfg, const PersistentNamespace &ns) {
+        SingleInstrumentStrategy inst {
+            *this,
+            instrument,
+            cfg["trend_detect_interval_min"],
+            cfg["mean_rev_check_interval_min"],
+            cfg["bbema_band_multiplier"],
+            cfg["reversal_multiplier"],
+            cfg["initial_budget"],
+            cfg["initial_pos_percent"],
+            cfg["max_loss_percent"],            
+
+            {{ns, "bbema"}, cfg["bbema_interval"], cfg["bbema_interval"]},
+            {{ns,"ema_master"}, cfg["trend_indicator_interval_master"]},
+            {{ns,"ema_slave"}, cfg["trend_indicator_interval_slave"]},
+
+            {ns, "position"},
+            {ns,"last_trade_price"},
+            {ns,"total_loss"},
+            {ns,"calc_loss"},
+            {ns,"last_trend_check_price"},
+            {ns,"benchmark_profit"},
+            {ns,"current_profit"},
+            {ns,"center_band_index"},
+        };
+
+        Quote qt;
+        auto stream = instrument.subscribe<Quote>();
+        do {
+            if (!co_await stream.receive(qt)) co_return;
+        } while (!qt.both_sides());
+
+        if (inst.last_trend_check_price.get() == 0_dec) inst.last_trend_check_price  = qt.mid();
+        if (inst.last_trade_price.get() == 0_dec) inst.last_trend_check_price  = qt.mid();        
+
+        auto p1 = inst.fast_interval(stream);
+        auto p2 = inst.slow_interval(stream);
+        co_await context.stop_signal;
+        co_await inst.quit();
+        co_await p2;
+        co_await p1;        
+    }
+
+
     StrategyFragment main() {
 
         for (auto &instrument: context.instruments) {
-            context.run(run_instrument(std::move(instrument), context.config/instrument.get_info().name));
+            auto &info = instrument.get_info();
+            auto &name = info.name;            
+            context.run(run_instrument(std::move(instrument), 
+                                 context.config/name, 
+                                 {context.storage, std::string(name)}));
         }
         co_return;
     }
-
-    struct ParsedConfig {
-        std::size_t trend_detection_min;
-        std::size_t base_interval_min;        
-        Decimal bbema_multiplier;
-        Decimal reversal_multiplier;
-        Decimal max_loss;
-    };
-
-
-    struct StrategyState {
-        Decimal position = {};
-        Decimal prev_price = {};
-        Decimal total_loss = {};
-        Decimal calc_loss = {};
-    };
-
-    struct State {
-        ParsedConfig config;
-        BBEma price_bb;        
-        Ema trend_ema;               
-        Ema trend_ema2;
-        EventStream<Quote> quote_stream;
-        TradableInstrument instrument;
-        ContractInfo contract_type;
-
-        StrategyState sstate = {};
-
-
-        Decimal upper_price = {};
-        Decimal lower_price = {};
-        Order upper = {};
-        Order lower = {};
-        int cur_line = 0;
-    };
-
-    using PState = std::shared_ptr<State>;
-
-    Order calculate_order(PState state, Order replaced_order, Decimal price, Side side, bool reverse) {
-        auto [total, calc] = calculate_loss(state, price);
-        Decimal new_pos = calc * state->config.reversal_multiplier / price;
-        
-        if (reverse) {
-            //TODO: add loss on reverse
-            Decimal new_pos_dir = static_cast<int>(side) * new_pos;
-            Decimal diff = new_pos_dir - state->sstate.position ;
-            return state->instrument.place_order({
-                "reverse",
-                side,
-                OrderType::market,
-                abs(diff),                
-            });
-        } else {
-            Decimal new_pos_dir = sgn(state->sstate.position) * new_pos;
-            Decimal diff = new_pos_dir - state->sstate.position ;
-            return state->instrument.place_order({
-                "dca",
-                side,
-                OrderType::limit,
-                abs(diff),                
-                price
-            },replaced_order);
-        }
-
-
-    }
-
-    std::pair<Decimal, Decimal> calculate_loss(PState state, Decimal cur_price) {
-        Decimal pnl = state->contract_type.calc_pnl(state->sstate.prev_price, cur_price, state->sstate.position);
-        Decimal new_loss = state->sstate.total_loss - pnl;
-        Decimal new_calc_loss = pnl > 0?state->sstate.calc_loss - pnl:state->sstate.calc_loss - 2*pnl;
-        Decimal total_loss = std::max(Decimal{}, new_loss);
-        Decimal calc_loss = std::min(state->sstate.total_loss,std::max(Decimal{}, new_calc_loss));
-        return {total_loss, calc_loss};
-    }
-
-    void process_fill(PState state, const Fill &f) {        
-        auto x = calculate_loss(state, f.price);
-        state->sstate.total_loss = x.first;
-        state->sstate.calc_loss = x.second;
-        state->sstate.position += f.quantity * static_cast<int>(f.side);
-
-    }
-
-   
-    StrategyFragment monitor_order(PState state, Order order) {
-        OrderReport rpt;
-        while (true) {
-            while (co_await order.receive(rpt)) {
-                for (auto &f: rpt.fills) {
-                    process_fill(state, f);
-                }
-            }
-            if (order == state->lower) {
-                state->lower = order =  calculate_order(state, {}, state->lower_price, Side::buy, false);                 
-            } else if (order == state->upper) {
-                state->lower = order =  calculate_order(state, {}, state->upper_price, Side::sell, false); 
-            } else {
-                break;
-            }
-        }
-    }
-
-
-    StrategyFragment tick_loop(PState state) {
-        std::size_t base_interval = state->config.base_interval_min;
-        Decimal bb_multipler = state->config.bbema_multiplier;
-        Timestamp next_tp;                
-        Quote qt;
-        do {
-            next_tp = interval_upper_bound(timer.now(), std::chrono::minutes(base_interval));
-            state->quote_stream.current(qt); //read quotes
-            if (!qt.both_sides()) continue;
-            
-            auto bbval = state->price_bb.update(qt.mid());
-            state->upper_price = bbval.mean + (state->cur_line + 1) * bbval.dev*bb_multipler;
-            state->lower_price = bbval.mean + (state->cur_line - 1) * bbval.dev*bb_multipler;
-
-            state->upper = calculate_order(state, state->upper, state->upper_price, Side::sell, false);
-            state->lower = calculate_order(state, state->lower, state->lower_price, Side::buy, false);
-            context.run(monitor_order(state, state->upper));
-            context.run(monitor_order(state, state->lower));
-
-        } while (co_await timer.sleep_until(next_tp));
-    }
-
-    StrategyFragment reverse_position_to(PState state, Quote qt, Side side) {
-        do {
-            state->upper.cancel();
-            state->lower.cancel();
-            Order ord = calculate_order(state, {}, qt.mid(), side, true);
-            OrderReport rpt;
-            while (co_await ord.receive(rpt)) {
-                for (auto &f: rpt.fills) {
-                    process_fill(state, f);
-                }
-            }
-            if (sgn(state->sstate.position) == static_cast<int>(side)) co_return;                      
-        } while (co_await timer.sleep_for(std::chrono::minutes(1)));
-        
-    }
-
-    StrategyFragment day_loop(PState state) {
-        std::size_t interval = state->config.trend_detection_min;
-        Timestamp next_tp;                
-        Quote qt;
-        do {
-            next_tp = interval_upper_bound(timer.now(), std::chrono::minutes(interval));
-            state->quote_stream.current(qt); //read quotes
-            if (!qt.both_sides()) continue;
-            
-            auto ema1 = state->trend_ema.update(qt.mid());
-            auto ema2 = state->trend_ema2.update(ema1);
-            if (ema1 > ema2) {
-                if (state->sstate.position < 0) {
-                    co_await reverse_position_to(state, qt, Side::buy);                
-                }
-            } else if (ema1 < ema2) {
-                if (state->sstate.position < 0) {
-                    co_await reverse_position_to(state, qt, Side::sell);                
-                }
-            }
-
-        } while (co_await timer.sleep_until(next_tp));
-
-    }
-
-    StrategyFragment run_instrument(TradableInstrument instrument, StrategyContext::Config config) {
- 
-        Quote qt;
-        //wait for first quote
-        auto quote_stream = instrument.subscribe<Quote>().stop_on(context.stop_signal);
-        do {
-            if (!co_await quote_stream.receive(qt)) co_return;
-        } while (!qt.both_sides());
-
-        auto name = instrument.get_info().name;
-     
-        auto state = std::make_shared<State>(State{
-            {
-                config["trend_detection_min"],
-                config["base_interval_min"],
-                config["bbema_multiplier"],
-                config["reversal_multiplier"],
-                config["max_loss"]
-            },
-            {{context.storage,std::string(name)+"_pricebb"}, config["price_bb_mean"], config["price_bb_mean"]},
-            {{context.storage,std::string(name)+"_ema"}, config["trend_ema"]},
-            {{context.storage,std::string(name)+"_ema2"}, config["trend_ema2"]},
-            std::move(quote_stream),
-            instrument,
-            instrument.get_info()
-        });
-
-        auto tl = tick_loop(state).launch();
-        auto dl = day_loop(state).launch();
-
-
-        co_await dl;
-        co_await tl;
-        state->upper.cancel();
-        state->lower.cancel();
-        
-        co_return;
-    }
-
-
 
 };
-
-
 
 }

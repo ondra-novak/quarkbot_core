@@ -2,6 +2,7 @@
 
 
 #include "abstract/istorage.hpp"
+#include "quarkbot/serializer/schema_fwd.hpp"
 #include <memory>
 namespace quarkbot {
 
@@ -33,6 +34,9 @@ namespace quarkbot {
         }
         virtual Value get_schema_binary(srl::SchemaHash h) const override {
             return _root->get_schema_binary(h);
+        }
+        virtual bool is_schema_stored(srl::SchemaHash h) const override {
+            return _root->is_schema_stored(h);
         }
         virtual void add_replicator(Replicator::Connection consumer) override {
             _root->add_replicator(std::move(consumer));

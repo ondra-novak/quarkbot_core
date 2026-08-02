@@ -165,6 +165,14 @@ namespace quarkbot {
         ///Retrieve binary version of schema
         virtual Value get_schema_binary(srl::SchemaHash h) const = 0;
 
+        ///Determines whether schema is stored without retrieveing it
+        /**
+            The call should be fast!
+            The value can be cached in some lookup map, because once the schema is stored, it is stored forever
+            The function is called for every put with schema and it determines whether to serialize and store schema
+        */
+        virtual bool is_schema_stored(srl::SchemaHash h) const = 0;
+
         ///create write transaction
         virtual PStorageTransaction write() = 0;
 
@@ -325,6 +333,9 @@ namespace quarkbot {
         }
         virtual void add_replicator(Replicator::Connection) override {
             //read only, do nothing
+        }
+        virtual bool is_schema_stored(srl::SchemaHash) const override {
+            return true;
         }
     };
 

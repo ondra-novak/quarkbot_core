@@ -221,7 +221,7 @@ struct Fill {
 
     bool operator==(const Fill &other) const = default;
 
-    void serialize(this auto &self, auto &ar) {
+    constexpr void serialize(this auto &self, auto &ar) {
         ar(self.id,"id");
         ar(self.label,"label");
         ar(self.time,"time");
@@ -233,6 +233,8 @@ struct Fill {
     }
     
 };
+
+
 
 struct Position {    
    

@@ -2,76 +2,58 @@
 
 #pragma once
 
-#include "quarkbot/abstract/istorage.hpp"
-#include "quarkbot/serializer/schema.hpp"
-#include "quarkbot/storage.hpp"
+#include "abstract/istorage.hpp"
+#include "serializer/schema_fwd.hpp"
+#include "serializer/serialize.hpp"
+#include "storage.hpp"
+#include "serializer/serialize_schema_to_json.hpp"
+#include <iterator>
 namespace quarkbot {
 
-template<typename Self, typename T>
-inline bool IStorage::Extractor::extract(this Self &&self, T &val, srl::SchemaHash &h)             {
-    if (!self.exists || self.data.size() < sizeof(srl::SchemaHash)) return false;
-
+template<typename T>
+inline bool extract_srl(std::string_view value, T &out, srl::SchemaHash &type_hash) {
+    if (value.size() < sizeof(srl::SchemaHash)) return false;
     std::array<char, sizeof(srl::SchemaHash)> buff;
-    std::string_view value(self.data);
     std::string_view tail = value.substr(value.size() - sizeof(srl::SchemaHash));
     std::copy(tail.begin(), tail.end(),buff.begin());
+    value.remove_prefix(sizeof(srl::SchemaHash));
     
     srl::SchemaHash record_hash = std::bit_cast<srl::SchemaHash>(buff);
+    type_hash = srl::schema_hash<T>;
     
-    auto th = srl::schema_hash_for_type<T>;
-    if (!th.has_value()) {
-        std::string schema_bin = srl::serialize_schema<T>();
-        std::hash<std::string> hasher;
-        th = hasher(schema_bin);
-    }
-
-    h = th.value();
-
-    if (record_hash != h) return false;
+    if (record_hash != type_hash) return false;
 
     bool valid = false;
     try {
-        srl::BinaryParser parser([&, pos = std::size_t(0)](std::span<std::uint8_t> buff) mutable {
-            if (pos + value.size() > value.size()) throw true;
-            std::copy_n(value.begin()+static_cast<std::ptrdiff_t>(pos), buff.size(), buff.begin());
-            pos += buff.size();
-        });
-        parser(val);
+        srl::deserialize_from(value.begin(), value.end(), out);
         valid = true;
     } catch (...) {
         valid = false;
     }
     return valid;
+
 }
 
-inline auto Storage::get_schema(srl::SchemaHash h) const  {
-    std::optional<srl::BinarySchemaGenerator::Schema> out;
-    out.emplace();
-    if (!(get_schema_binary(h) >> out.value())) {
-        out.reset();
-    }
-    return out;
-    
+template<typename Self, typename T>
+inline bool IStorage::Extractor::extract(this Self &&self, T &out, srl::SchemaHash &h)             {
+    if (!self.exists || self.data.size() < sizeof(srl::SchemaHash)) return false;
+    return extract_srl<T>(self.data,out, h);    
 }
+
 
 template<typename T>
-std::string StorageTransaction::serialize_value(const T &val) {
+std::string StorageTransaction::serialize_value(const T &val) {    
+
     std::vector<char> buffer;
-    buffer.reserve(sizeof(val));
-    srl::BinarySerializer serializer([&](std::span<const std::uint8_t> data){
-        buffer.insert(buffer.end(), data.begin(), data.end());
-    });
-    serializer(val);
-    auto hash = srl::schema_hash_for_type<T>;
-    if (!hash.has_value() || !srl::schema_is_stored<T>) {
-        std::string binschema = srl::serialize_schema<T>();
-        std::hash<std::string> hasher;
-        hash = srl::schema_hash_for_type<T> = hasher(binschema);
-        srl::schema_is_stored<T> = true;
-        put_schema_binary(hash.value(), binschema);
+    auto iter = srl::serialize_to<char>(val, std::back_inserter(buffer));
+    auto hash = srl::schema_hash<T>;
+    auto schema_bin = std::bit_cast<std::array<char, sizeof(srl::SchemaHash)> >(hash);
+    std::copy(schema_bin.begin(), schema_bin.end(), iter);
+
+    if (!get_storage().get_handle()->is_schema_stored(hash)) {
+        auto schema = srl::Schema::create<T>();
+        srl::serialize_schema_to_json(schema);
     }
-    auto hash_bin = std::bit_cast<std::array<char, sizeof(srl::SchemaHash)> >(hash.value());
-    buffer.insert(buffer.end(), hash_bin.begin(), hash_bin.end());            
     return {buffer.begin(), buffer.end()};
 }
 
