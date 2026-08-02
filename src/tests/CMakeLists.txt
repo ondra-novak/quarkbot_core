@@ -9,7 +9,7 @@ set(BASIC_TESTS
     mem_storage_test.cpp
     tardis_source_test.cpp
     merged_source_test.cpp
-    #serializer.cpp
+    serializer.cpp
     signals.cpp
     ta.cpp
     websocket_binance.cpp

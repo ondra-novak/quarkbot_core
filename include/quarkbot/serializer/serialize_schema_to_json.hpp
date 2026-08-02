@@ -33,7 +33,7 @@ inline Json serialize_schema_to_json(const Schema &schema) {
         }
         Json::Object obj;
         if (!seq.empty()) obj["fields"] = seq;
-        if (any_name) obj["names"] = seq;
+        if (any_name) obj["names"] = names;
         obj["layout"] = layout_type_table(value->type).value_or(std::string_view());
         if (value->type == LayoutType::trivial) {
             obj["size"] = value->blob_size;

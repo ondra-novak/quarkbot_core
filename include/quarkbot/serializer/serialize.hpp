@@ -8,9 +8,11 @@
 #include <algorithm>
 #include <bit>
 #include <chrono>
+#include <array>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <iterator>
 #include <span>
 #include <stdexcept>
@@ -45,7 +47,7 @@ concept IsMap = std::ranges::range<T> && requires(T v, typename T::key_type k) {
     typename T::key_type;
     typename T::mapped_type;
     { v.clear() };
-    { v[k]} -> std::same_as<typename T::mapped_value &>;
+    { v[k]} -> std::same_as<typename T::mapped_type &>;
 };
 
 template<typename T>
@@ -154,12 +156,6 @@ concept SerializeRule = requires(LayoutBase &layout_base,
 
 
 template<typename T>
-constexpr bool type_has_zero_fields = get_serialize_rule(std::type_identity<T>{}).field_count() == 0;
-
-
-
-
-template<typename T>
 struct UninitialzedObject {
     union DummyUnion {
         T val;
@@ -188,7 +184,7 @@ struct SerializeRuleWithMethod {
     static constexpr void iterate_fields(auto &&cb) {
         const auto &obj = UninitialzedObject<T>::obj;
         auto iter = [&]<typename X, typename ... Args>(const X &, Args &&... ){
-            cb(std::type_identity<T>());
+            cb(std::type_identity<std::decay_t<X> >());
         };
         obj.val.serialize(iter);
     }
@@ -197,7 +193,8 @@ struct SerializeRuleWithMethod {
         auto beg = l.fields.begin();       
         const auto &obj = UninitialzedObject<T>::obj; 
         auto iter = [&]<typename X, typename ... Args>(X &&, Args &&...name){
-            beg->type_name = type_name<X>;
+            //decay: X binds as 'const F &' here, but iterate_fields/Schema key on F
+            beg->type_name = type_name<std::decay_t<X> >;
             static_assert(sizeof...(Args)<2, "Serialization operator can have 1 or 2 arguments, not more");
             if constexpr(sizeof...(Args) == 1) {
                 static_assert((IsStringLiteral<Args> && ...), "Second argument must be string literal");
@@ -235,9 +232,9 @@ struct SerializeRuleTupleLike {
 
     }
     static constexpr void init_layout(LayoutBase &l) {
-        l.type =  LayoutType::variant;        
-        auto beg = l.fields.begin();        
-        iterate_fields([&]<typename X>(std::type_identity<T>){
+        l.type =  LayoutType::sequence;
+        auto beg = l.fields.begin();
+        iterate_fields([&]<typename X>(std::type_identity<X>){
             beg->type_name = type_name<X>;
             beg->field_name = {};
             ++beg;
@@ -248,7 +245,7 @@ struct SerializeRuleTupleLike {
             (cb(std::get<idx>(s)),...);
         };
         iter(std::make_index_sequence<fld_count>{});
-        
+
     }
     static constexpr void deserialize(T &s, auto &&cb) {
         auto iter = [&]<std::size_t ... idx>(std::index_sequence<idx...>) {
@@ -275,9 +272,9 @@ struct SerializeRuleVariantLike {
 
     }
     static constexpr void init_layout(LayoutBase &l) {
-        l.type =  LayoutType::variant;        
-        auto beg = l.fields.begin();        
-        iterate_fields([&]<typename X>(std::type_identity<T>){
+        l.type =  LayoutType::variant;
+        auto beg = l.fields.begin();
+        iterate_fields([&]<typename X>(std::type_identity<X>){
             beg->type_name = type_name<X>;
             beg->field_name = {};
             ++beg;
@@ -305,9 +302,9 @@ struct SerializeRuleVariantLike {
         cb(idx);
         if (idx >=  fld_count) throw std::runtime_error(std::format("Variant index for {} is out of range. index={}, maximum={}. Corrupted data", type_name<T>, idx, fld_count-1));
         variant_init_table_by_index[idx](s);
-        std::visit([&](const auto &x){
+        std::visit([&](auto &x){
             cb(x);
-        }, s);        
+        }, s);
     }
 };
 
@@ -346,13 +343,17 @@ struct SerializeRuleUnsignedNumber {
         if (pfx <=246) {
             s = static_cast<T>(pfx);
         } else {
-            std::array<std::uint8_t, sizeof(T)> buffer;
-            pfx -= 246;
-            read_binary(cb, std::span(buffer.data(), pfx));
+            //the prefix is attacker/corruption controlled - it can claim up to 9
+            //trailing bytes, which must not be written past the end of buffer
+            const std::size_t count = static_cast<std::size_t>(pfx) - 246;
+            if (count > sizeof(T)) throw std::runtime_error(std::format(
+                    "Varuint of {} declares {} trailing bytes, maximum is {}. Corrupted data",
+                    type_name<T>, count, sizeof(T)));
+            std::array<std::uint8_t, sizeof(T)> buffer = {};
+            read_binary(cb, std::span(buffer.data(), count));
             s = 0;
-            for (auto x: buffer) {
-                s = (s << 8) | x;
-                if (--pfx == 0) break;
+            for (std::size_t i = 0; i < count; ++i) {
+                s = static_cast<T>((s << 8) | buffer[i]);
             }
         }
 
@@ -368,19 +369,22 @@ struct SerializeRuleSignedNumber {
         l.type = LayoutType::varint;        
     }
     using U = std::make_unsigned_t<T>;
-    static constexpr void serialize(const T &s, auto &&cb) {        
-        if (s < static_cast<T>(0)) {            
-            SerializeRuleUnsignedNumber<U>::serialize((static_cast<U>(-s)<<1) | 1, cb);
-        } else {
-            SerializeRuleUnsignedNumber<U>::serialize((static_cast<U>(s)<<1), cb);
-        }
+    ///standard zigzag: 0,-1,1,-2,2 -> 0,1,2,3,4
+    /**
+     * Everything happens in the unsigned domain on purpose. Negating the minimum
+     * value of T is undefined behaviour, so a sign-magnitude scheme cannot encode
+     * it at all - this mapping is bijective over the whole range of T.
+     */
+    static constexpr void serialize(const T &s, auto &&cb) {
+        const U mask = s < static_cast<T>(0) ? static_cast<U>(~U(0)) : U(0);
+        const U zigzag = static_cast<U>(static_cast<U>(static_cast<U>(s) << 1) ^ mask);
+        SerializeRuleUnsignedNumber<U>::serialize(zigzag, cb);
     }
     static constexpr void deserialize(T &s, auto &&cb) {
-        U v;
+        U v = {};
         SerializeRuleUnsignedNumber<U>::deserialize(v, cb);
-        if (v & 1) s = -static_cast<T>(v >> 1);
-        else s = static_cast<T>(v >> 1);
-
+        const U mask = (v & 1) ? static_cast<U>(~U(0)) : U(0);
+        s = static_cast<T>(static_cast<U>(static_cast<U>(v >> 1) ^ mask));
     }
 };
 
@@ -453,13 +457,14 @@ struct SerializeRuleMap {
     static constexpr void init_layout(LayoutBase &l) {
         l.fields[0].type_name = type_name<typename T::key_type>;
         l.fields[1].type_name = type_name<typename T::mapped_type>;
-        l.type = LayoutType::dictionary;        
+        l.type = LayoutType::dictionary;
     }
-    static constexpr void serialize(const T &s, auto &&cb) {    
+    static constexpr void serialize(const T &s, auto &&cb) {
         auto count = static_cast<std::size_t>(std::distance(s.begin(), s.end()));
         cb(count);
-        for (const auto &x: s) {
-            cb(x);
+        for (const auto &[k, v]: s) {
+            cb(k);
+            cb(v);
         }
     }
     static constexpr void deserialize(T &s, auto &&cb) {    
@@ -478,7 +483,7 @@ struct SerializeRuleMap {
 template<IsSet T>
 struct SerializeRuleSet {
     using value_type = T;
-    using U = std::decay_t<decltype(*std::declval<T::iterator>())>;
+    using U = std::decay_t<decltype(*std::declval<typename T::iterator>())>;
     static constexpr std::size_t field_count() {return 1;}
     static constexpr void iterate_fields(auto cb) {
         cb(std::type_identity<typename T::value_type>());
@@ -500,6 +505,7 @@ struct SerializeRuleSet {
         s.clear();
         for (std::size_t i = 0; i < count; ++i) {
             typename T::value_type v = {};
+            cb(v);
             s.emplace(std::move(v));
         }
     }
@@ -552,60 +558,121 @@ struct SerializeRuleTrivial {
 };
 
 
+///Built-in rules for the types this library knows about.
+/**
+ * These live in a nested namespace under a different name on purpose. They are
+ * reached only by *qualified* lookup from the get_rule customization point, so
+ * they never take part in overload resolution against a user-provided
+ * get_serialize_rule(). That is what makes a user rule always win instead of
+ * becoming ambiguous with a built-in one.
+ */
+namespace builtin {
+
 template<typename T>
-requires(HasSerializeMethod<T>) 
-constexpr auto get_serialize_rule(std::type_identity<T>) {return  SerializeRuleWithMethod<T>{};}
+requires(HasSerializeMethod<T>)
+constexpr auto rule(std::type_identity<T>) {return  SerializeRuleWithMethod<T>{};}
 
 template<typename T>
 requires(std::is_integral_v<T> && std::is_arithmetic_v<T> && std::is_unsigned_v<T>)
-constexpr auto get_serialize_rule(std::type_identity<T>) {return SerializeRuleUnsignedNumber<T>{};}
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleUnsignedNumber<T>{};}
 
 template<typename T>
 requires(std::is_integral_v<T> && std::is_arithmetic_v<T> && !std::is_unsigned_v<T>)
-constexpr auto get_serialize_rule(std::type_identity<T>) {return SerializeRuleSignedNumber<T>{};}
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleSignedNumber<T>{};}
 
 template<typename T>
-requires(IsMap<T> && !HasSerializeMethod<T>) 
-constexpr auto get_serialize_rule(std::type_identity<T>) {return SerializeRuleMap<T>{};}
+requires(IsMap<T> && !HasSerializeMethod<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleMap<T>{};}
 
 template<typename T>
-requires(IsSet<T> && !HasSerializeMethod<T>) 
-constexpr auto get_serialize_rule(std::type_identity<T>) {return SerializeRuleSet<T>{};}
+requires(IsSet<T> && !HasSerializeMethod<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleSet<T>{};}
 
 template<typename T>
-requires(IsLinearContainer<T> && !HasSerializeMethod<T> && !IsString<T>) 
-constexpr auto get_serialize_rule(std::type_identity<T>) {return SerializeRuleLinearContainer<T>{};}
+requires(IsLinearContainer<T> && !HasSerializeMethod<T> && !IsString<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleLinearContainer<T>{};}
 
 template<typename T>
-requires(IsTupleLike<T> && !HasSerializeMethod<T>) 
-constexpr auto get_serialize_rule(std::type_identity<T>) {return SerializeRuleTupleLike<T>{};}
+requires(IsTupleLike<T> && !HasSerializeMethod<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleTupleLike<T>{};}
 
 template<typename T>
-requires(IsVariantLike<T> && !HasSerializeMethod<T>) 
-constexpr auto get_serialize_rule(std::type_identity<T>) {return SerializeRuleVariantLike<T>{};}
+requires(IsVariantLike<T> && !HasSerializeMethod<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleVariantLike<T>{};}
 
 template<typename T>
-requires(std::is_trivially_copyable_v<T> && !HasSerializeMethod<T> && !IsIntegralNumber<T>)
-constexpr auto get_serialize_rule(std::type_identity<T>) {return SerializeRuleTrivial<T>{};}
+requires(IsOptional<T> && !HasSerializeMethod<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleOptional<T>{};}
+
+//note: optional is excluded because std::optional<trivial> is itself trivially
+//copyable, which would otherwise hide SerializeRuleOptional behind a blob
+template<typename T>
+requires(std::is_trivially_copyable_v<T> && !HasSerializeMethod<T> && !IsIntegralNumber<T> && !IsOptional<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleTrivial<T>{};}
 
 template<typename T>
 requires(IsString<T> && !HasSerializeMethod<T>)
-constexpr auto get_serialize_rule(std::type_identity<T>) {return SerializeRuleString<typename T::value_type>{};}
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleString<typename T::value_type>{};}
+
+}
+
+///Escape hatch for types whose namespace you cannot extend (std::*, global, foreign libs)
+/**
+ * Specialize this with a type satisfying SerializeRule. An explicit
+ * specialization may be written qualified from any namespace and works across
+ * module boundaries, so this covers what ADL cannot reach:
+ *
+ * @code
+ * template<> struct srl::custom_serialize_rule<Foreign> { ... };
+ * @endcode
+ */
+template<typename T> struct custom_serialize_rule;
+
+///Poison pill - keeps the name visible so the unqualified call below triggers ADL,
+///while never being a viable candidate itself.
+void get_serialize_rule() = delete;
+
+namespace _cpo {
+
+struct GetRule {
+    template<typename T>
+    constexpr auto operator()(std::type_identity<T> ident) const {
+        if constexpr (requires {get_serialize_rule(ident);}) {
+            //1. rule found through ADL in the namespace of T
+            return get_serialize_rule(ident);
+        } else if constexpr (requires {typename custom_serialize_rule<T>::value_type;}) {
+            //2. rule injected through an explicit specialization
+            return custom_serialize_rule<T>{};
+        } else if constexpr (requires {builtin::rule(ident);}) {
+            //3. built-in rule, reached by qualified lookup only
+            return builtin::rule(ident);
+        }
+        //otherwise returns void, which fails SerializeRuleExists below
+    }
+};
+
+}
+
+///Resolves the serialization rule for a type. Customize by declaring
+///get_serialize_rule(std::type_identity<T>) in the namespace of T, or by
+///specializing custom_serialize_rule<T>.
+inline constexpr _cpo::GetRule get_rule = {};
+
+template<typename T>
+concept SerializeRuleExists = SerializeRule<decltype(get_rule(std::type_identity<T>{}))>;
 
 
 template<typename T>
-concept SerializeRuleExists = requires(std::type_identity<T> ident) {
-    get_serialize_rule(ident);
-};
+constexpr bool type_has_zero_fields = get_rule(std::type_identity<T>{}).field_count() == 0;
 
 
 template<SerializeRuleExists T>
 struct Layout: LayoutBase {
-    static constexpr std::size_t field_count = get_serialize_rule(std::type_identity<T>{}).field_count();
+    static constexpr std::size_t field_count = get_rule(std::type_identity<T>{}).field_count();
     std::array<FieldDef, field_count> fields_arr = {};
     constexpr Layout() {
         this->fields = fields_arr;
-        get_serialize_rule(std::type_identity<T>{}).init_layout(*this);
+        get_rule(std::type_identity<T>{}).init_layout(*this);
     }
 };
 
@@ -623,7 +690,7 @@ struct Schema {
 
     template<SerializeRuleExists T>
     constexpr void recursive_walk() {
-        const auto rule = get_serialize_rule(std::type_identity<T>{});
+        const auto rule = get_rule(std::type_identity<T>{});
         rule.iterate_fields([&]<typename Ti>(Ti){
             using U = typename Ti::type;
             auto v = Item(type_name<U>,&layout_of_type<U>);
@@ -663,7 +730,7 @@ public:
     template<typename X, typename ... Args>
     constexpr void operator()(X &val, Args &&... ) {
         static_assert(SerializeRuleExists<X>, "No serialization rule for this type");
-        auto rule = get_serialize_rule(std::type_identity<X>{});
+        auto rule = get_rule(std::type_identity<X>{});
         rule.deserialize(val, *this);
     }
     constexpr friend void read_binary(Deserializer &me, std::span<std::uint8_t> buffer) {
@@ -681,7 +748,7 @@ public:
     template<typename X, typename ... Args>
     constexpr void operator()(const X &val, Args &&...) {
         static_assert(SerializeRuleExists<X>, "No serialization rule for this type");
-        auto rule = get_serialize_rule(std::type_identity<X>{});
+        auto rule = get_rule(std::type_identity<X>{});
         rule.serialize(val, *this);
     }
     constexpr friend void write_binary(Serializer &me, std::span<const std::uint8_t> buffer) {

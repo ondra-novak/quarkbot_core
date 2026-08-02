@@ -72,7 +72,7 @@ struct ContractInfo {
 
     bool operator==(const ContractInfo &) const = default;
 
-    void serialize(this auto &self, auto &ar) {
+    constexpr void serialize(this auto &self, auto &ar) {
         ar(self.type,"type");
         ar(self.multiplier,"multiplier");
         ar(self.tick_scale,"tick_scale");
