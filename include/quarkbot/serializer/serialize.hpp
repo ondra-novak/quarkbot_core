@@ -892,6 +892,11 @@ struct Schema {
         return out;
     }
 
+    template<SerializeRuleExists T>
+    constexpr static Schema create(const T &/*unused*/) {
+        return create<T>();
+    }
+
     constexpr std::size_t get_hash() const {
         std::size_t ret = 0;
         for (auto &[k, v]: schema) {

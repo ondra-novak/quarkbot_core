@@ -14,7 +14,7 @@ public:
     virtual ~ISerie() = default;
     virtual void put(T value) = 0;
     virtual void reserve(std::size_t size) = 0;
-    virtual std::optional<T> operator[](std::size_t index) const = 0;;
+    virtual std::optional<T> operator[](std::size_t index) const = 0;
     virtual std::shared_ptr<ISerie<T> > clone_ptr() const = 0;
 
     class Null;

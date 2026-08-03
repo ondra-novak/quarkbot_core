@@ -1,3 +1,4 @@
+#pragma once
 #include "../json/json.hpp"
 #include "../utils/lookup.hpp"
 #include "serialize.hpp"

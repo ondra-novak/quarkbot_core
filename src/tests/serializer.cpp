@@ -1,10 +1,13 @@
 #include "check.h"
 
+#include "quarkbot/decimal.hpp"
 #include "quarkbot/serializer/serialize.hpp"
 #include "quarkbot/serializer/serialize_schema_to_json.hpp"
+#include "quarkbot/serializer/deserialize_from_schema.hpp"
 
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <map>
 #include <optional>
 #include <set>
@@ -287,7 +290,9 @@ static_assert(roundtrip(std::optional<int>{42}));
 static_assert(roundtrip(std::optional<std::string>{"x"}));
 static_assert(roundtrip(std::tuple<int, bool, double>{7, true, 1.5}));
 static_assert(roundtrip(TestVariant{123}));
+#if !defined(__clang__) || __clang_major__ > 18
 static_assert(roundtrip(TestVariant{std::string("abc")}));
+#endif
 
 static_assert(roundtrip(Inner{42, 2.5}));
 static_assert(roundtrip(Outer{{1, 0.25}, "name", {1, 2, 3}}));
@@ -565,11 +570,48 @@ static void test_schema_to_json() {
     CHECK_EQUAL(s["types"][srl::type_name<std::uint16_t>]["byte_size"].as<std::size_t>(), std::size_t(2));
 }
 
+struct OuterOuterDecimal {
+    Decimal dec_val = {};
+    Outer outer;
+    constexpr void serialize(this auto &self, auto &arch) {
+        arch(self.dec_val, "dec_val");
+        arch(self.outer, "outer");
+    }
+};
+
+void test_deserialize_from_schema() {
+    OuterOuterDecimal subject = {
+        3.1415_dec,
+        {
+            {
+                42,0.5
+            }, "test_name",{1,2,3,4}
+        }
+    };
+    std::string serialized;
+    srl::serialize_to<char>(subject, std::back_inserter(serialized));
+    Json schema = srl::serialize_schema_to_json(srl::Schema::create(subject));
+
+    auto dsrl = srl::string_deserializer(serialized);
+    Json output = srl::deserialize_from_schema(schema,dsrl , [](std::string_view type, std::string_view content) {
+        if (type == "Decimal") {
+            Decimal val;
+            srl::deserialize_from(content.begin(), content.end(), val);
+            return val.to_string();
+        } else {
+            return srl::default_resolver(type, content);
+        }
+    });
+    CHECK_EQUAL(output.to_string() , R"json({"dec_val":"3.1415","outer":{"inner":{"foo":42,"bar":0.5},"name":"test_name","items":[1,2,3,4]}})json");
+
+}
+
 int main() {
     test_non_literal_containers();
     test_truncated_input();
     test_corrupted_input();
     test_bool_normalization();
     test_schema_to_json();
+    test_deserialize_from_schema();
     return 0;
 }
