@@ -2,6 +2,7 @@
 
 #include "quarkbot/abstract/istorage.hpp"
 #include "quarkbot/execution_worker.hpp"
+#include "quarkbot/serializer/serialize.hpp"
 #include "quarkbot/storage.hpp"
 #include "quarkbot/storage_srl.hpp"
 #include "quarkbot/strategy_fragment.hpp"
@@ -101,7 +102,7 @@ protected:
 
 
 template<typename T, CommitStrategy cs>
-requires (std::is_trivially_copyable_v<T>)
+requires (srl::SerializeRuleExists<T>)
 class Persistent<T,cs> {
 public:
 
@@ -202,96 +203,6 @@ protected:
     void store() {        
         if constexpr(cs == CommitStrategy::delayed) {
             auto &trn = shared_transaction(group.get_storage());
-            auto bin = std::bit_cast<std::array<char, sizeof(T)> >(value);
-            trn.store(group.get_name(), std::string_view(bin.begin(), bin.end()));
-        } else {
-            auto trn = group.get_storage().write();
-            auto bin = std::bit_cast<std::array<char, sizeof(T)> >(value);
-            trn.store(group.get_name(), std::string_view(bin.begin(), bin.end()));
-            trn.commit(cs == CommitStrategy::immediately_sync);
-        }
-    }
-};
-
-template<CommitStrategy cs>
-class Persistent<std::string, cs> {
-public:
-    Persistent(Storage storage, std::string name, std::string def_value)
-        :group(std::move(storage), std::move(name)), value (std::move(def_value)) {
-            init();
-        }
-    Persistent(Storage storage, std::string name)
-        :group(std::move(storage), std::move(name)) {
-            init();
-        }
-    Persistent(const PersistentNamespace &group, std::string name, std::string def_value)
-        :group(group.sub_ns(name)), value (std::move(def_value)) {
-            init();
-        }
-    Persistent(const PersistentNamespace &group, std::string name)
-        :group(group.sub_ns(name)) {
-            init();
-        }
-
-    Persistent(const Persistent &) = delete;
-    Persistent(Persistent &&) = default;
-    Persistent &operator=(const Persistent &other) {
-        if (this != &other)  {
-            set(other.value);
-        }
-        return *this;
-    }
-    Persistent &operator=(Persistent &&other) {
-        if (this != &other)  {
-            set(std::move(other.value));
-        }
-        return *this;
-    }
-    Persistent &operator=(const std::string &other) {
-        set(other);
-        return *this;
-    }
-    Persistent &operator=(std::string &&other) {
-        set(std::move(other));
-        return *this;
-    }
-
-    void set(const std::string &val) {
-        if (value != val) {
-            value = val;
-            store();
-        }
-    }
-    void set(std::string &&val) {
-        if (val != value) {
-            value = std::move(val);
-            store();
-        }
-    }
-    operator std::string_view() const {
-        return value;
-    }
-    operator std::string() const {
-        return value;
-    }
-    const std::string &get() const {
-        return value;
-    }
-
-protected:
-    PersistentNamespace group;
-    std::string value = {};
-
-    void init() {
-        auto val = group.get_storage().get(group.get_name());
-        if (val.exists) {
-            value = val.data;
-        }
-    }
-
-    void store() {
-        if constexpr(cs == CommitStrategy::delayed) {
-            auto &trn = shared_transaction(group.get_storage());
             trn.store(group.get_name(), value);
         } else {
             auto trn = group.get_storage().write();
@@ -300,5 +211,6 @@ protected:
         }
     }
 };
+
 
 }

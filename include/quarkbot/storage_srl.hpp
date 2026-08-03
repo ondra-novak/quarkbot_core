@@ -16,7 +16,7 @@ inline bool extract_srl(std::string_view value, T &out, srl::SchemaHash &type_ha
     std::array<char, sizeof(srl::SchemaHash)> buff;
     std::string_view tail = value.substr(value.size() - sizeof(srl::SchemaHash));
     std::copy(tail.begin(), tail.end(),buff.begin());
-    value.remove_prefix(sizeof(srl::SchemaHash));
+    value.remove_suffix(sizeof(srl::SchemaHash));
     
     srl::SchemaHash record_hash = std::bit_cast<srl::SchemaHash>(buff);
     type_hash = srl::schema_hash<T>;
@@ -52,7 +52,8 @@ std::string StorageTransaction::serialize_value(const T &val) {
 
     if (!get_storage().get_handle()->is_schema_stored(hash)) {
         auto schema = srl::Schema::create<T>();
-        srl::serialize_schema_to_json(schema);
+        auto js = srl::serialize_schema_to_json(schema);
+        put_schema_binary(hash, js.to_string());
     }
     return {buffer.begin(), buffer.end()};
 }

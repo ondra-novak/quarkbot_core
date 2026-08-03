@@ -154,11 +154,9 @@ struct LayoutBase {
      * own length inline or through its fields.
      */
     std::size_t byte_size = {};
+    ///list if fields, depends on layout type (like arguments)
     std::span<FieldDef> fields = {};
 
-    constexpr LayoutBase() = default;
-    constexpr LayoutBase(const LayoutBase &) = delete;
-    constexpr LayoutBase &operator=(const LayoutBase &) = delete;
     constexpr std::size_t get_hash() const {
         std::size_t ret = 0;
         for (auto &f: fields) {
@@ -864,10 +862,12 @@ struct Schema {
     using Item = std::pair<std::string_view, const LayoutBase *>;
     std::vector<Item> schema = {};
     std::string_view root_type = {};
-    
-    constexpr static bool cmp_schema(const Item &a, const Item &b) {
-        return a.first  < b.first;
-    }
+
+    struct Order {
+        constexpr bool operator()(const auto &a, const auto &b) const {
+            return a.first < b.first;
+        }
+    };
 
     template<SerializeRuleExists T>
     constexpr void recursive_walk() {
@@ -875,7 +875,7 @@ struct Schema {
         rule.iterate_fields([&]<typename Ti>(Ti){
             using U = typename Ti::type;
             auto v = Item(type_name<U>,&layout_of_type<U>);
-            auto pos = std::lower_bound(schema.begin(), schema.end(), v, cmp_schema);
+            auto pos = std::lower_bound(schema.begin(), schema.end(), v, Order{});
             if (pos == schema.end() || pos->first != v.first) {
                 schema.insert(pos, v);
                 recursive_walk<U>();

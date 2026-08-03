@@ -1,6 +1,7 @@
 #pragma once
 
 #include "quarkbot/abstract/iserie.hpp"
+#include "quarkbot/serializer/serialize.hpp"
 #include "storage.hpp"
 #include "storage_srl.hpp"
 #include "types.hpp"
@@ -15,7 +16,7 @@ template<typename T, CommitStrategy cs = CommitStrategy::delayed>
 class PersistentSerie;
 
 template<typename T, CommitStrategy cs>
-requires (std::is_trivially_copyable_v<T>)
+requires (srl::SerializeRuleExists<T>)
 class PersistentSerie<T,cs> final: public ISerie<T> {
 public:
 
