@@ -4,6 +4,7 @@
 #include "quarkbot/serializer/serialize_schema_to_json.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <optional>
 #include <set>
@@ -184,8 +185,26 @@ using rule_of = decltype(srl::get_rule(std::type_identity<T>{}));
 
 static_assert(std::is_same_v<rule_of<unsigned int>,   srl::SerializeRuleUnsignedNumber<unsigned int> >);
 static_assert(std::is_same_v<rule_of<int>,            srl::SerializeRuleSignedNumber<int> >);
-static_assert(std::is_same_v<rule_of<double>,         srl::SerializeRuleTrivial<double> >);
+static_assert(std::is_same_v<rule_of<double>,         srl::SerializeRuleFloat<double> >);
+static_assert(std::is_same_v<rule_of<float>,          srl::SerializeRuleFloat<float> >);
 static_assert(std::is_same_v<rule_of<Inner>,          srl::SerializeRuleWithMethod<Inner> >);
+
+//narrow integers cannot profit from a varint, so they get a fixed width field of
+//their own rather than falling into the opaque trivial blob
+static_assert(std::is_same_v<rule_of<char>,           srl::SerializeRuleFixedInt<char> >);
+static_assert(std::is_same_v<rule_of<std::uint8_t>,   srl::SerializeRuleFixedInt<std::uint8_t> >);
+static_assert(std::is_same_v<rule_of<std::int16_t>,   srl::SerializeRuleFixedInt<std::int16_t> >);
+static_assert(std::is_same_v<rule_of<char16_t>,       srl::SerializeRuleFixedInt<char16_t> >);
+static_assert(std::is_same_v<rule_of<bool>,           srl::SerializeRuleBool>);
+//char32_t is wide enough for a varint to pay off, so it stays compressed
+static_assert(std::is_same_v<rule_of<char32_t>,       srl::SerializeRuleUnsignedNumber<char32_t> >);
+//long double has no portable representation - it is the one number left opaque
+static_assert(std::is_same_v<rule_of<long double>,    srl::SerializeRuleTrivial<long double> >);
+
+enum class Side: int {buy, sell};
+enum class Flags: std::uint8_t {none = 0, all = 200};
+static_assert(std::is_same_v<rule_of<Side>,  srl::SerializeRuleEnum<Side> >);
+static_assert(std::is_same_v<rule_of<Flags>, srl::SerializeRuleEnum<Flags> >);
 static_assert(std::is_same_v<rule_of<std::string>,    srl::SerializeRuleString<char> >);
 static_assert(std::is_same_v<rule_of<std::vector<int> >, srl::SerializeRuleLinearContainer<std::vector<int> > >);
 static_assert(std::is_same_v<rule_of<std::tuple<int,bool> >, srl::SerializeRuleTupleLike<std::tuple<int,bool> > >);
@@ -246,6 +265,19 @@ static_assert(roundtrip<std::int64_t>(std::numeric_limits<std::int64_t>::max()))
 static_assert(roundtrip(3.141592653589793));
 static_assert(roundtrip(-0.5f));
 
+//fixed width integers, at both ends of their range
+static_assert(roundtrip<std::uint8_t>(0));
+static_assert(roundtrip<std::int8_t>(-128));
+static_assert(roundtrip<std::int8_t>(127));
+static_assert(roundtrip<char>('A'));
+static_assert(roundtrip<std::uint16_t>(0));
+static_assert(roundtrip<std::uint16_t>(65535));
+static_assert(roundtrip<std::int16_t>(-32768));
+static_assert(roundtrip<std::int16_t>(32767));
+static_assert(roundtrip<char16_t>(u'€'));
+static_assert(roundtrip(Side::sell));
+static_assert(roundtrip(Flags::all));
+
 static_assert(roundtrip(std::string{}));
 static_assert(roundtrip(std::string("hello world")));
 static_assert(roundtrip(std::vector<int>{}));
@@ -305,9 +337,33 @@ static_assert(same_bytes(encode(TestVariant{7}), {0x00, 0x0E}));
 static_assert(same_bytes(encode(std::tuple<int, bool>{5, true}), {0x0A, 0x01}));
 static_assert(same_bytes(encode(std::string("abc")), {0x03, 97, 98, 99}));
 
-//double is a fixed size little endian blob, not a varint
+//fixed width integers: <byte_size> bytes, little endian, signed values as two's
+//complement. The byte order is part of the format, not whatever the host does -
+//going through the trivial rule made these host-endian and unportable
+static_assert(same_bytes(encode(std::uint16_t(0x0102)), {0x02, 0x01}));
+static_assert(same_bytes(encode(std::int16_t(-2)), {0xFE, 0xFF}));
+static_assert(same_bytes(encode(std::int16_t(-32768)), {0x00, 0x80}));
+static_assert(same_bytes(encode(std::uint8_t(255)), {0xFF}));
+static_assert(same_bytes(encode(std::int8_t(-1)), {0xFF}));
+static_assert(same_bytes(encode('A'), {0x41}));
+//...unlike a varint, a narrow integer never grows above its own width
+static_assert(encoded_size(std::uint8_t(255)) == 1);
+static_assert(encoded_size(std::uint16_t(65535)) == 2);
+
+//bool is one normalized byte
+static_assert(same_bytes(encode(true), {0x01}));
+static_assert(same_bytes(encode(false), {0x00}));
+
+//IEEE-754, little endian
+static_assert(same_bytes(encode(1.0), {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F}));
+static_assert(same_bytes(encode(-0.5f), {0x00, 0x00, 0x00, 0xBF}));
 static_assert(encoded_size(1.0) == sizeof(double));
 static_assert(encoded_size(0.0f) == sizeof(float));
+
+//an enum is stored exactly as its underlying type, so an enum over int is a
+//varint (one byte here) and one over uint8_t a single fixed byte
+static_assert(same_bytes(encode(Side::sell), {0x02}));
+static_assert(same_bytes(encode(Flags::all), {0xC8}));
 
 // ---------------------------------------------------------------------------
 // 5. layout and schema
@@ -321,10 +377,37 @@ static_assert(srl::layout_of_type<Inner>.fields[1].field_name == "bar");
 static_assert(srl::layout_of_type<Inner>.fields[0].type_name == srl::type_name<int>);
 static_assert(srl::layout_of_type<Inner>.fields[1].type_name == srl::type_name<double>);
 
-static_assert(srl::layout_of_type<double>.type == srl::LayoutType::trivial);
-static_assert(srl::layout_of_type<double>.blob_size == sizeof(double));
+static_assert(srl::layout_of_type<double>.type == srl::LayoutType::floating);
+static_assert(srl::layout_of_type<double>.byte_size == sizeof(double));
+static_assert(srl::layout_of_type<float>.type == srl::LayoutType::floating);
+static_assert(srl::layout_of_type<float>.byte_size == sizeof(float));
 static_assert(srl::layout_of_type<unsigned>.type == srl::LayoutType::varuint);
 static_assert(srl::layout_of_type<int>.type == srl::LayoutType::varint);
+
+//a narrow integer must describe itself as a number of a known width and sign.
+//regression: these all used to report {trivial, <sizeof>}, which left a reader of
+//the schema unable to tell an int16 from a uint16 or from any other 2 byte POD
+static_assert(srl::layout_of_type<std::uint16_t>.type == srl::LayoutType::fixed_uint);
+static_assert(srl::layout_of_type<std::uint16_t>.byte_size == 2);
+static_assert(srl::layout_of_type<std::int16_t>.type == srl::LayoutType::fixed_sint);
+static_assert(srl::layout_of_type<std::int16_t>.byte_size == 2);
+static_assert(srl::layout_of_type<std::uint8_t>.byte_size == 1);
+static_assert(srl::layout_of_type<bool>.type == srl::LayoutType::boolean);
+static_assert(srl::layout_of_type<bool>.byte_size == 1);
+static_assert(srl::layout_of_type<std::uint16_t>.get_hash() != srl::layout_of_type<std::int16_t>.get_hash());
+
+//byte_size is nonzero exactly for the fixed width leaf layouts
+static_assert(srl::layout_of_type<unsigned>.byte_size == 0);
+static_assert(srl::layout_of_type<std::string>.byte_size == 0);
+static_assert(srl::layout_of_type<Inner>.byte_size == 0);
+static_assert(srl::layout_of_type<Side>.byte_size == 0);
+
+//an enum wraps its underlying type as its single field, the way optional wraps
+//its value type - the width and the signedness come from that type's own layout
+static_assert(srl::layout_of_type<Side>.type == srl::LayoutType::enumeration);
+static_assert(srl::layout_of_type<Side>.fields.size() == 1);
+static_assert(srl::layout_of_type<Side>.fields[0].type_name == srl::type_name<int>);
+static_assert(srl::layout_of_type<Flags>.fields[0].type_name == srl::type_name<std::uint8_t>);
 static_assert(srl::layout_of_type<std::vector<int> >.type == srl::LayoutType::collection);
 static_assert(srl::layout_of_type<TestMap>.type == srl::LayoutType::dictionary);
 static_assert(srl::layout_of_type<std::optional<int> >.type == srl::LayoutType::optional);
@@ -354,6 +437,9 @@ constexpr bool schema_contains(const srl::Schema &s, std::string_view name) {
 static_assert(schema_is_closed(srl::Schema::create<Outer>()));
 static_assert(schema_is_closed(srl::Schema::create<TestVariant>()));
 static_assert(schema_is_closed(srl::Schema::create<std::vector<Inner> >()));
+//the underlying type an enum points at must be reachable from the schema too
+static_assert(schema_is_closed(srl::Schema::create<Side>()));
+static_assert(schema_contains(srl::Schema::create<Side>(), srl::type_name<int>));
 
 //regression: iterate_fields reported the owning type instead of the field type,
 //so recursive_walk stopped immediately and nested types never reached the schema
@@ -434,9 +520,25 @@ static void test_corrupted_input() {
         srl::deserialize_from(bad_width.begin(), bad_width.end(), n));
 
     //the widest legal encoding for the same type must still be accepted
-    Bytes widest{0xFA, 0xFF, 0xFF, 0xFF, 0xFF};
+    //(the trailing bytes carry the value biased down by single_byte_max)
+    Bytes widest{0xFA, 0xFF, 0xFF, 0xFF, 0x09};
     srl::deserialize_from(widest.begin(), widest.end(), n);
     CHECK_EQUAL(n, 0xFFFFFFFFu);
+}
+
+static void test_bool_normalization() {
+    //a bool holding anything but 0 or 1 has no valid representation and poisons
+    //every later use of it. Reading it as a raw blob used to do exactly that:
+    //the byte 0x02 survived into the bool and `b == true` evaluated to 2
+    for (std::uint8_t raw: {std::uint8_t(2), std::uint8_t(0x80), std::uint8_t(0xFF)}) {
+        bool b = decode<bool>(Bytes{raw});
+        CHECK(b);
+        CHECK_EQUAL(b, true);
+        std::uint8_t stored = 0;
+        std::memcpy(&stored, &b, 1);
+        CHECK_EQUAL(stored, std::uint8_t(1));
+    }
+    CHECK_EQUAL(decode<bool>(Bytes{0x00}), false);
 }
 
 static void test_schema_to_json() {
@@ -448,12 +550,26 @@ static void test_schema_to_json() {
     CHECK_EQUAL(inner["fields"][1].as<std::string_view>(), srl::type_name<double>);
     CHECK_EQUAL(inner["names"][0].as<std::string_view>(), "foo");
     CHECK_EQUAL(inner["names"][1].as<std::string_view>(), "bar");
+    //a fixed width leaf must publish its width, everything else must not claim one
+    CHECK_EQUAL(j["types"][srl::type_name<double>]["layout"].as<std::string_view>(), "floating");
+    CHECK_EQUAL(j["types"][srl::type_name<double>]["byte_size"].as<std::size_t>(), std::size_t(8));
+    CHECK(inner["byte_size"].is_null());
+
+    Json e = srl::serialize_schema_to_json(srl::Schema::create<Side>());
+    CHECK_EQUAL(e["types"][srl::type_name<Side>]["layout"].as<std::string_view>(), "enumeration");
+    CHECK_EQUAL(e["types"][srl::type_name<Side>]["fields"][0].as<std::string_view>(), srl::type_name<int>);
+    CHECK_EQUAL(e["types"][srl::type_name<int>]["layout"].as<std::string_view>(), "varint");
+
+    Json s = srl::serialize_schema_to_json(srl::Schema::create<std::uint16_t>());
+    CHECK_EQUAL(s["types"][srl::type_name<std::uint16_t>]["layout"].as<std::string_view>(), "fixed_uint");
+    CHECK_EQUAL(s["types"][srl::type_name<std::uint16_t>]["byte_size"].as<std::size_t>(), std::size_t(2));
 }
 
 int main() {
     test_non_literal_containers();
     test_truncated_input();
     test_corrupted_input();
+    test_bool_normalization();
     test_schema_to_json();
     return 0;
 }

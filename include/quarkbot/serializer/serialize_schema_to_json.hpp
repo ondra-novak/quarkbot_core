@@ -13,10 +13,15 @@ constexpr auto layout_type_table =  make_string_lookup_table<LayoutType>({
     {LayoutType::dictionary,"dictionary"},
     {LayoutType::variant,"variant"},
     {LayoutType::optional,"optional"},
-    {LayoutType::trivial,"trivial"},
+    {LayoutType::enumeration,"enumeration"},
     {LayoutType::string,"string"},
+    {LayoutType::boolean,"boolean"},
+    {LayoutType::fixed_uint,"fixed_uint"},
+    {LayoutType::fixed_sint,"fixed_sint"},
+    {LayoutType::floating,"floating"},
     {LayoutType::varuint,"varuint"},
     {LayoutType::varint,"varint"},
+    {LayoutType::trivial,"trivial"},
 
 });
 
@@ -35,8 +40,10 @@ inline Json serialize_schema_to_json(const Schema &schema) {
         if (!seq.empty()) obj["fields"] = seq;
         if (any_name) obj["names"] = names;
         obj["layout"] = layout_type_table(value->type).value_or(std::string_view());
-        if (value->type == LayoutType::trivial) {
-            obj["size"] = value->blob_size;
+        //nonzero exactly for the fixed width leaf layouts - a schema driven reader
+        //needs it to know how many bytes the field occupies
+        if (value->byte_size) {
+            obj["byte_size"] = value->byte_size;
         }
         types[key] = obj;
     }

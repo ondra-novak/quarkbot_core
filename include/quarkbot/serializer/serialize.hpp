@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <bit>
-#include <chrono>
 #include <array>
 #include <concepts>
 #include <cstddef>
@@ -72,8 +71,30 @@ template<typename T>
 concept IsIntegralNumber = std::is_integral_v<T> && std::is_arithmetic_v<T>;
 
 
+///Integers wide enough that variable length encoding can actually pay off.
+/**
+ * A 1 byte integer can never shrink and would grow to 2 bytes above 246, so
+ * char / uint8_t / bool are always stored raw - that is what keeps std::string
+ * and std::vector<char> at one byte per element. Two byte integers are a real
+ * trade (0..246 saves a byte, above 501 costs one); the fixed form is chosen
+ * because u16string / wstring dominate that category.
+ */
 template<typename T>
 concept IsIntegralNumberCompressed = std::is_integral_v<T> && std::is_arithmetic_v<T> && sizeof(T) > 2;
+
+///Integers stored as a fixed width little endian field instead of a varint
+template<typename T>
+concept IsIntegralNumberFixed = IsIntegralNumber<T> && !IsIntegralNumberCompressed<T>
+                                && !std::is_same_v<std::remove_cv_t<T>, bool>;
+
+///Floating point types with an IEEE-754 interchange format this library can pin down
+/**
+ * long double is deliberately excluded - it has no portable representation
+ * (80 bit x87, 128 bit quad, or plain double depending on the target), so it
+ * keeps falling into the opaque trivial rule.
+ */
+template<typename T>
+concept IsFixedFloat = std::is_floating_point_v<T> && (sizeof(T) == 4 || sizeof(T) == 8);
 
 
 template<typename T> concept HasSerializeMethod = requires(const T &rd, T &wr, decltype([](auto){}) &archive) {
@@ -105,10 +126,15 @@ enum class LayoutType {
     dictionary,     //associative collection - key=value
     variant,        //list of variants
     optional,       //optional field
-    trivial,        //binary blob of fixed size
+    enumeration,    //enum - stored exactly as its underlying type (fields[0])
     string,         //<size><characters>
-    varuint,        //compresed unsigned  (prefixed, 0-246 inline number, n-247 - count of following bytes - big endian)
+    boolean,        //1 byte, 0 = false, any other value = true
+    fixed_uint,     //unsigned integer, <byte_size> bytes, little endian
+    fixed_sint,     //signed integer, two's complement, <byte_size> bytes, little endian
+    floating,       //IEEE-754 binary32/binary64, <byte_size> bytes, little endian
+    varuint,        //compresed unsigned  (prefixed, 0-246 inline number, n-246 - count of following bytes - big endian, biased by 246)
     varint,         //compresed signed (zigzag)
+    trivial,        //opaque binary blob of <byte_size> bytes, in *host* byte order - not portable
 };
 
 struct FieldDef {
@@ -120,8 +146,15 @@ struct FieldDef {
 
 struct LayoutBase {
     LayoutType type = {};
-    std::size_t blob_size = {};
-    std::span<FieldDef> fields = {}; 
+    ///Bytes this type occupies on the wire, or 0 when the length is not fixed
+    /**
+     * Nonzero exactly for the fixed width leaf layouts (boolean, fixed_uint,
+     * fixed_sint, floating, trivial). A reader driven by the schema alone needs
+     * this to know how many bytes to consume; every other layout describes its
+     * own length inline or through its fields.
+     */
+    std::size_t byte_size = {};
+    std::span<FieldDef> fields = {};
 
     constexpr LayoutBase() = default;
     constexpr LayoutBase(const LayoutBase &) = delete;
@@ -133,7 +166,7 @@ struct LayoutBase {
                 fnv1a_hash(f.field_name)),
                 fnv1a_hash(f.type_name));
         }
-        ret = hash_combine(ret, blob_size);
+        ret = hash_combine(ret, byte_size);
         ret = hash_combine(ret, static_cast<std::size_t>(type));
         return ret;
     }
@@ -330,12 +363,12 @@ struct SerializeRuleUnsignedNumber {
             std::array<std::uint8_t, sizeof(T) + 1> buffer;
             auto iter = buffer.begin();
             auto t = b;
-            auto c = 0;
+            std::size_t c = 0;
             while (t) {
                 ++c;
                 t >>= 8;
             }
-            *iter++ = static_cast<std::uint8_t>(c+static_cast<std::uint8_t>(single_byte_max));
+            *iter++ = static_cast<std::uint8_t>(c+single_byte_max);
             while (c--) {
                 *iter++ = static_cast<std::uint8_t>((b>>(c*8)) & 0xFF);
             }
@@ -350,7 +383,7 @@ struct SerializeRuleUnsignedNumber {
         } else {
             //the prefix is attacker/corruption controlled - it can claim up to 9
             //trailing bytes, which must not be written past the end of buffer
-            const std::size_t count = static_cast<std::size_t>(pfx) - 246;
+            const std::size_t count = static_cast<std::size_t>(pfx) - single_byte_max;
             if (count > sizeof(T)) throw std::runtime_error(std::format(
                     "Varuint of {} declares {} trailing bytes, maximum is {}. Corrupted data",
                     type_name<T>, count, sizeof(T)));
@@ -391,6 +424,127 @@ struct SerializeRuleSignedNumber {
         SerializeRuleUnsignedNumber<U>::deserialize(v, cb);
         const U mask = (v & 1) ? static_cast<U>(~U(0)) : U(0);
         s = static_cast<T>(static_cast<U>(static_cast<U>(v >> 1) ^ mask));
+    }
+};
+
+///Fixed width little endian integer - used where a varint cannot pay off
+/**
+ * The byte order is part of the format on purpose. Going through
+ * SerializeRuleTrivial would emit the host representation, which makes an
+ * archive written on one machine undecodable on another with the opposite
+ * endianness, and leaves the schema unable to say whether the blob was signed.
+ */
+///Note: not restricted to IsIntegralNumberFixed - SerializeRuleFloat reuses it for
+///the 4/8 byte bit pattern of a float. Which types *dispatch* here is decided in builtin.
+template<typename T>
+requires(std::is_integral_v<T> && !std::is_same_v<std::remove_cv_t<T>, bool>)
+struct SerializeRuleFixedInt {
+    using value_type = T;
+    ///signed values travel as their two's complement pattern; C++20 onwards both
+    ///conversions are well defined and lossless in either direction
+    using U = std::make_unsigned_t<T>;
+    static constexpr std::size_t field_count() {return 0;}
+    static constexpr void iterate_fields(auto) {}
+    static constexpr void init_layout(LayoutBase &l) {
+        l.type = std::is_signed_v<T>?LayoutType::fixed_sint:LayoutType::fixed_uint;
+        l.byte_size = sizeof(T);
+    }
+    static constexpr void serialize(const T &s, auto &&cb) {
+        const auto v = static_cast<U>(s);
+        std::array<std::uint8_t, sizeof(T)> buffer = {};
+        for (std::size_t i = 0; i < sizeof(T); ++i) {
+            buffer[i] = static_cast<std::uint8_t>((v >> (i*8)) & 0xFF);
+        }
+        write_binary(cb, buffer);
+    }
+    static constexpr void deserialize(T &s, auto &&cb) {
+        std::array<std::uint8_t, sizeof(T)> buffer = {};
+        read_binary(cb, buffer);
+        U v = {};
+        for (std::size_t i = sizeof(T); i--;) {
+            v = static_cast<U>(static_cast<U>(v << 8) | buffer[i]);
+        }
+        s = static_cast<T>(v);
+    }
+};
+
+///bool as a single normalized byte
+/**
+ * The read must not bit_cast the incoming byte: a bool holding anything but 0
+ * or 1 has no valid representation, and every later use of it is undefined
+ * behaviour. Corrupted input has to collapse to true, not to a broken bool.
+ */
+struct SerializeRuleBool {
+    using value_type = bool;
+    static constexpr std::size_t field_count() {return 0;}
+    static constexpr void iterate_fields(auto) {}
+    static constexpr void init_layout(LayoutBase &l) {
+        l.type = LayoutType::boolean;
+        l.byte_size = 1;
+    }
+    static constexpr void serialize(const bool &s, auto &&cb) {
+        std::uint8_t n = s?std::uint8_t(1):std::uint8_t(0);
+        write_binary(cb, std::span(&n,1));
+    }
+    static constexpr void deserialize(bool &s, auto &&cb) {
+        std::uint8_t n = {};
+        read_binary(cb, std::span(&n,1));
+        s = n != 0;
+    }
+};
+
+///IEEE-754 float / double, little endian
+/**
+ * Reuses the integer rule over the bit pattern so the byte order is spelled out
+ * rather than inherited from the host, matching fixed_uint / fixed_sint.
+ */
+template<IsFixedFloat T>
+struct SerializeRuleFloat {
+    using value_type = T;
+    using U = std::conditional_t<sizeof(T) == 4, std::uint32_t, std::uint64_t>;
+    static constexpr std::size_t field_count() {return 0;}
+    static constexpr void iterate_fields(auto) {}
+    static constexpr void init_layout(LayoutBase &l) {
+        l.type = LayoutType::floating;
+        l.byte_size = sizeof(T);
+    }
+    static constexpr void serialize(const T &s, auto &&cb) {
+        SerializeRuleFixedInt<U>::serialize(std::bit_cast<U>(s), cb);
+    }
+    static constexpr void deserialize(T &s, auto &&cb) {
+        U v = {};
+        SerializeRuleFixedInt<U>::deserialize(v, cb);
+        s = std::bit_cast<T>(v);
+    }
+};
+
+///enum - a wrapper over its underlying type, like optional is over its value type
+/**
+ * The underlying type is reported as the single field instead of being flattened
+ * into a width, so its own layout supplies the encoding, the size and the
+ * signedness. An enum over int therefore travels as a varint (one byte for the
+ * handful of values enums usually hold) rather than as four raw ones.
+ */
+template<typename T>
+struct SerializeRuleEnum {
+    using value_type = T;
+    using U = std::underlying_type_t<T>;
+    static constexpr std::size_t field_count() {return 1;}
+    static constexpr void iterate_fields(auto &&cb) {
+        cb(std::type_identity<U>{});
+    }
+    static constexpr void init_layout(LayoutBase &l) {
+        l.type = LayoutType::enumeration;
+        l.fields[0].type_name = type_name<U>;
+    }
+    static constexpr void serialize(const T &s, auto &&cb) {
+        U v = static_cast<U>(s);
+        cb(v);
+    }
+    static constexpr void deserialize(T &s, auto &&cb) {
+        U v = {};
+        cb(v);
+        s = static_cast<T>(v);
     }
 };
 
@@ -551,7 +705,7 @@ struct SerializeRuleTrivial {
     static constexpr void iterate_fields(auto) {}
     static constexpr void init_layout(LayoutBase &l) {
         l.type = LayoutType::trivial;
-        l.blob_size = sizeof(T);
+        l.byte_size = sizeof(T);
     }
     static constexpr void serialize(const T &s, auto &&cb) {
         write_binary(cb, std::bit_cast<std::array<std::uint8_t, sizeof(T)> >(s));
@@ -587,6 +741,21 @@ requires(IsIntegralNumberCompressed<T> && !std::is_unsigned_v<T>)
 constexpr auto rule(std::type_identity<T>) {return SerializeRuleSignedNumber<T>{};}
 
 template<typename T>
+requires(IsIntegralNumberFixed<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleFixedInt<T>{};}
+
+//not a template: bool is one type, and make_unsigned_t<bool> is ill-formed anyway
+constexpr auto rule(std::type_identity<bool>) {return SerializeRuleBool{};}
+
+template<typename T>
+requires(IsFixedFloat<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleFloat<T>{};}
+
+template<typename T>
+requires(std::is_enum_v<T>)
+constexpr auto rule(std::type_identity<T>) {return SerializeRuleEnum<T>{};}
+
+template<typename T>
 requires(IsMap<T> && !HasSerializeMethod<T>)
 constexpr auto rule(std::type_identity<T>) {return SerializeRuleMap<T>{};}
 
@@ -610,10 +779,16 @@ template<typename T>
 requires(IsOptional<T> && !HasSerializeMethod<T>)
 constexpr auto rule(std::type_identity<T>) {return SerializeRuleOptional<T>{};}
 
-//note: optional is excluded because std::optional<trivial> is itself trivially
-//copyable, which would otherwise hide SerializeRuleOptional behind a blob
+///Last resort: an opaque host-order blob, for PODs with no better description
+/**
+ * note: optional is excluded because std::optional<trivial> is itself trivially
+ * copyable, which would otherwise hide SerializeRuleOptional behind a blob.
+ * Numbers, bools and enums are excluded because they now have layouts that say
+ * what they are - only genuinely opaque types should land here.
+ */
 template<typename T>
-requires(std::is_trivially_copyable_v<T> && !HasSerializeMethod<T> && !IsIntegralNumberCompressed<T> && !IsOptional<T>)
+requires(std::is_trivially_copyable_v<T> && !HasSerializeMethod<T> && !IsOptional<T>
+        && !IsIntegralNumber<T> && !IsFixedFloat<T> && !std::is_enum_v<T>)
 constexpr auto rule(std::type_identity<T>) {return SerializeRuleTrivial<T>{};}
 
 template<typename T>
