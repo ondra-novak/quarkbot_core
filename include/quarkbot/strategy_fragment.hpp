@@ -29,7 +29,7 @@ namespace quarkbot {
                 this->return_void();
                 //report exception
                 logOutputCB(LogLevel::error, 
-                     [&]{return std::pair(Logger::from(coro_location),"Strategy fragment unhandled exception");});
+                     [&]{return std::pair(coro_location,"Strategy fragment unhandled exception");});
                 coro::async_unhandled_exception();
             }
         };
