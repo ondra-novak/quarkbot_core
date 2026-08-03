@@ -281,10 +281,12 @@ static_assert(roundtrip(Foreign{5, 300000}));
 // varuint: 0..246 inline, otherwise (246 + byte count) followed by big endian bytes
 static_assert(same_bytes(encode(0u), {0x00}));
 static_assert(same_bytes(encode(246u), {0xF6}));
-static_assert(same_bytes(encode(247u), {0xF7, 0xF7}));
-static_assert(same_bytes(encode(255u), {0xF7, 0xFF}));
-static_assert(same_bytes(encode(256u), {0xF8, 0x01, 0x00}));
-static_assert(same_bytes(encode(0xFFFFFFFFu), {0xFA, 0xFF, 0xFF, 0xFF, 0xFF}));
+static_assert(same_bytes(encode(247u), {0xF7, 0x1}));
+static_assert(same_bytes(encode(255u), {0xF7, 0x9}));
+static_assert(same_bytes(encode(256u), {0xF7, 0xa}));
+static_assert(same_bytes(encode(501u), {0xF7, 0xFF}));
+static_assert(same_bytes(encode(502u), {0xF8, 0x01, 0x00}));
+static_assert(same_bytes(encode(0xFFFFFFFFu), {0xFA, 0xFF, 0xFF, 0xFF, 0x09}));
 
 // varint: zigzag (0,-1,1,-2,2 -> 0,1,2,3,4), then varuint
 static_assert(same_bytes(encode(0), {0x00}));
@@ -301,7 +303,7 @@ static_assert(same_bytes(encode(std::optional<int>{}), {0x00}));
 static_assert(same_bytes(encode(std::optional<int>{5}), {0x01, 0x0A}));
 static_assert(same_bytes(encode(TestVariant{7}), {0x00, 0x0E}));
 static_assert(same_bytes(encode(std::tuple<int, bool>{5, true}), {0x0A, 0x01}));
-static_assert(same_bytes(encode(std::string("abc")), {0x03, 0xC2, 0xC4, 0xC6}));
+static_assert(same_bytes(encode(std::string("abc")), {0x03, 97, 98, 99}));
 
 //double is a fixed size little endian blob, not a varint
 static_assert(encoded_size(1.0) == sizeof(double));

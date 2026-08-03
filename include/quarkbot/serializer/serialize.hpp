@@ -72,6 +72,9 @@ template<typename T>
 concept IsIntegralNumber = std::is_integral_v<T> && std::is_arithmetic_v<T>;
 
 
+template<typename T>
+concept IsIntegralNumberCompressed = std::is_integral_v<T> && std::is_arithmetic_v<T> && sizeof(T) > 2;
+
 
 template<typename T> concept HasSerializeMethod = requires(const T &rd, T &wr, decltype([](auto){}) &archive) {
     {rd.serialize(archive)};
@@ -311,6 +314,7 @@ struct SerializeRuleVariantLike {
 template<typename T>
 struct SerializeRuleUnsignedNumber {
     using value_type = T;
+    static constexpr std::uintmax_t single_byte_max = 246;
     static constexpr std::size_t field_count() {return 0;}
     static constexpr void iterate_fields(auto) {}
     static constexpr void init_layout(LayoutBase &l) {
@@ -318,10 +322,11 @@ struct SerializeRuleUnsignedNumber {
     }
     static constexpr void serialize(const T &s, auto &&cb) {
         auto b = static_cast<std::uintmax_t>(s);
-        if (b <= 246) {
+        if (b <= single_byte_max) {
             auto n = static_cast<std::uint8_t>(b);
             write_binary(cb, std::span(&n,1));
         } else {
+            b-=single_byte_max;
             std::array<std::uint8_t, sizeof(T) + 1> buffer;
             auto iter = buffer.begin();
             auto t = b;
@@ -330,7 +335,7 @@ struct SerializeRuleUnsignedNumber {
                 ++c;
                 t >>= 8;
             }
-            *iter++ = static_cast<std::uint8_t>(c+246);
+            *iter++ = static_cast<std::uint8_t>(c+static_cast<std::uint8_t>(single_byte_max));
             while (c--) {
                 *iter++ = static_cast<std::uint8_t>((b>>(c*8)) & 0xFF);
             }
@@ -340,7 +345,7 @@ struct SerializeRuleUnsignedNumber {
     static constexpr void deserialize(T &s, auto &&cb) {
         std::uint8_t pfx = {};
         read_binary(cb, std::span(&pfx,1));
-        if (pfx <=246) {
+        if (pfx <=single_byte_max) {
             s = static_cast<T>(pfx);
         } else {
             //the prefix is attacker/corruption controlled - it can claim up to 9
@@ -355,6 +360,7 @@ struct SerializeRuleUnsignedNumber {
             for (std::size_t i = 0; i < count; ++i) {
                 s = static_cast<T>((s << 8) | buffer[i]);
             }
+            s+=single_byte_max;
         }
 
     }
@@ -573,11 +579,11 @@ requires(HasSerializeMethod<T>)
 constexpr auto rule(std::type_identity<T>) {return  SerializeRuleWithMethod<T>{};}
 
 template<typename T>
-requires(std::is_integral_v<T> && std::is_arithmetic_v<T> && std::is_unsigned_v<T>)
+requires(IsIntegralNumberCompressed<T> && std::is_unsigned_v<T>)
 constexpr auto rule(std::type_identity<T>) {return SerializeRuleUnsignedNumber<T>{};}
 
 template<typename T>
-requires(std::is_integral_v<T> && std::is_arithmetic_v<T> && !std::is_unsigned_v<T>)
+requires(IsIntegralNumberCompressed<T> && !std::is_unsigned_v<T>)
 constexpr auto rule(std::type_identity<T>) {return SerializeRuleSignedNumber<T>{};}
 
 template<typename T>
@@ -607,7 +613,7 @@ constexpr auto rule(std::type_identity<T>) {return SerializeRuleOptional<T>{};}
 //note: optional is excluded because std::optional<trivial> is itself trivially
 //copyable, which would otherwise hide SerializeRuleOptional behind a blob
 template<typename T>
-requires(std::is_trivially_copyable_v<T> && !HasSerializeMethod<T> && !IsIntegralNumber<T> && !IsOptional<T>)
+requires(std::is_trivially_copyable_v<T> && !HasSerializeMethod<T> && !IsIntegralNumberCompressed<T> && !IsOptional<T>)
 constexpr auto rule(std::type_identity<T>) {return SerializeRuleTrivial<T>{};}
 
 template<typename T>
