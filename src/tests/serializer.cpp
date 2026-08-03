@@ -606,6 +606,200 @@ void test_deserialize_from_schema() {
 
 }
 
+// ---------------------------------------------------------------------------
+// schema driven deserialization - every layout has to be decodable from the
+// JSON schema alone, without the originating C++ type
+// ---------------------------------------------------------------------------
+
+///encode a value, then decode the bytes using nothing but the JSON schema, the
+///way an external reader (the javascript on the web side) has to
+template<typename T>
+static std::string via_schema(const T &val, auto &&resolver) {
+    std::string bin;
+    srl::serialize_to<char>(val, std::back_inserter(bin));
+    Json schema = srl::serialize_schema_to_json(srl::Schema::create<T>());
+    auto rd = srl::string_deserializer(bin);
+    return srl::deserialize_from_schema(schema, rd, resolver).to_string();
+}
+
+template<typename T>
+static std::string via_schema(const T &val) {
+    return via_schema(val, srl::default_resolver);
+}
+
+///a field emitted without a name next to one that has it - the reader has to
+///invent something for the unnamed slot
+struct MixedNames {
+    int a = {};
+    int b = {};
+    constexpr void serialize(this auto &self, auto &ar) {
+        ar(self.a);
+        ar(self.b, "b");
+    }
+};
+
+enum class Wide: std::uint16_t {small = 5, big = 300};
+
+static void test_schema_leaf_layouts() {
+    CHECK_EQUAL(via_schema(true), "true");
+    CHECK_EQUAL(via_schema(false), "false");
+
+    //fixed width integers, at both ends of every supported width
+    CHECK_EQUAL(via_schema(std::uint8_t(255)), "255");
+    CHECK_EQUAL(via_schema(std::int8_t(-128)), "-128");
+    CHECK_EQUAL(via_schema(std::uint16_t(65535)), "65535");
+    CHECK_EQUAL(via_schema(std::int16_t(-32768)), "-32768");
+    //a bare char reads back as its numeric value - only a string turns into text
+    CHECK_EQUAL(via_schema('A'), "65");
+
+    //varints, at the range limits where the width prefix is widest
+    CHECK_EQUAL(via_schema(std::uint32_t(0xFFFFFFFF)), "4294967295");
+    CHECK_EQUAL(via_schema(std::uint64_t(0xFFFFFFFFFFFFFFFFULL)), "18446744073709551615");
+    CHECK_EQUAL(via_schema(std::numeric_limits<std::int64_t>::min()), "-9223372036854775808");
+    CHECK_EQUAL(via_schema(0), "0");
+
+    CHECK_EQUAL(via_schema(1.5f), "1.5");
+    CHECK_EQUAL(via_schema(0.5), "0.5");
+    //presentation limit, not a decode limit: JsonNumber formats with {:.12g}
+    CHECK_EQUAL(via_schema(3.141592653589793), "3.14159265359");
+
+    //long double has no portable representation, so it stays an opaque blob and
+    //the resolver is the only thing that can say anything about it
+    CHECK_EQUAL(via_schema(1.0L), R"("Binary size: 16")");
+}
+
+static void test_schema_composite_layouts() {
+    CHECK_EQUAL(via_schema(std::vector<int>{1, 2, 3}), "[1,2,3]");
+    CHECK_EQUAL(via_schema(std::vector<int>{}), "[]");
+    CHECK_EQUAL(via_schema(std::set<int>{2, 1}), "[1,2]");
+
+    //a dictionary decodes as a list of [key,value] pairs - a JSON object cannot
+    //be used because the keys are not necessarily strings
+    CHECK_EQUAL(via_schema(std::map<std::string, int>{{"a", 1}, {"b", 2}}),
+                R"([["a",1],["b",2]])");
+    CHECK_EQUAL(via_schema(std::map<int, bool>{{7, true}}), "[[7,true]]");
+
+    CHECK_EQUAL(via_schema(std::optional<int>{}), "null");
+    CHECK_EQUAL(via_schema(std::optional<int>{7}), "7");
+    CHECK_EQUAL(via_schema(std::optional<std::string>{"x"}), R"("x")");
+
+    //a variant decodes as the alternative that was actually stored
+    CHECK_EQUAL(via_schema(TestVariant{7}), "7");
+    CHECK_EQUAL(via_schema(TestVariant{std::string("x")}), R"("x")");
+
+    //named fields make an object, an unnamed sequence (a tuple) makes an array
+    CHECK_EQUAL(via_schema(Inner{42, 0.5}), R"({"foo":42,"bar":0.5})");
+    CHECK_EQUAL(via_schema(std::tuple<int, bool>{5, true}), "[5,true]");
+    CHECK_EQUAL(via_schema(MixedNames{1, 2}), R"({"#1":1,"b":2})");
+
+    //a string of char is text; any wider character type falls back to a list of
+    //code units, because the schema cannot promise a JSON encodable encoding
+    CHECK_EQUAL(via_schema(std::string("ahoj")), R"("ahoj")");
+    CHECK_EQUAL(via_schema(std::string()), R"("")");
+    CHECK_EQUAL(via_schema(std::u16string(u"ab")), "[97,98]");
+}
+
+static void test_schema_enums() {
+    //an enum is stored as its underlying type, so the reader has to decode it
+    //through that type - not by assuming int
+    CHECK_EQUAL(via_schema(Side::sell), "1");
+    CHECK_EQUAL(via_schema(Flags::all), "200");
+    CHECK_EQUAL(via_schema(Wide::big), "300");
+
+    //...and a desync shows up as soon as anything follows the enum
+    CHECK_EQUAL(via_schema(std::tuple<Wide, std::string>{Wide::big, "after"}),
+                R"([300,"after"])");
+    CHECK_EQUAL(via_schema(std::tuple<Flags, int>{Flags::all, -5}), "[200,-5]");
+}
+
+static void test_schema_resolver() {
+    //the resolver gets the type name and exactly the bytes the schema claims
+    std::vector<std::pair<std::string, std::size_t> > seen;
+    auto spy = [&](std::string_view type, std::string_view content) -> Json {
+        seen.emplace_back(std::string(type), content.size());
+        return std::string("blob");
+    };
+    CHECK_EQUAL(via_schema(std::tuple<long double, int>{1.0L, 3}, spy), R"(["blob",3])");
+    CHECK_EQUAL(seen.size(), std::size_t(1));
+    CHECK_EQUAL(seen[0].first, srl::type_name<long double>);
+    CHECK_EQUAL(seen[0].second, sizeof(long double));
+
+    //Decimal is the real motivation: a trivially copyable type whose bytes only
+    //the owning application can interpret
+    auto dec_resolver = [](std::string_view type, std::string_view content) -> Json {
+        if (type == srl::type_name<Decimal>) {
+            Decimal val;
+            srl::deserialize_from(content.begin(), content.end(), val);
+            return val.to_string();
+        }
+        return srl::default_resolver(type, content);
+    };
+    CHECK_EQUAL(via_schema(std::vector<Decimal>{1.5_dec, -2.25_dec}, dec_resolver),
+                R"(["1.5","-2.25"])");
+}
+
+///replaces one key of one type description, leaving the rest of the schema alone
+static Json patch_type(const Json &schema, std::string_view type,
+                       std::string_view key, Json value) {
+    Json::Object types;
+    for (const auto &[k, v]: schema["types"].as_object()) {
+        Json::Object t;
+        for (const auto &[tk, tv]: v.as_object()) t[tk] = tv;
+        if (k == type) t[key] = value;
+        types[k] = Json(std::move(t));
+    }
+    return Json{{"root", schema["root"].as_text()}, {"types", Json(std::move(types))}};
+}
+
+static void test_schema_broken_schema() {
+    //a schema that does not describe the data must be reported, never guessed at
+    std::string bin;
+    srl::serialize_to<char>(Inner{1, 2.0}, std::back_inserter(bin));
+
+    auto run = [&](const Json &schema) {
+        auto rd = srl::string_deserializer(bin);
+        return srl::deserialize_from_schema(schema, rd, srl::default_resolver);
+    };
+
+    Json good = srl::serialize_schema_to_json(srl::Schema::create<Inner>());
+    //the baseline has to work, otherwise the rest of this proves nothing
+    CHECK_EQUAL(run(good).to_string(), R"({"foo":1,"bar":2})");
+
+    CHECK_EXCEPTION(std::runtime_error,
+        run(patch_type(good, srl::type_name<Inner>, "layout", "nonsense")));
+
+    CHECK_EXCEPTION(std::runtime_error,
+        run(patch_type(good, srl::type_name<Inner>, "fields",
+                       Json(Json::Array{Json("NoSuchType")}))));
+
+    Json missing_root = Json{{"root", "NoSuchType"}, {"types", good["types"]}};
+    CHECK_EXCEPTION(std::runtime_error, run(missing_root));
+
+    //a fixed width leaf without a width cannot be read at all - consuming zero
+    //bytes and carrying on would silently desync everything after it
+    CHECK_EXCEPTION(std::runtime_error,
+        run(patch_type(good, srl::type_name<double>, "byte_size", Json())));
+    CHECK_EXCEPTION(std::runtime_error,
+        run(patch_type(good, srl::type_name<double>, "byte_size", 0)));
+
+    //a variant index past the last alternative, the same corruption the typed
+    //deserializer already rejects
+    std::string var_bin;
+    srl::serialize_to<char>(TestVariant{7}, std::back_inserter(var_bin));
+    var_bin[0] = 0x05;
+    Json var_schema = srl::serialize_schema_to_json(srl::Schema::create<TestVariant>());
+    auto var_rd = srl::string_deserializer(var_bin);
+    CHECK_EXCEPTION(std::runtime_error,
+        srl::deserialize_from_schema(var_schema, var_rd, srl::default_resolver));
+
+    //data that ends early must throw rather than return a half decoded value
+    for (std::size_t cut = 0; cut < bin.size(); ++cut) {
+        auto rd = srl::string_deserializer(std::string_view(bin).substr(0, cut));
+        CHECK_EXCEPTION(std::runtime_error,
+            srl::deserialize_from_schema(good, rd, srl::default_resolver));
+    }
+}
+
 int main() {
     test_non_literal_containers();
     test_truncated_input();
@@ -613,5 +807,10 @@ int main() {
     test_bool_normalization();
     test_schema_to_json();
     test_deserialize_from_schema();
+    test_schema_leaf_layouts();
+    test_schema_composite_layouts();
+    test_schema_enums();
+    test_schema_resolver();
+    test_schema_broken_schema();
     return 0;
 }

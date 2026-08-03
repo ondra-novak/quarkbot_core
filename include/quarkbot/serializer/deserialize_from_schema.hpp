@@ -2,6 +2,9 @@
 
 #include "../json/json.hpp"
 #include "serialize.hpp"
+//layout_type_table lives there - without it this header only compiled when the
+//translation unit happened to include the writer side first
+#include "serialize_schema_to_json.hpp"
 #include <concepts>
 #include <cstdint>
 #include <format>
@@ -29,7 +32,16 @@ inline Json deserialize_from_schema(const Json &json_schema, std::string_view ty
     LayoutType ltype = *ltop;
 
     auto trivial_parse = [](const Json &typedf, std::string_view type, auto &arch, ResolveCustomType auto &resolver){
-            auto bsize = typedf["byte_size"].as<std::size_t>();
+            //a fixed width leaf with no usable width cannot be read at all.
+            //Consuming zero bytes and carrying on would hand the resolver an empty
+            //blob and desync every field that follows
+            const Json &bs = typedf["byte_size"];
+            if (!bs.is_number()) throw std::runtime_error(std::format(
+                    "Corrupted json schema: Type {} has layout {} without byte_size",
+                    type, typedf["layout"].as_text()));
+            auto bsize = bs.as<std::size_t>();
+            if (!bsize) throw std::runtime_error(std::format(
+                    "Corrupted json schema: Type {} declares byte_size 0", type));
             std::string buffer;
             buffer.resize(bsize);
             read_binary(arch, std::span(reinterpret_cast<std::uint8_t *>(buffer.data()), buffer.size()));
@@ -93,9 +105,11 @@ inline Json deserialize_from_schema(const Json &json_schema, std::string_view ty
             return out;
         }
         case srl::LayoutType::enumeration: {
-            int val;
-            arch(val);
-            return val;
+            //an enum carries no encoding of its own - it is stored exactly as the
+            //underlying type in fields[0]. Assuming int here decoded an enum over
+            //uint8_t as a varint (200 came back as 100) and desynced the stream
+            //outright for anything wider
+            return deserialize_from_schema(json_schema, typedf["fields"][0].as_text(), arch, resolver);
         }
         case srl::LayoutType::fixed_sint: {
             auto bsize = typedf["byte_size"].as<std::size_t>();
