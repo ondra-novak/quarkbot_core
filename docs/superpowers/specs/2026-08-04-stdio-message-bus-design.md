@@ -100,7 +100,13 @@ nicer than `new Date(Number(msg.time))`.
 
 **Payload encoding.** `enc` absent or `false` means `payload` is text and its
 bytes are the payload verbatim. `enc: true` means `payload` is standard base64
-(with `=` padding) of an arbitrary byte string. The encoder picks text when the
+(with `=` padding) of an arbitrary byte string.
+
+`base64_t::decode` cannot report failure — it silently skips characters outside
+the charset (`base64.hpp:79-90`). The format therefore validates before
+decoding: length a multiple of 4, every character in the charset, `=` only as
+one or two trailing characters. An invalid string is a skipped line, not a
+silently mangled payload. The encoder picks text when the
 payload is valid UTF-8 and base64 otherwise, so a strategy sending text messages
 pays no encoding tax and the line stays readable; the replicator's binary frames
 go base64.
@@ -312,9 +318,10 @@ These are on the path and must land with the work:
 
 1. **Move base64 into the SDK.** `src/quarkbot/network/base64.hpp` sits behind
    `QUARKBOT_NETWORK` and declares `base64_t` in the *global* namespace. Move it
-   to `include/quarkbot/utils/base64.hpp`, wrap it in `namespace quarkbot`, and
-   update `src/quarkbot/network/ws.cpp:4` (its two call sites at lines 42 and 50
-   are already inside the namespace, so unqualified lookup keeps working).
+   to `include/quarkbot/utils/base64.hpp` and wrap it in `namespace quarkbot`.
+   `ws.cpp` is in a top-level `namespace network`, not inside `quarkbot`, so its
+   include (line 4) and both call sites (lines 42 and 50) need qualifying with
+   `quarkbot::`.
 
 2. **Fix `MessageBus::send<T>`** (`include/quarkbot/message_bus_srl.hpp:25-29`).
    It never compiled because it was never instantiated: it forwards
