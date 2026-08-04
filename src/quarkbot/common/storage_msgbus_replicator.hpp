@@ -36,7 +36,7 @@ namespace quarkbot {
     @retval true message replicated
     @retval false filtered out
      */
-    bool replicate_from_message(const std::span<const std::uint8_t> &msg, StorageTransaction &trn);
+    bool replicate_from_message(const std::string_view &msg, StorageTransaction &trn);
 
     ///Replicator runner, reads message stream and writes into storage
     /**
