@@ -30,7 +30,7 @@ namespace quarkbot {
             @param conversation_id id which specifies conversation
             @param schema schema hash of message (optional)
         */
-        void send_raw(std::string_view target, std::span<const std::uint8_t> payload, 
+        void send_raw(std::string_view target, std::string_view payload, 
                 ConversationID conversation_id = {}, 
                 srl::SchemaHash schema = {}) {
             _ptr->send({

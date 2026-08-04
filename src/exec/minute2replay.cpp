@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
             std::cout << timestamp << "," << symbol << ",quote," << bid << "," << bid_size << ",BID," << std::endl;
             std::cout << timestamp << "," << symbol << ",trade," << price << "," << trade_size << ","<< (prev_price < price?"BUY":"SELL") << "," << std::endl;
             prev_price = price;            
-            timestamp+=1000000;
+            timestamp+=60000000;
         }
     }
 
