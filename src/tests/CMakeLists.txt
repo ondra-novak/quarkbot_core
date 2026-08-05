@@ -22,6 +22,7 @@ set(BASIC_TESTS
     strategy_fragment.cpp
     replay_csv.cpp
     persistent.cpp
+    json_number.cpp
 )
 
 

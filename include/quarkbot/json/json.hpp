@@ -43,6 +43,9 @@ public:
         if (empty()) return static_cast<T>(0);
         if (find_first_of("eE") != npos) { //there can scientific number, in this case, use double conversion
                 return static_cast<T>(std::strtod(this->c_str(), nullptr));
+        } else if constexpr(std::is_unsigned_v<T>) {
+                //strtoll would saturate at INT64_MAX for values above it
+                return static_cast<T>(std::strtoull(this->c_str(), nullptr,10));
         } else {
                 return static_cast<T>(std::strtoll(this->c_str(), nullptr,10));
         }
@@ -529,18 +532,27 @@ protected:
         }
     }
     template<typename Fn>
-    static double parse_number(char &c, Fn &&fn) {
+    static JsonNumber parse_number(char &c, Fn &&fn) {
         std::string buff;
         while (is_digit(c) || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E') {
             buff.push_back(c);
             auto cc = fn();
-            c = !cc?' ': *cc;            
+            c = !cc?' ': *cc;
         }
         double v;
         auto st = std::from_chars(buff.data(), buff.data()+buff.size(), v);
         if (st.ec != std::errc{} || st.ptr != buff.data()+buff.size()) throw ParseError();
         if (std::isspace(c)) c = 0;
-        return v;
+        //Keep the original token rather than the double. Storing the double would
+        //round-trip through JsonNumber's {:.12g} formatting and silently truncate
+        //anything above 12 significant digits - a 13-digit unix millisecond
+        //timestamp, for instance.
+        //Assigned to the base string directly because JsonNumber's string_view
+        //constructor re-validates with the stricter is_valid_number and would
+        //store an empty string for tokens from_chars accepts, such as a leading '+'.
+        JsonNumber out;
+        static_cast<std::string &>(out) = std::move(buff);
+        return out;
     }
     template<typename Fn>
     static std::string parse_string(Fn &&fn) {        
