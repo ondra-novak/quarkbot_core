@@ -39,11 +39,32 @@ static void test_no_regression_on_existing_behaviour() {
     CHECK(Json::from_string("null").is_null());
     // a malformed number must still be a parse error, not a silent zero
     CHECK_EXCEPTION(Json::ParseError, Json::from_string("1.2.3"));
+    CHECK_EXCEPTION(Json::ParseError, Json::from_string("+5"));
+}
+
+// The tokenizer accepts shapes JSON forbids, and serialize() emits a number's
+// stored token verbatim. Keeping such a token as-is would make this library
+// re-emit a literal that a strict peer's JSON.parse rejects, so those tokens
+// must still be normalized through the double.
+static void test_lenient_tokens_are_normalised_to_valid_json() {
+    CHECK_EQUAL(Json::from_string("05").to_string(), "5");
+    CHECK_EQUAL(Json::from_string("00").to_string(), "0");
+    CHECK_EQUAL(Json::from_string("007").to_string(), "7");
+    CHECK_EQUAL(Json::from_string(".5").to_string(), "0.5");
+    CHECK_EQUAL(Json::from_string("5.").to_string(), "5");
+
+    // whatever comes back out must itself be a valid JSON number
+    for (auto in: {"1784700083313", "18446744073709551615", "-42", "1.5",
+                   "05", "00", "007", ".5", "5.", "1e3", "-0", "0.5"}) {
+        auto out = Json::from_string(in).to_string();
+        CHECK_PRINT(JsonNumber::is_valid_number(out), out);
+    }
 }
 
 int main() {
     test_large_integers_survive_a_round_trip();
     test_unsigned_above_int64_max();
     test_no_regression_on_existing_behaviour();
+    test_lenient_tokens_are_normalised_to_valid_json();
     return 0;
 }

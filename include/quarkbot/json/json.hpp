@@ -547,11 +547,20 @@ protected:
         //round-trip through JsonNumber's {:.12g} formatting and silently truncate
         //anything above 12 significant digits - a 13-digit unix millisecond
         //timestamp, for instance.
-        //Assigned to the base string directly because JsonNumber's string_view
-        //constructor re-validates with the stricter is_valid_number and would
-        //store an empty string for tokens from_chars accepts, such as a leading '+'.
+        //
+        //Only for tokens that are valid JSON numbers, though: the loop above also
+        //accepts shapes JSON forbids and is_valid_number rejects ("05", "007",
+        //"00", ".5", "5."). Those still go through the double, because serialize()
+        //emits a number's stored token verbatim - keeping them as-is would make
+        //this parser re-emit literals a strict peer's JSON.parse would reject.
+        //The valid token is assigned to the base string directly, since
+        //JsonNumber's string_view constructor would re-validate redundantly.
         JsonNumber out;
-        static_cast<std::string &>(out) = std::move(buff);
+        if (JsonNumber::is_valid_number(buff)) {
+            static_cast<std::string &>(out) = std::move(buff);
+        } else {
+            out = JsonNumber(v);
+        }
         return out;
     }
     template<typename Fn>
