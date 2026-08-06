@@ -6,6 +6,7 @@ set(BASIC_TESTS
     compile_test.cpp
     decimal_test.cpp
     pubsub.cpp
+    strategy_publisher.cpp
     mem_storage_test.cpp
     tardis_source_test.cpp
     merged_source_test.cpp
