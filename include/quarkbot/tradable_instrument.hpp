@@ -45,6 +45,7 @@ public:
      */     
     template<std::derived_from<OrderRequest> _Req = OrderRequest>
     Order place_order(const _Req &params, Order order_to_replace) {
+        if (!order_to_replace) return place_order(params);
         return _ptr->place_order(params, order_to_replace.get_handle(),class_hash<_Req>);
     }
 

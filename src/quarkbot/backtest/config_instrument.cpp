@@ -165,6 +165,9 @@ public:
         std::vector<InstrumentDescription> out;
         out.reserve(instruments.size());
         for (auto &[k, v]: instruments) {
+            if (v.pnl_currency.id.empty()) {
+                if (v.type != InstrumentType::inverse_contract) v.pnl_currency = v.quote_currency;
+            }
             out.push_back(std::move(v));
         }
         instruments.clear();
