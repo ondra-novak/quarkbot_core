@@ -2,6 +2,7 @@
 #include "quarkbot/context.hpp"
 #include "quarkbot/event_stream.hpp"
 #include "quarkbot/market_instrument.hpp"
+#include "quarkbot/strategy_fragment.hpp"
 #include "quarkbot/stream/closedbar.hpp"
 #include "quarkbot/stream/quote.hpp"
 #include "quarkbot/stream/trade.hpp"
@@ -19,6 +20,7 @@ public:
             :context(std::move(context)) {}
 
     StrategyFragment main([[maybe_unused]]std::string_view example_argument) {
+        co_await StrategyFragment::set_location("aaaa","bbbb",211);
         std::vector<std::function<void()>> cleanup_actions;
 
         for (MarketInstrument instr: this->context.instruments) {

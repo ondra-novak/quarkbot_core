@@ -10,6 +10,11 @@
 #include "quarkbot/utils/string_utils.hpp"
 namespace quarkbot {
 
+    template<typename T>
+    concept AwaitTransformDisabled =  requires {
+        typename T::no_transform_awaiter;
+    };
+
     template<coro::is_awaiter _Awt>
     class TransformedAwaiterExecWorker   {
     public:
@@ -114,8 +119,7 @@ namespace quarkbot {
 
     class promise_type: public coro::coroutine<T>::promise_type {
         public:            
-            std::source_location coro_location;
-            std::string_view coro_function_name;
+            Logger::Location coro_location;            
 
             void *operator new(std::size_t sz) {return MagazineVMemAllocator::allocate(sz);}
             void operator delete(void *ptr, std::size_t sz) {return MagazineVMemAllocator::deallocate(ptr, sz);}
@@ -156,7 +160,7 @@ namespace quarkbot {
             static void debug_traced_resume(std::coroutine_handle<promise_type> h) {
                 auto &me = h.promise();
                 logOutputCB(LogLevel::trace, [&]{
-                    return std::pair(Logger::from(me.coro_location),std::format("Fragment is running: {}",me.coro_function_name));
+                    return std::pair(me.coro_location,std::format("Fragment is running: {}",me.coro_location.function));
                 });
                 me.old_resume(h);
             }
@@ -164,25 +168,26 @@ namespace quarkbot {
 
 
             std::suspend_always initial_suspend(std::source_location loc = std::source_location::current())  noexcept {
-                this->coro_location = loc;
-                coro_function_name = short_name(loc.function_name());
+                this->coro_location = Logger::from(loc);
+                this->coro_location.function =short_name(loc.function_name());
                 logOutputCB(LogLevel::trace,  [&]{
                     auto h = std::coroutine_handle<promise_type>::from_promise(*this);
                     auto frame_ptr = reinterpret_cast<void (**)(std::coroutine_handle<promise_type>) >(h.address());
                     old_resume = *frame_ptr;
                     *frame_ptr = &debug_traced_resume;
-                    return std::pair(Logger::from(loc),std::format("Frame created: {}", coro_function_name));
+                    return std::pair(Logger::from(loc),std::format("Frame created: {}", coro_location.function));
                 });
                 return {};
             }        
 
             ~promise_type() {
                 logOutputCB(LogLevel::trace, [&]{
-                    return std::pair(Logger::from(coro_location),std::format("Fragment finished: {}", coro_function_name));
+                    return std::pair(coro_location,std::format("Fragment finished: {}", coro_location.function));
                 });
             }
 
             template<typename _Awt>
+            requires (!AwaitTransformDisabled<std::decay_t<_Awt> >)
             auto await_transform(_Awt &&awt) {
                 if constexpr(coro::is_awaiter<_Awt>) {
                     return TransformedAwaiterExecWorker<_Awt &&>(std::forward<_Awt>(awt));
@@ -190,6 +195,9 @@ namespace quarkbot {
                     return TransformedAwaiterExecWorker<coro::extract_awaiter_t<_Awt> >(awt);
                 }
             }
+            template<typename _Awt>
+            requires (AwaitTransformDisabled<std::decay_t<_Awt> >)
+            decltype(auto) await_transform(_Awt &&x) {return std::forward<_Awt>(x);}
             auto await_transform(std::suspend_always &awt) {return awt;}
             auto await_transform(std::suspend_always &&awt) {return awt;}
             auto await_transform(std::suspend_never &awt) {return awt;}
@@ -201,6 +209,28 @@ namespace quarkbot {
 
         Async() = default;
         Async(coro::coroutine<T> x):coro::coroutine<T>(std::move(x)) {}
+
+        class set_location {
+            Logger::Location loc;
+        public:
+            struct no_transform_awaiter{};
+            set_location(const set_location &) = delete;
+            set_location &operator=(const set_location &) = delete;
+            set_location(std::string_view function, std::string_view file,  uint_least32_t line)
+                :loc(file,function,line) {}
+            static constexpr bool await_ready() {return false;}
+            bool await_suspend(std::coroutine_handle<> h) {
+                void *addr = h.address();
+                auto hp = std::coroutine_handle<promise_type>::from_address(addr);
+                auto &promise = hp.promise();
+                logOutputCB(LogLevel::trace, [&]{
+                    return std::pair(loc,std::format("Fragment {} transfered to {} ", promise.coro_location.function, loc.function));
+                });
+                promise.coro_location = loc;
+                return false;
+            }
+            static constexpr void await_resume() {}            
+        };
     };
 
 

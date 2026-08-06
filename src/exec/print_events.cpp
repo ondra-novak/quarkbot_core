@@ -1,6 +1,7 @@
 
 #include "quarkbot/backtest/backtest.hpp"
 #include "quarkbot/backtest/simexchange.hpp"
+#include "quarkbot/common/logger.hpp"
 #include "quarkbot/context.hpp"
 #include "quarkbot/instrument_description.hpp"
 #include "quarkbot/log.hpp"
@@ -39,6 +40,8 @@ int main() {
         {"USD"},{},"BTCUSD",InstrumentCategory::Crypto}
     };
 
+    log_set_level(LogLevel::trace);
+    log_to_stderr();
     BacktestEnv bt("backtest",wallet,instruments,{});
     bt.add_strategy<PrintEventStrategy>({}, "example argyment");
     bt.run(std::ref(source));
