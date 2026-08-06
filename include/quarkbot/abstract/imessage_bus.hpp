@@ -87,7 +87,7 @@ namespace quarkbot {
         ///Target or topic
         std::string_view target = {};
         ///Message payload
-        std::span<const std::uint8_t> payload ={};
+        std::string_view payload ={};
         ///Conversation id
         ConversationID conversation_id ={};
         ///Schema hash of payload
@@ -95,7 +95,7 @@ namespace quarkbot {
         ///time on send side
         std::chrono::system_clock::time_point send_time = {};
         ///holds reference to snapshot to keep lifetime 
-        RefCountPtr<RefCountInstanceWithDeleter> snapshot_ptr = {};
+        RefCountPtr<RefCountInstanceWithDeleter> ownership = {};
 
         ///Extract value to type, function checks for schema
         /**

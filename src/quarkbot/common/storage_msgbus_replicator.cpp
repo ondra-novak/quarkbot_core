@@ -5,6 +5,7 @@
 #include "quarkbot/storage.hpp"
 #include <chrono>
 #include <cstdint>
+#include <string_view>
 
 namespace quarkbot {
 
@@ -35,7 +36,7 @@ static void replicate_with_buffer(const Storage::ReplicatorEvent &event, std::ui
     iter = write_blob(iter, event.value);
     std::size_t final_size = static_cast<std::size_t>(iter - buffer);
     bus.send(Message{
-        MessageType::normal_message,{}, target, std::span(buffer, final_size),
+        MessageType::normal_message,{}, target, {reinterpret_cast<const char *>(buffer), final_size},
         0,0,std::chrono::system_clock::now(),{}        
     });
 }
@@ -77,12 +78,12 @@ static std::string_view extract_blob(auto &iter, auto end_iter) {
     return {reinterpret_cast<const char *>(bin.data()), bin.size()};
 }
 
-bool replicate_from_message(const std::span<const std::uint8_t> &msg, StorageTransaction &trn) {
+bool replicate_from_message(const std::string_view &msg, StorageTransaction &trn) {
     if (msg.size()<4) return false;
     auto iter = msg.begin();
     auto end = msg.end();
-    char ch1 = static_cast<char>(*iter++);
-    char ch2 = static_cast<char>(*iter++);
+    char ch1 =*iter++;
+    char ch2 =*iter++;
     bool erase;
     bool schema;
     if (ch1 == 'E')  erase = true;
