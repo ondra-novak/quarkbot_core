@@ -42,7 +42,7 @@ public:
             iter = ins.first;
         }
         std::invoke(std::forward<Callback>(cb), iter->second);
-        return check_bankruptcy(iter->second);
+        return !check_bankruptcy(iter->second);
     }
 
     template<std::invocable<WalletInfoExt &> Callback>

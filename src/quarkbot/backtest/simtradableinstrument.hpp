@@ -107,12 +107,12 @@ protected:
             }
             ok = get_sim_account()->update_wallet(info.quote_currency, [&](SimAccount::WalletInfoExt &w){
                 w.order_blocked = cur_blocked - _margin;
-            }, true) || ok;
+            }, true) && ok;
             _margin = cur_blocked;
             if (info.asset_has_wallet()) {
                 ok = get_sim_account()->update_wallet(*info.asset_wallet, [&](SimAccount::WalletInfoExt &w){
                     w.order_blocked = pos_blocked - _position_blocked;
-                }, true) || ok;
+                }, true) && ok;
             }
             _position_blocked = pos_blocked;
         }
