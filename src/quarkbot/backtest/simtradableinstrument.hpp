@@ -91,7 +91,7 @@ protected:
             Decimal margin = bigger / info.leverage;
             ok = get_sim_account()->update_wallet(info.pnl_currency, [&](SimAccount::WalletInfoExt &w){
                 w.initial_margin  = margin - _margin;
-            }, true) || ok;
+            }, true) && ok;
             _margin = margin;
         } else {
             Decimal cur_blocked = {};
