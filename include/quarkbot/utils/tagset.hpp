@@ -75,7 +75,7 @@ public:
     constexpr std::size_t get_raw(const std::string_view &tag) const {
         auto iter = std::find(_mapping->begin(), _mapping->end(), tag);
         if (iter != _mapping->end())  {
-            return static_cast<std::size_t>(1<<std::distance(_mapping->begin(), iter));
+            return static_cast<std::size_t>(static_cast<std::size_t>(1)<<std::distance(_mapping->begin(), iter));
         }
         return 0;
     }

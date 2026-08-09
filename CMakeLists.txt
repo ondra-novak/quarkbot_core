@@ -6,9 +6,8 @@ if (MSVC)
 	set(STANDARD_LIBRARIES "")
 else()
 	add_compile_options(-Wall -Wextra -Wpedantic -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused -Woverloaded-virtual -Wconversion -Wsign-conversion -Wnull-dereference -Wdouble-promotion -Wformat=2)
-	set(STANDARD_LIBRARIES "pthread")
+	set(STANDARD_LIBRARIES "pthread")    
 endif()
-add_compile_options(-Wall -Wno-noexcept-type)
 
 option(quarkbot_DEVELOPMENT_MODE "(Quarkbot) Include development targets" ${PROJECT_IS_TOP_LEVEL})
 

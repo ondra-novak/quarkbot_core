@@ -168,9 +168,9 @@ namespace quarkbot {
                 set_order_status(order.ord,OrderRejectionReason::too_late);
                 return true;
             }            
-            const auto &params = order.ord->get_parameters();
+            const auto &params_ = order.ord->get_parameters();
             //order is ato but open auction finished
-            if (params.time_in_force == TimeInForce::ato && auction_state_iter->second.at_open_finished) {
+            if (params_.time_in_force == TimeInForce::ato && auction_state_iter->second.at_open_finished) {
                 //reject
                 set_order_status(order.ord,OrderRejectionReason::too_late);
                 return true;

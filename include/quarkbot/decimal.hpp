@@ -16,21 +16,65 @@
 #include <type_traits>
 
 
-#if defined(__SIZEOF_INT128__)
-#  if defined(__clang__) || defined(__GNUC__)
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wpedantic"
-#  endif
-using int128_t = __int128;
-using uint128_t = unsigned  __int128;
-#  if defined(__clang__) || defined(__GNUC__)
-#    pragma GCC diagnostic pop
-#  endif
-#else
-#  error "Compiler must support int128_t for multiply_and_div64"
+#if defined(_MSC_VER)
+    #include <intrin.h>   // _mul128, _div128
 #endif
 
 namespace _decimal_details {
+
+
+
+    struct uint128 { std::uint64_t hi, lo; };
+
+    // 64 x 64 -> 128 unsigned, constexpr, přenositelné.
+    constexpr uint128 umul128(std::uint64_t a, std::uint64_t b) noexcept {
+        const std::uint64_t aL = a & 0xFFFF'FFFFull, aH = a >> 32;
+        const std::uint64_t bL = b & 0xFFFF'FFFFull, bH = b >> 32;
+
+        const std::uint64_t ll = aL * bL;
+        const std::uint64_t lh = aL * bH;
+        const std::uint64_t hl = aH * bL;
+        const std::uint64_t hh = aH * bH;
+
+        const std::uint64_t mid = (ll >> 32) + (lh & 0xFFFF'FFFFull) + (hl & 0xFFFF'FFFFull);
+        const std::uint64_t lo  = (ll & 0xFFFF'FFFFull) | (mid << 32);
+        const std::uint64_t hi  = hh + (lh >> 32) + (hl >> 32) + (mid >> 32);
+        return { hi, lo };
+    }
+
+    // 128 / 64 -> 64 unsigned (kvocient se dle kontraktu vejde do 64 bitů).
+    // Bitová dlouhá dělení; správnost > rychlost (běží jen při const-eval / fallbacku).
+    constexpr std::uint64_t udiv128_64(uint128 n, std::uint64_t d) noexcept {
+        std::uint64_t q = 0, r = 0;
+        for (int i = 127; i >= 0; --i) {
+            const std::uint64_t bit = (i >= 64) ? ((n.hi >> (i - 64)) & 1u)
+                                                : ((n.lo >> i) & 1u);
+            const bool carry = (r >> 63) != 0;   // bit vypadlý z r přes hranici 64b
+            r = (r << 1) | bit;
+            if (carry || r >= d) {
+                r -= d;
+                if (i < 64) q |= (std::uint64_t{1} << i);
+                // i >= 64 by znamenalo kvocient > 64 bitů -> porušení kontraktu
+            }
+        }
+        return q;
+    }
+
+    constexpr std::uint64_t uabs64(std::int64_t v) noexcept {
+        return v < 0 ? (0u - static_cast<std::uint64_t>(v))
+                     :        static_cast<std::uint64_t>(v);
+    }
+
+    // Přenositelné znaménkové (a*b)/k se 128b mezivýsledkem, ořez k nule.
+    constexpr std::int64_t muldiv64_portable(std::int64_t a, std::int64_t b, std::int64_t k) noexcept {
+        const bool neg = (a < 0) ^ (b < 0) ^ (k < 0);
+        const uint128 prod = umul128(uabs64(a), uabs64(b));
+        const std::uint64_t mag = udiv128_64(prod, uabs64(k));
+        return neg ? -static_cast<std::int64_t>(mag)
+                   :  static_cast<std::int64_t>(mag);
+    }
+
+
 
     inline constexpr int count_bits(uint64_t n) {
         if (n == 0) return 0;
@@ -72,25 +116,29 @@ namespace _decimal_details {
     }
 
 
-    inline constexpr std::int64_t multiply_and_div64(int64_t a, int64_t b, int64_t k) {
-        auto m = static_cast<int128_t>(a) * static_cast<int128_t>(b);
+    inline constexpr std::int64_t multiply_and_div64(std::int64_t a, std::int64_t b, std::int64_t k) {
+    if consteval {
+        return _decimal_details::muldiv64_portable(a, b, k);
+    } else {
 #if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
-        //k fits into 64 bits and the quotient is expected to fit into 64 bits too,
-        //so the 128/64->64 division can be done directly by IDIV instead of
-        //the generic (and much slower, libgcc __divti3) int128_t/int128_t division
-        if consteval {
-            return static_cast<int64_t>(m / k);
-        } else {
-            std::int64_t hi = static_cast<std::int64_t>(m >> 64);
-            std::uint64_t lo = static_cast<std::uint64_t>(m);
-            std::int64_t q, r;
-            asm("idivq %[div]" : "=a"(q), "=d"(r) : [div] "r"(static_cast<std::int64_t>(k)), "a"(lo), "d"(hi));
-            return q;
-        }
+        int128_t m = static_cast<int128_t>(a) * static_cast<int128_t>(b);
+        std::int64_t hi = static_cast<std::int64_t>(m >> 64);
+        std::uint64_t lo = static_cast<std::uint64_t>(m);
+        std::int64_t q, r;
+        asm("idivq %[div]" : "=a"(q), "=d"(r)
+                           : [div] "r"(static_cast<std::int64_t>(k)), "a"(lo), "d"(hi));
+        return q;
+#elif defined(_MSC_VER) && defined(_M_X64)
+        long long hi;
+        long long lo = _mul128(a, b, &hi);   // znaménkové 64x64 -> 128, vrací dolních 64
+        long long rem;
+        return _div128(hi, lo, k, &rem);      // znaménkové 128/64 -> 64
 #else
-        return static_cast<int64_t>(m/ k);
+        return detail::muldiv64_portable(a, b, k);
 #endif
     }
+}
+
 
     ///enforces compiler to implement division as fixed with multiplication
     inline constexpr std::int64_t divide_pow10(int64_t a, unsigned int b) {

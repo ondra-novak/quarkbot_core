@@ -36,8 +36,7 @@ namespace quarkbot {
     }
 
     void BacktestConfig::configure_log(std::string_view section) {
-        auto config = as_config();
-        auto log_config = config / section;
+        auto log_config = as_config() / section;
         auto log_level = log_config["level"](LogLevel::info);
         std::optional<std::string> log_file = log_config["file"](std::nullopt);
         if (log_file.has_value()) {
@@ -50,8 +49,7 @@ namespace quarkbot {
     }
 
     SimulationParams BacktestConfig::configure_simulation(std::string_view section) {
-        auto config = as_config();
-        auto sim_config = config / section;
+        auto sim_config = as_config() / section;
         std::string_view report_csv = sim_config["report_file"]("report.csv");
         double slippage = sim_config["slippage"](0.0);
         std::size_t latency = sim_config["latency_ms"](static_cast<std::size_t>(0));

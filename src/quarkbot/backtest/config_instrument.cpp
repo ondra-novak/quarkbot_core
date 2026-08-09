@@ -30,14 +30,15 @@ public:
     std::unordered_set<std::filesystem::path> processed;
     std::unordered_map<std::string, InstrumentDescription> instruments;
 
-    using Field = std::variant<Decimal InstrumentDescription::*,
-                               std::string InstrumentDescription::*,
+    using Field = std::variant<std::string InstrumentDescription::*,
                                UnderlyingCurrency InstrumentDescription::*,
                                std::optional<UnderlyingCurrency> InstrumentDescription::*,
                                InstrumentCategory InstrumentDescription::*,
                                InstrumentType InstrumentDescription::*,
                                std::size_t InstrumentDescription::*,
-                               const std::chrono::time_zone *InstrumentDescription::*>;
+                               const std::chrono::time_zone *InstrumentDescription::*,
+                               Decimal InstrumentDescription::*,
+                               Decimal InstrumentGeometry::*>;
 
     static constexpr auto field_lookup = make_lookup_table<std::string_view, Field>({
         {"quote_currency", &InstrumentDescription::quote_currency},
@@ -47,17 +48,18 @@ public:
         {"category", &InstrumentDescription::category},
         {"uid", &InstrumentDescription::uid},
         {"type", &InstrumentDescription::type},
+        {"time_zone", &InstrumentDescription::time_zone},
         {"multiplier", &InstrumentDescription::multiplier},
         {"tick_scale", &InstrumentDescription::tick_scale},
-        {"min_quantity",&InstrumentDescription::min_quantity},
-        {"max_quantity",&InstrumentDescription::max_quantity},
-        {"quantity_increment",&InstrumentDescription::quantity_increment},
-        {"price_increment",&InstrumentDescription::price_increment},
-        {"min_turnover",&InstrumentDescription::min_turnover},
-        {"leverage",&InstrumentDescription::leverage},
-        {"fee_rate_maker",&InstrumentDescription::fee_rate_maker},
-        {"fee_rate_taker",&InstrumentDescription::fee_rate_taker},
-        {"time_zone", &InstrumentDescription::time_zone}
+        {"min_quantity",&InstrumentGeometry::min_quantity},
+        {"max_quantity",&InstrumentGeometry::max_quantity},
+        {"quantity_increment",&InstrumentGeometry::quantity_increment},
+        {"price_increment",&InstrumentGeometry::price_increment},
+        {"min_turnover",&InstrumentGeometry::min_turnover},
+        {"leverage",&InstrumentGeometry::leverage},
+        {"fee_rate_maker",&InstrumentGeometry::fee_rate_maker},
+        {"fee_rate_taker",&InstrumentGeometry::fee_rate_taker},
+    
     });
 
 
@@ -116,6 +118,9 @@ public:
                         [&](Decimal InstrumentDescription::*ptr) {
                             desc.*ptr = Decimal::from_string(row.value);
                         },
+                        [&](Decimal InstrumentGeometry::*ptr) {
+                            desc.*ptr = Decimal::from_string(row.value);
+                        },
                         [&](std::string InstrumentDescription::*ptr) {
                             desc.*ptr = row.value;
                         },
@@ -140,7 +145,7 @@ public:
                         },
                         [&](std::size_t InstrumentDescription::*ptr) {
                             std::size_t id;
-                            auto res = std::from_chars(row.value.begin(), row.value.end(), id);
+                            auto res = std::from_chars(row.value.data(), row.value.data()+row.value.size(), id);
                             if (res.ec != std::errc{}) throw std::runtime_error(std::format("Invalid number: {}", row.value));
                             desc.*ptr = id;
                         },

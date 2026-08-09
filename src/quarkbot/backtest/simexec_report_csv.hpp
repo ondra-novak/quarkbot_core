@@ -21,7 +21,7 @@ inline std::string csv_quotes(std::string_view text) {
     if (n == text.npos) {
         out.append(text);
     } else {
-        std::string out = "\"";
+        out = "\"";
         for (char x: text) {
             if (x == '"') out.push_back(x);
             out.push_back(x);

@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iostream>
 #include <ostream>
+#include <print>
 
 namespace quarkbot {
 
@@ -30,7 +31,7 @@ namespace quarkbot {
         cfg = BacktestConfig::load(backtest_config_path);
         cfg.configure_log();
     } catch (const std::exception &e) {
-        std::fprintf(stderr, "Failed to initialize backtest config %s, exception %s\n", backtest_config_path.c_str(), e.what());
+        std::print(std::cerr, "Failed to initialize backtest config {}, exception {}\n", backtest_config_path.string(), e.what());
         return 2;
     }
 

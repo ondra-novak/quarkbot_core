@@ -165,9 +165,11 @@ void log_to_file(const std::filesystem::path &file) {
     _cur_log_stream.clear();
     _cur_log_stream.open(_cur_log_file, std::ios::out|std::ios::app);
     Logger::instance.log_sink = std_file_sink;
+#ifndef _WIN32
     signal(SIGUSR1, [](int){
         _rotate_signal.store(true, std::memory_order_relaxed);
     });
+#endif
 }
 void log_to_file_rotate(const std::filesystem::path &file, unsigned int retention, unsigned int rotate_seconds) {
     std::scoped_lock _(_mx);

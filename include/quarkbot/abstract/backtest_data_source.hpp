@@ -9,6 +9,7 @@
 #include <chrono>
 #include <functional>
 #include <string>
+#include <variant>
 #include <type_traits>
 
 namespace quarkbot {

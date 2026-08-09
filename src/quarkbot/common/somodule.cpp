@@ -1,3 +1,7 @@
+#ifdef _WIN32
+
+#else
+
 #include "somodule.hpp"
 #include "quarkbot/version.hpp"
 #include <dlfcn.h>
@@ -52,3 +56,4 @@ namespace quarkbot {
 
 
 }
+#endif

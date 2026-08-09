@@ -48,7 +48,11 @@ ReplayCSVDataSource::ReplayCSVDataSource(std::string_view content)
 
 
 ReplayCSVDataSource::CSVSource ReplayCSVDataSource::init_source(std::filesystem::path source_file) {
+#ifdef _WIN32
+    auto gzf = gzopen_w(source_file.c_str(), "r");
+#else
     auto gzf = gzopen(source_file.c_str(), "r");
+#endif 
     if (gzf == nullptr) throw std::runtime_error(std::format("Failed to open gz file: {}", source_file.string()));
     auto shared_gzf = std::shared_ptr<struct gzFile_s>(gzf, [](gzFile f){gzclose(f);});
     return CSVSource{

@@ -42,7 +42,11 @@ namespace quarkbot {
 
 TardisCsvDataSource::TardisCsvDataSource(std::string instrument, std::filesystem::path csv_gz_path)
     : _instrument(std::move(instrument)) {
+    #ifdef _WIN32
+    _gz = reinterpret_cast<gzFile_s *>(gzopen_w(csv_gz_path.c_str(), "rb"));
+    #else
     _gz = reinterpret_cast<gzFile_s *>(gzopen(csv_gz_path.c_str(), "rb"));
+    #endif
     if (!_gz) throw std::runtime_error("Cannot open gz file: " + csv_gz_path.string());
 }
 

@@ -82,7 +82,7 @@ bool TRTHEventSource::operator()(BacktestEvent &ev) {
         std::chrono::sys_time<std::chrono::nanoseconds> tp;
         in >> std::chrono::parse("%FT%T", tp);
         if (in.fail()) continue;
-        ev.time = tp;
+        ev.time = std::chrono::time_point_cast<std::chrono::system_clock::duration>(tp);
         ev.symbol = _data.RIC;
         if (_data.Type == "Auction") {
             Auction &a = ev.data.emplace<Auction>();
