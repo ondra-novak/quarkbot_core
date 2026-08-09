@@ -11,7 +11,6 @@ namespace quarkbot {
 
 
 
-    static constexpr OrderParameters empty_order_parameters = {};
 
     
 
@@ -147,7 +146,7 @@ namespace quarkbot {
             std::scoped_lock _(mx);
             return id;  //id will not change when it is set, so it is safe to return view which is either empty or valid
         }
-        void set_id(std::string id) {this->id = std::move(id);}
+        void set_id(std::string id_) {this->id = std::move(id_);}
         Decimal get_remaining_quantity() const {return parameters.quantity - next_report.fill_stats.filled;}
         Decimal get_filled() const  {return  next_report.fill_stats.filled;}
         const OrderFillStats &get_fill_stats() const {return next_report.fill_stats;}

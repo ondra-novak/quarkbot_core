@@ -48,7 +48,7 @@ namespace quarkbot {
 
     bool SimAccount::check_bankruptcy(const WalletInfoExt &info)  {
         if (info.disable_balance_check) return false;
-        return info.balance + info.unrealized_pnl >= info.initial_margin + info.order_blocked;
+        return info.balance + info.unrealized_pnl < info.initial_margin + info.order_blocked;
     }
 
 

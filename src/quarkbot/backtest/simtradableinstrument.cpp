@@ -181,9 +181,9 @@ void SimTradableInstrument::submit_order(POrderData order) {
 
     _active_orders.push_back({order, calc_turnover(params, TradableInstrument(shared_from_this()),_last_price, 0),{}});
     if (!update_margin()) {
-        return update_order(order,OrderRejectionReason::insufficient_funds);
         _active_orders.pop_back();    
         update_margin();
+        return update_order(order,OrderRejectionReason::insufficient_funds);
     }
 
     get_sim_instrument()->get_sim_exchange()->place_order(order);    

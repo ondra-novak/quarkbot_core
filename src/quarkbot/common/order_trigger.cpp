@@ -55,10 +55,10 @@ namespace quarkbot {
         return true;
     }
 
-    bool TrigOrder::set_event(EventStream<Trade> *ev) {
+    bool TrigOrder::set_event(EventStream<Trade> *event) {
         std::scoped_lock _(mx);
         if (canceled.load(std::memory_order_relaxed)) return false;
-        this->ev = ev;
+        this->ev = event;
         return true;
     }
 

@@ -37,10 +37,10 @@ namespace _magazine_vmem_details {
         @param hwm change high watermark
         @param magazine_size change magazine size
          */
-        void configure(std::size_t hwm, std::size_t magazine_size = 32) {
+        void configure(std::size_t hwm, std::size_t mgz_size = 32) {
             std::scoped_lock _(mx);
             high_watermark = hwm;
-            this->magazine_size = magazine_size;
+            this->magazine_size = mgz_size;
 
 
         }

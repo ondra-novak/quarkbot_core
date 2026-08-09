@@ -3,6 +3,7 @@
 
 #include <stdexcept>
 #include <zlib.h>
+#include <array>
 
 
 
@@ -36,7 +37,11 @@ bool TRTHRawSource::read(Data &data){
  }
 
 TRTHRawSource::CSVSource TRTHRawSource::init_source(std::filesystem::path source_file) {
-    auto gzf = gzopen(source_file.c_str(), "r");
+    #if defined(_WIN32)
+        auto gzf = gzopen_w(source_file.c_str(), "r");
+    #else
+        auto gzf = gzopen(source_file.c_str(), "r");
+    #endif
     if (gzf == nullptr) throw std::runtime_error(std::format("Failed to open gz file: {}", source_file.string()));
     auto shared_gzf = std::shared_ptr<struct gzFile_s>(gzf, [](gzFile f){gzclose(f);});
     return CSVSource{

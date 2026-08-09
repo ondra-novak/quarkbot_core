@@ -2,6 +2,7 @@
 #include "quarkbot/backtest/config_backtest.hpp"
 #include "quarkbot/backtest/config_datasource.hpp"
 #include "quarkbot/backtest/config_instrument.hpp"
+#include "quarkbot/common/strategy_config.hpp"
 #include "quarkbot/config.hpp"
 #include "quarkbot/utils/simple_ini.hpp"
 #include "quarkbot/common/mem_storage.hpp"
@@ -9,17 +10,9 @@
 #include <fstream>
 #include <iostream>
 #include <ostream>
+#include <print>
 
 namespace quarkbot {
-
-    StrategyContext::Config loadStrategyConfig(std::filesystem::path cfg)  {
-        std::fstream f(cfg);
-        if (!f) throw std::runtime_error(std::format("Failed to open: {}", cfg.string()));
-        IniReaderFromStream ini(f);
-        auto kv = ini.create_kv_map();
-        return {ConfigBackend(std::make_shared<ConfigBackendMap>(kv.begin(), kv.end())),'#'};
-    }
-
 
     int entry_point(std::string_view program_name, std::span<const char *const > args, std::function<StrategyFragment(StrategyContext &&, const StrategyContext::Config &)> start_fn){
         //TODO - argv[1] = strategy config, argv[2] = backtest config + python config
@@ -36,8 +29,9 @@ namespace quarkbot {
 
     try {
         cfg = BacktestConfig::load(backtest_config_path);
+        cfg.configure_log();
     } catch (const std::exception &e) {
-        std::fprintf(stderr, "Failed to initialize backtest config %s, exception %s\n", backtest_config_path.c_str(), e.what());
+        std::print(std::cerr, "Failed to initialize backtest config {}, exception {}\n", backtest_config_path.string(), e.what());
         return 2;
     }
 
@@ -48,7 +42,7 @@ namespace quarkbot {
 
         StrategyContext ctx;
         ctx.storage = MemStorage::create(MemStorage::no_history);        
-        ctx.config = loadStrategyConfig(strategy_config_path);;        
+        ctx.config = load_strategy_config(strategy_config_path);
         bt.add_strategy([start_fn = std::move(start_fn), config = cfg.as_config()](StrategyContext &&context){
             return start_fn(std::move(context), config);
         },  std::move(ctx));

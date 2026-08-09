@@ -1,6 +1,7 @@
 #pragma once
 
 #include "quarkbot/order_defs.hpp"
+#include <variant>
 namespace quarkbot {
 
 

@@ -48,7 +48,6 @@ public:
 
 class IOrder::Null final: public IOrder {
 public:
-    static constexpr auto params = OrderParameters{};
     virtual RcvStatus receive_report(OrderReport &) override {
         return RcvStatus::done;
     }
@@ -60,7 +59,7 @@ public:
     }
     virtual void cancel() override {}
     virtual const OrderParameters &get_parameters() const  override {
-        return params;
+        throw UninitializedException();
     }
     virtual std::chrono::system_clock::time_point get_creation_time() const override {
         return {};

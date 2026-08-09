@@ -59,8 +59,8 @@ public:
                 throw std::runtime_error(std::format("Config parse error on {}: Boolean expects 'true' or 'false', 1 or 0, 'on' or 'off', 'enabled' or 'disabled'", key));
             } else if constexpr(std::is_arithmetic_v<T>) {
                 T val;
-                auto r = std::from_chars(actual_str.begin(), actual_str.end(), val);
-                if (r.ec != std::errc{} || r.ptr != actual_str.end())  {
+                auto r = std::from_chars(actual_str.data(), actual_str.data()+actual_str.size(), val);
+                if (r.ec != std::errc{} || r.ptr != actual_str.data()+actual_str.size())  {
                     throw std::runtime_error(std::format("Config parse error on {}: invalid number format", key));
                 }
                 return val;

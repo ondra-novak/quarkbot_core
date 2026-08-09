@@ -48,12 +48,12 @@ struct RangedBar{
         auto from_low = new_close - low;
         auto from_high = high - new_close;
 
-        bool gap = false;
+        bool is_gap = false;
         bool broken = false;
         if (from_low > range) {
             broken = true;
             if (from_low > 2*range) {
-                gap = true;
+                is_gap = true;
                 new_close = tr.price - range;
             } else {
                 new_close = low + range;
@@ -61,7 +61,7 @@ struct RangedBar{
         } else if (from_high > range) {
             broken = true;
             if (from_high > 2*range) {
-                gap = true;
+                is_gap = true;
                 new_close = high - range;
             } else {
                 new_close = high - range;
@@ -69,7 +69,7 @@ struct RangedBar{
         }
         return {
             { open, std::max(high, new_close), std::min(low, new_close),
-            new_close, broken?volume:volume + tr.size, gap, open_tp, tr.time}
+            new_close, broken?volume:volume + tr.size, is_gap, open_tp, tr.time}
             ,broken
         };
     }

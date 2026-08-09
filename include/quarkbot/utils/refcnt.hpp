@@ -93,7 +93,7 @@ public:
     }
     void release_ref() {
         if (_references.fetch_sub(1, std::memory_order_release) <= 1) {
-            _references.load(std::memory_order_acquire);
+            std::ignore=_references.load(std::memory_order_acquire);
             _deleter(this);
         }
     }

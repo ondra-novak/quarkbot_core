@@ -9,6 +9,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <type_traits>
+#include <print>
+#include <ostream>
 
 namespace quarkbot {
 

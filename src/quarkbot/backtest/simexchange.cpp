@@ -49,7 +49,9 @@ std::shared_ptr<SimInstrument> SimExchange::resolve_instrument(const std::string
 void SimExchange::on_event(const std::string &instrument, Quote qt) {
     auto mi = resolve_instrument(instrument);
     if (!mi) return;
-    _executor.on_event(mi, qt); 
+    if (qt.both_sides()) {
+        _executor.on_event(mi, qt); 
+    }
     _streams.on_event(instrument, qt);
     for (auto &x: _tradable_instruments) {
         auto trad = x.lock();

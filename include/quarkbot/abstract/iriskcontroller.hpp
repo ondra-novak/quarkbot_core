@@ -70,7 +70,7 @@ namespace quarkbot {
 
     class IRiskController::Null: public IRiskController {
     public:
-        virtual CheckResult pre_trade_check(const Order &) override {return {false, OrderRejectionReason::not_tradable};}
+        virtual CheckResult pre_trade_check(const Order &) override {return {true, OrderRejectionReason::not_tradable};}
         virtual void on_order_event(const Order &, const Fill &) override {}
         virtual void on_order_event(const Order &, OrderStatus ) override {};
     };
