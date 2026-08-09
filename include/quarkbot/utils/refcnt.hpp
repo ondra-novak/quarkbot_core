@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <concepts>
+#include <tuple>
 #include <utility>
 template<typename T>
 concept RefCountedInstance = requires(T v) {

@@ -121,7 +121,11 @@ namespace _decimal_details {
         return _decimal_details::muldiv64_portable(a, b, k);
     } else {
 #if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+        using int128_t = __int128;
         int128_t m = static_cast<int128_t>(a) * static_cast<int128_t>(b);
+#pragma GCC diagnostic pop
         std::int64_t hi = static_cast<std::int64_t>(m >> 64);
         std::uint64_t lo = static_cast<std::uint64_t>(m);
         std::int64_t q, r;
