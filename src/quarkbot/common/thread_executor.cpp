@@ -2,8 +2,10 @@
 #include "basic_coro/prepared_coro.hpp"
 #include <atomic>
 #include <chrono>
+#include <coroutine>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <stop_token>
 #include <thread>
 
@@ -16,6 +18,13 @@ namespace quarkbot {
             manage_lock_me();
         }
         _cv.notify_one();
+    }
+    void ThreadExecutor::resume_idle(std::coroutine_handle<> h) noexcept {
+        {
+            std::scoped_lock _(_mx);
+            _idle_queue.push(std::move(h));
+            manage_lock_me();
+        }
     }
 
     std::shared_ptr<ThreadExecutor> ThreadExecutor::create(){
@@ -64,15 +73,15 @@ namespace quarkbot {
     }
 
     void ThreadExecutor::start() {
-        _thr = std::jthread([this](std::stop_token tkn){
+        _thr = std::thread([this](std::stop_token tkn){            
             worker(tkn);
-        });
+        }, _stpsrc.get_token());
 
     }
 
     ThreadExecutor::~ThreadExecutor() {
+        _stpsrc.request_stop();
         if (_thr.joinable()) {
-            _thr.request_stop();
             if (std::this_thread::get_id() == _thr.get_id()) {
                 _thr.detach();
             } else {
@@ -82,7 +91,7 @@ namespace quarkbot {
     }
 
     void ThreadExecutor::manage_lock_me() {
-        bool keeplock = (_scheduler.get_first_scheduled_time() || !_dispatch_queue.empty());
+        bool keeplock = (_scheduler.get_first_scheduled_time() || !_dispatch_queue.empty() || !_idle_queue.empty());
         if (!_lock_me && keeplock) {
             _lock_me = shared_from_this();
         } else if (_lock_me && !keeplock) {
@@ -110,15 +119,11 @@ namespace quarkbot {
                     //cycle
                     continue;
                 }
-            }
-            //if dispatch queue is not empty
-            if (!_dispatch_queue.empty()) {
-                //pick front coroutine
-                auto p = std::move(_dispatch_queue.front());
+            }     
+            
+            auto resume_task = [&](coro::prepared_coro p) {
                 //save _lock_me to keep locked during execution
                 auto lkme = _lock_me;
-                //remove from dispatch queue
-                _dispatch_queue.pop();
                 //manage lock me state (can be release, but we holding reference)
                 manage_lock_me();
                 //unlock internals
@@ -135,8 +140,28 @@ namespace quarkbot {
                 _in_task = false;
                 _counter.fetch_add(1, std::memory_order_release);
                 _counter.notify_all();
+            };
+
+            //if dispatch queue is not empty
+            if (!_dispatch_queue.empty()) {
+                //pick front coroutine
+                auto p = std::move(_dispatch_queue.front());
+                //remove from dispatch queue
+                _dispatch_queue.pop();
+                //resume this task
+                resume_task(std::move(p));
                 continue;
-            } 
+            }
+
+            //process idle queue - make snapshot if count, process only count items. Do not processes reenqueued items
+            for (std::size_t i = 0, cnt = _idle_queue.size(); i < cnt; ++i) {
+                auto p = std::move(_idle_queue.front());
+                _idle_queue.pop();                
+                resume_task(std::move(p));
+                //top can change, reupdate
+                top = _scheduler.get_first_scheduled_time();
+            }
+
             //queue is empty, but there is top time
             if (top.has_value()) {
                 //wait until top time is reached
@@ -180,6 +205,28 @@ namespace quarkbot {
             }
             return true;
         }
+    }
+
+
+    void ThreadExecutor::attach(function_view<void(std::shared_ptr<ThreadExecutor>) >  startupFn) {
+        if (!_current_worker.lock()) throw std::runtime_error("Can't attach thread already managed by the ThreadExecutor");
+        //create thread executor instance
+        auto inst = std::make_shared<ThreadExecutor>();
+        //register it as current (weak_ptr)
+        _current_worker = inst;
+        //retrieve a raw pointer
+        auto ptr = inst.get();
+        //resume noop coroutine, making thread executor locked until empty coroutine is called
+        //this keeps raw pointer valid to start worker and create token
+        ptr->resume(std::noop_coroutine());
+        //execute startup function and pass the instance to the function. 
+        startupFn(std::move(inst));
+        //noop coroutine was not yet executed, so pointer is still valid
+        //use raw pointer to start worker (create stop token)
+        ptr->worker(ptr->_stpsrc.get_token());
+        //once destructor is called, _thr is not joinable, but stop signal is generated
+        //the thread should leave this function
+
     }
 
 }

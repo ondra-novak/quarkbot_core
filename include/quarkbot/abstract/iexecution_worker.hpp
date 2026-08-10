@@ -5,6 +5,7 @@
 #include "../defs.hpp"
 #include "quarkbot/types.hpp"
 #include <chrono>
+#include <coroutine>
 
 namespace quarkbot {
 
@@ -14,6 +15,7 @@ public:
 
     virtual ~IExecutionWorker() = default;
     virtual void resume(std::coroutine_handle<> h) noexcept = 0;
+    virtual void resume_idle(std::coroutine_handle<> h) noexcept = 0;
     virtual PExecutionWorker spawn() noexcept = 0;
     static PExecutionWorker current() {return _current_worker.lock();}
     virtual std::chrono::system_clock::time_point now() const = 0;
@@ -31,6 +33,7 @@ inline  thread_local std::weak_ptr<IExecutionWorker> IExecutionWorker::_current_
 
 class IExecutionWorker::Null: public IExecutionWorker{
     virtual void resume(std::coroutine_handle<> h) noexcept {h.resume();}
+    virtual void resume_idle(std::coroutine_handle<> h) noexcept {h.resume();}
     virtual PExecutionWorker spawn() noexcept {return {};}
     virtual std::chrono::system_clock::time_point now() const {return std::chrono::system_clock::now();}
     virtual awaitable<bool> sleep_until(std::chrono::system_clock::time_point , cancel_signal * = nullptr) {

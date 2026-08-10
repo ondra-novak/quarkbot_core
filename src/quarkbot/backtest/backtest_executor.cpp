@@ -2,27 +2,15 @@
 
 #include "../common/logger.hpp"
 
-#include "quarkbot/log.hpp"
-#include "quarkbot/strategy_fragment.hpp"
-#include "quarkbot/utils/string_utils.hpp"
 
 #include <chrono>
 #include <coroutine>
-#include <format>
-#include <iterator>
 #include <memory>
-#include <source_location>
 #include <stdexcept>
-#include <unordered_map>
 
 namespace quarkbot {
 
 
-
-class BacktestExecutorFactory: public BacktestExecutor {
-public:
-    BacktestExecutorFactory() = default;
-};
 
 
 void BacktestExecutor::flush_queue() {
@@ -30,6 +18,12 @@ void BacktestExecutor::flush_queue() {
         auto p = std::move(_dispatch_queue.front());
         _dispatch_queue.pop();
         p.lazy_resume();
+    }
+    for (std::size_t i = 0, cnt=_idle_queue.size(); i<cnt;++i) {
+        auto p = std::move(_idle_queue.front());
+        _idle_queue.pop();
+        p.lazy_resume();
+
     }
 }
 
@@ -40,7 +34,7 @@ std::shared_ptr<BacktestExecutor> BacktestExecutor::create() {
         if (cur) throw std::runtime_error("Thread is alread execution worker of different type");
         return me;        
     } else {
-        me = std::make_shared<BacktestExecutorFactory>();
+        me = std::make_shared<BacktestExecutor>();
         log_set_time_source([melk = std::weak_ptr(me)]{
             auto lk = melk.lock();
             if (lk) return lk->now();
@@ -58,6 +52,7 @@ void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
     while (r) {
         r.lazy_resume();        
         flush_queue();
+
         r = _scheduler.advance_time_until(tp);
     }
 }
@@ -65,6 +60,10 @@ void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
 void BacktestExecutor::resume(std::coroutine_handle<> h) noexcept {
     _dispatch_queue.push(h);
 }
+void BacktestExecutor::resume_idle(std::coroutine_handle<> h) noexcept {
+    _idle_queue.push(h);
+}
+
 PExecutionWorker BacktestExecutor::spawn() noexcept {
     return shared_from_this();   //just clone self
 
@@ -99,7 +98,7 @@ bool BacktestExecutor::quiesce() {
 }
 
 bool BacktestExecutor::empty() const  {
-    return _dispatch_queue.empty();
+    return _dispatch_queue.empty() && _idle_queue.empty();
 }
 
 }

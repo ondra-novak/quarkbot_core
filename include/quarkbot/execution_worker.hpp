@@ -2,7 +2,6 @@
 
 #include "abstract/iexecution_worker.hpp"
 #include "basic_coro/coroutine.hpp"
-#include "basic_coro/pending.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "defs.hpp"
 #include "utils/wrapper.hpp"
@@ -17,7 +16,6 @@
 #include <basic_coro/result_proxy.hpp>
 #include <basic_coro/sync_await.hpp>
 #include <chrono>
-#include <cstddef>
 #include <stdexcept>
 namespace quarkbot {
 
@@ -44,6 +42,14 @@ public:
     */
     void resume(coro::prepared_coro h) {
         if (h) _ptr->resume(h.release());
+    }
+    ///Schedule coroutine for resumption in this worker during idle stage
+    /**
+        @param h prepared_coro object 
+        @note if no coroutine prepared in the object, it does nothing. Expects valid handle in the object
+    */
+    void resume_idle(coro::prepared_coro h) {
+        if (h) _ptr->resume_idle(h.release());
     }
     ///Run a coroutine in this executable worker
     /**
@@ -102,10 +108,29 @@ public:
     ///Schedule current coroutine (StrategyFragment) on this execution worker
     /**
     Execution is transfered to new execution worker. It can be called from thread which has no execution worker
+    @note not useful for StrategyFragment - this coroutine must be started in ExecutionWorker
      */
     awaitable<void> schedule() {
         return [this](auto promise) {
             resume(promise());
+        };
+    }
+
+    ///postpone execition until the execution worker is idle
+    /**
+        Idle state is defined as a stage, when all tasks has been executed for current event. 
+        For thread executor, this happens before the thread is suspended on wait or wait_until.
+        For backtest executor, this happens after current queue is flushed.
+
+        The idle queue is flushed once, so the task can call sleep_until_idle() to schedule on next idle event. 
+        Calling schedule() after wait_idle() is not recommended as there is no defintion when such
+        task is resumed. 
+
+        You can use sleep_until() or sleep_for() during idle execution
+    */
+    awaitable<void> sleep_until_idle() {
+        return [this](auto promise) {
+            this->resume_idle(promise());
         };
     }
 
