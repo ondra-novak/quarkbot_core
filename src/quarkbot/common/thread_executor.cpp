@@ -134,12 +134,15 @@ namespace quarkbot {
                 //destroy thread executor, if there are no references
                 lkme.reset();
                 //tkn can be signalized especially when this thread performed destruction - this is no longer valid
-                if (tkn.stop_requested()) return;//exit immediately
+                if (tkn.stop_requested()) {
+                    return true;//exit immediately
+                }
                 //lock back
                 lk.lock();
                 _in_task = false;
                 _counter.fetch_add(1, std::memory_order_release);
                 _counter.notify_all();
+                return false;
             };
 
             //if dispatch queue is not empty
@@ -149,7 +152,7 @@ namespace quarkbot {
                 //remove from dispatch queue
                 _dispatch_queue.pop();
                 //resume this task
-                resume_task(std::move(p));
+                if (resume_task(std::move(p))) return;
                 continue;
             }
 
@@ -157,10 +160,12 @@ namespace quarkbot {
             for (std::size_t i = 0, cnt = _idle_queue.size(); i < cnt; ++i) {
                 auto p = std::move(_idle_queue.front());
                 _idle_queue.pop();                
-                resume_task(std::move(p));
+                if (resume_task(std::move(p))) return;
                 //top can change, reupdate
                 top = _scheduler.get_first_scheduled_time();
             }
+
+            if (!_dispatch_queue.empty()) continue;
 
             //queue is empty, but there is top time
             if (top.has_value()) {
@@ -209,7 +214,7 @@ namespace quarkbot {
 
 
     void ThreadExecutor::attach(function_view<void(std::shared_ptr<ThreadExecutor>) >  startupFn) {
-        if (!_current_worker.lock()) throw std::runtime_error("Can't attach thread already managed by the ThreadExecutor");
+        if (_current_worker.lock()) throw std::runtime_error("Can't attach thread already managed by the ThreadExecutor");
         //create thread executor instance
         auto inst = std::make_shared<ThreadExecutor>();
         //register it as current (weak_ptr)
@@ -225,7 +230,7 @@ namespace quarkbot {
         //use raw pointer to start worker (create stop token)
         ptr->worker(ptr->_stpsrc.get_token());
         //once destructor is called, _thr is not joinable, but stop signal is generated
-        //the thread should leave this function
+        //the thread should leave this function        
 
     }
 

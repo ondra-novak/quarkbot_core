@@ -2,6 +2,7 @@
 #include "basic_coro/coroutine.hpp"
 #include "basic_coro/sync_await.hpp"
 #include "check.h"
+#include "quarkbot/backtest/backtest_executor.hpp"
 #include "quarkbot/common/thread_executor.hpp"
 #include "quarkbot/execution_worker.hpp"
 #include <chrono>
@@ -33,8 +34,61 @@ void test1() {
 
 }
 
+StrategyFragment main_cycle(int &counter) {
+    for (int i = 0; i < 10;++i) {
+        co_await ExecutionWorker::current().schedule();
+        ++counter;
+    }
+}
+
+
+
+StrategyFragment idle_worker(int &counter, bool &called) {
+    co_await ExecutionWorker::current().sleep_until_idle();
+    CHECK_EQUAL(counter, 10);    
+    ExecutionWorker::current().run(main_cycle(counter));
+    co_await ExecutionWorker::current().sleep_until_idle();
+    CHECK_EQUAL(counter, 20);    
+    called = true;
+}
+
+void test2() {
+
+    int counter = 0;
+    bool called = false;
+    ThreadExecutor::attach([&](std::shared_ptr<ThreadExecutor> ptr){
+        ExecutionWorker wrk(ptr);
+        wrk.run(idle_worker(counter, called));
+        wrk.run(main_cycle(counter));
+    });
+    CHECK(called);
+
+
+}
+
+void test3() {
+
+    auto exc = BacktestExecutor::create();
+
+    int counter = 0;
+    bool called = false;
+    ExecutionWorker wrk(exc);
+
+    wrk.run(idle_worker(counter, called));
+    wrk.run(main_cycle(counter));
+
+    exc->flush_queue();
+
+    CHECK(called);
+
+
+}
+
+
 
 int main() {
     test1();
+    test2();
+    test3();
     return 0;
 }

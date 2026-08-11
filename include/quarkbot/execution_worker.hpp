@@ -23,6 +23,12 @@ class ExecutionWorker: public Wrapper<IExecutionWorker> {
 public:
 
     using Wrapper<IExecutionWorker>::Wrapper;
+
+    class Awaitable_Reschedule : public awaitable<void> {
+    public:
+        struct no_transform_awaiter{};
+        using awaitable<void>::awaitable;
+    };
     
 
     ///Schedule coroutine for resumption in this worker
@@ -110,7 +116,7 @@ public:
     Execution is transfered to new execution worker. It can be called from thread which has no execution worker
     @note not useful for StrategyFragment - this coroutine must be started in ExecutionWorker
      */
-    awaitable<void> schedule() {
+    Awaitable_Reschedule schedule() {
         return [this](auto promise) {
             resume(promise());
         };
@@ -123,12 +129,8 @@ public:
         For backtest executor, this happens after current queue is flushed.
 
         The idle queue is flushed once, so the task can call sleep_until_idle() to schedule on next idle event. 
-        Calling schedule() after wait_idle() is not recommended as there is no defintion when such
-        task is resumed. 
-
-        You can use sleep_until() or sleep_for() during idle execution
     */
-    awaitable<void> sleep_until_idle() {
+    Awaitable_Reschedule sleep_until_idle() {
         return [this](auto promise) {
             this->resume_idle(promise());
         };
@@ -206,6 +208,8 @@ public:
               It just executes all scheduled tasks and returns. It doesn't wait for tasks scheduled after the call.
 
         @return true if there were tasks to wait for, false if there were no tasks
+
+        @note idle tasks are excluded.
      */
     bool quiesce() {
         return _ptr->quiesce();

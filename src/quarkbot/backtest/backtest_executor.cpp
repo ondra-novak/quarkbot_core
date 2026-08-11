@@ -15,15 +15,16 @@ namespace quarkbot {
 
 void BacktestExecutor::flush_queue() {
     while (!_dispatch_queue.empty()) {
-        auto p = std::move(_dispatch_queue.front());
-        _dispatch_queue.pop();
-        p.lazy_resume();
-    }
-    for (std::size_t i = 0, cnt=_idle_queue.size(); i<cnt;++i) {
-        auto p = std::move(_idle_queue.front());
-        _idle_queue.pop();
-        p.lazy_resume();
-
+        while (!_dispatch_queue.empty()) {
+            auto p = std::move(_dispatch_queue.front());
+            _dispatch_queue.pop();
+            p.lazy_resume();
+        }
+        for (std::size_t i = 0, cnt=_idle_queue.size(); i<cnt;++i) {
+            auto p = std::move(_idle_queue.front());
+            _idle_queue.pop();
+            p.lazy_resume();
+        }
     }
 }
 

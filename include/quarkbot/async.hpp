@@ -2,6 +2,7 @@
 #include "basic_coro/concepts.hpp"
 #include "basic_coro/coro_frame.hpp"
 #include "basic_coro/coroutine.hpp"
+#include "basic_coro/prepared_coro.hpp"
 #include "log.hpp"
 #include <coroutine>
 #include <source_location>
@@ -81,7 +82,7 @@ namespace quarkbot {
 
     protected:
         struct Frame: coro::coro_frame<Frame> {
-            ExecutionWorker _worker{nullptr};
+            ExecutionWorker _worker;
             std::coroutine_handle<> _awaiting = {};
             void do_resume() {
                 _worker.resume(_awaiting);            
