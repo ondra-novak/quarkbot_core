@@ -121,13 +121,13 @@ namespace quarkbot {
                 }
             }     
             
-            auto resume_task = [&](coro::prepared_coro p) {
+            auto resume_task = [&](coro::prepared_coro p, bool main_queue) {
                 //save _lock_me to keep locked during execution
                 auto lkme = _lock_me;
                 //manage lock me state (can be release, but we holding reference)
                 manage_lock_me();
                 //unlock internals
-                _in_task = true;
+                _in_task = main_queue;
                 lk.unlock();
                 //resume coroutine outside lock (also install lazy resume framework)
                 p.lazy_resume();
@@ -139,9 +139,11 @@ namespace quarkbot {
                 }
                 //lock back
                 lk.lock();
-                _in_task = false;
-                _counter.fetch_add(1, std::memory_order_release);
-                _counter.notify_all();
+                if (main_queue) {
+                    _in_task = false;
+                    _counter.fetch_add(1, std::memory_order_release);
+                    _counter.notify_all();
+                }
                 return false;
             };
 
@@ -152,7 +154,7 @@ namespace quarkbot {
                 //remove from dispatch queue
                 _dispatch_queue.pop();
                 //resume this task
-                if (resume_task(std::move(p))) return;
+                if (resume_task(std::move(p), true)) return;
                 continue;
             }
 
@@ -160,7 +162,7 @@ namespace quarkbot {
             for (std::size_t i = 0, cnt = _idle_queue.size(); i < cnt; ++i) {
                 auto p = std::move(_idle_queue.front());
                 _idle_queue.pop();                
-                if (resume_task(std::move(p))) return;
+                if (resume_task(std::move(p), false)) return;
                 //top can change, reupdate
                 top = _scheduler.get_first_scheduled_time();
             }
@@ -181,7 +183,7 @@ namespace quarkbot {
     }
 
     bool ThreadExecutor::quiesce() {
-        if (std::this_thread::get_id() == _thr.get_id()) {
+        if (_current_worker.lock().get() == this) {
             std::unique_lock lk(_mx);
             std::size_t sz =   _dispatch_queue.size();
             if (sz == 0) return false;
@@ -193,13 +195,14 @@ namespace quarkbot {
                 lk.lock();
                 sz--;
             }
+            manage_lock_me();
             return true;
 
         } else {
             std::size_t join_counter;
             {
                 std::scoped_lock _(_mx);        
-                std::size_t sz =  _in_task?1:0 + _dispatch_queue.size();
+                std::size_t sz =  (_in_task?1:0) + _dispatch_queue.size();
                 if (sz == 0) return false;
                 join_counter = _counter.load(std::memory_order_acquire) + sz;
             }

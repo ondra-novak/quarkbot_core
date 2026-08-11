@@ -209,7 +209,7 @@ public:
 
         @return true if there were tasks to wait for, false if there were no tasks
 
-        @note idle tasks are excluded.
+        @note you cannot synchronize with idle tasks. 
      */
     bool quiesce() {
         return _ptr->quiesce();
