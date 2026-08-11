@@ -48,7 +48,7 @@ namespace quarkbot {
         },  std::move(ctx));
         logInfo("Backtest started");
         bt.run(std::move(data_source));
-        logInfo("Backtest ended");
+        logInfo("Backtest ended");        
 
     } catch (const std::exception &e) {
         logFatal("Exception: {}",e.what());

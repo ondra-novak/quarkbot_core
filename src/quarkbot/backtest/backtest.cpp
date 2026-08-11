@@ -58,6 +58,7 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
     
         auto wrk = BacktestExecutor::create();
         auto ex = std::make_shared<SimExchange>();
+        ex->stop_on(stop_src.get_token());
         auto acc = ex->create_account(std::string(account_name), wallet);
         for (auto &info: instruments) {
             ex->add_instrument(info);
@@ -101,5 +102,19 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
                     std::static_pointer_cast<SimAccount>(_account.get_handle()),
                     std::move(data_source),stop_src);
     }
+
+
+
+    void BacktestEnv::join() {
+        auto pending = _strategy_group.join().launch();
+        while (!pending.await_ready()) {
+            if (!_worker.quiesce()) {
+                logFatal("Not all task are properly stopped! Backtest aborted");
+                abort();
+            }
+        }
+        coro::sync_await(pending);
+    }
+
 
 }

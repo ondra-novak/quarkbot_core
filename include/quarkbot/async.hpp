@@ -151,6 +151,8 @@ namespace quarkbot {
                     if (c == '<') bc++;
                     if (c == '>') bc--;                
                 }
+                n = trim(n);
+                if (n.starts_with("__cdecl")) n.remove_prefix(7);
                 auto rc = n.find('(');
                 if (rc != n.npos) n = n.substr(0,rc);
                 n = trim(n);
@@ -176,7 +178,7 @@ namespace quarkbot {
                     auto frame_ptr = reinterpret_cast<void (**)(std::coroutine_handle<promise_type>) >(h.address());
                     old_resume = *frame_ptr;
                     *frame_ptr = &debug_traced_resume;
-                    return std::pair(Logger::from(loc),std::format("Frame created: {}", coro_location.function));
+                    return std::pair(Logger::from(loc),std::format("Fragment created: {}", coro_location.function));
                 });
                 return {};
             }        

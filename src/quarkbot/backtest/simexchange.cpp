@@ -184,6 +184,9 @@ std::shared_ptr<SimInstrument> SimExchange::InstrumentRef::get(const std::shared
     return lk;
 }
 
+void SimExchange::stop_on(std::stop_token tkn) {
+    _executor.stop_on(std::move(tkn));
+}
 
 
 }

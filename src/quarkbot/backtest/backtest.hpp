@@ -149,13 +149,7 @@ public:
         join();
     }
 
-    void join() {
-        auto pending = _strategy_group.join().launch();
-        while (!pending.await_ready()) {
-            _worker.quiesce();
-        }
-        coro::sync_await(pending);
-    }
+    void join();
 
 protected:
     ExecutionWorker _worker;

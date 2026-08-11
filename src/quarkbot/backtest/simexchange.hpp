@@ -73,6 +73,8 @@ public:
     void cancel_order(IOrder *ord);
     void place_order(POrder ord);
 
+    void stop_on(std::stop_token tkn);
+
 
 protected:
 
