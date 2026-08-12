@@ -58,6 +58,16 @@ void BacktestExecutor::set_time(std::chrono::system_clock::time_point tp) {
     }
 }
 
+bool BacktestExecutor::advance_time(std::chrono::system_clock::time_point tp) {
+    auto r = _scheduler.advance_time_until(tp);
+    if (r) {
+        r.lazy_resume();
+        flush_queue();
+        return false;
+    }
+    return true;
+}
+
 void BacktestExecutor::resume(std::coroutine_handle<> h) noexcept {
     _dispatch_queue.push(h);
 }

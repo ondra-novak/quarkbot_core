@@ -6,6 +6,8 @@
 #include <quarkbot/execution_worker.hpp>
 #include <quarkbot/tradable_instrument.hpp>
 #include "backtest_executor.hpp"
+#include "quarkbot/backtest/debugger.hpp"
+#include "quarkbot/backtest/ibacktest_debugger.hpp"
 #include "quarkbot/selector.hpp"
 #include "quarkbot/types.hpp"
 #include "quarkbot/utils/init_with.hpp"
@@ -19,32 +21,54 @@
 
 namespace quarkbot {
 
+
+    struct DbgExit {};
+
     bool run_backtest(std::shared_ptr<BacktestExecutor> executor, 
                   std::shared_ptr<SimExchange> exchange,
                   std::shared_ptr<SimAccount> account,
-                  BacktestDataSource source,std::stop_source stop_source) {
+                  BacktestDataSource source,std::stop_source stop_source,
+                  std::shared_ptr<BasicDebuggerImpl> debugger
+                ) {
 
         auto token = stop_source.get_token();
 
             
         BacktestEvent event;
         if (!source(event)) return false;
-        do {
-            executor->set_time(event.time);
-            selector(event.data, [&](const CustomBacktestEvent &ev){
-                ev(event.symbol);
-            }, [&](const CustomBacktestEventOnExchange &ev){
-                ev(event.symbol, exchange.get());
-            }, [&](const CustomBacktestEventOnAccount &ev){
-                ev(event.symbol, account.get());                
-            }, [&](const auto &ev){
-                exchange->on_event(event.symbol, ev);
-            });
-            executor->flush_queue();
-        } while (source(event) && !token.stop_requested());
+        try {
+            do {
+                while (!executor->advance_time(event.time)) {
+                    if (debugger) {
+                        if (!debugger->on_debugger_event(executor->now(), IBacktestDebugger::EventType::scheduler)) {
+                            throw DbgExit();
+                        }
+                    }
+                }
+                selector(event.data, [&](const CustomBacktestEvent &ev){
+                    ev(event.symbol);
+                }, [&](const CustomBacktestEventOnExchange &ev){
+                    ev(event.symbol, exchange.get());
+                }, [&](const CustomBacktestEventOnAccount &ev){
+                    ev(event.symbol, account.get());                
+                }, [&](const auto &ev){
+                    exchange->on_event(event.symbol, ev);
+                });
+                executor->flush_queue();
+                if (debugger && !debugger->on_debugger_event(executor->now(), IBacktestDebugger::EventType::data)) {
+                    throw DbgExit{};                    
+                }
+            } while (source(event) && !token.stop_requested());
+
+        } catch (const DbgExit &) {
+            logInfo("Debugger requested exit");
+        } catch (const std::exception &e) {
+            logError("Backtest exit because of exception: {}", e.what());            
+        }
 
         stop_source.request_stop();    
         executor->flush_queue();    
+        if (debugger) debugger->on_exit();
         return true;
     }
 
@@ -100,7 +124,7 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
         return run_backtest(std::static_pointer_cast<BacktestExecutor>(_worker.get_handle()),
                     std::static_pointer_cast<SimExchange>(_exchange.get_handle()),
                     std::static_pointer_cast<SimAccount>(_account.get_handle()),
-                    std::move(data_source),stop_src);
+                    std::move(data_source),stop_src, _debugger);
     }
 
 
@@ -116,5 +140,10 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
         coro::sync_await(pending);
     }
 
+
+    std::shared_ptr<IBacktestDebugger> BacktestEnv::enable_debugger(){
+        if (!_debugger) _debugger = std::make_shared<BasicDebuggerImpl>();
+        return _debugger;
+    }
 
 }

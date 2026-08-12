@@ -1,10 +1,14 @@
 #pragma once
 #include "basic_coro/sync_await.hpp"
+#include "quarkbot/backtest/debugger.hpp"
+#include "quarkbot/backtest/ibacktest_debugger.hpp"
+#include "quarkbot/config.hpp"
 #include "quarkbot/context.hpp"
 #include "quarkbot/exchange.hpp"
 #include "quarkbot/strategy_fragment.hpp"
 #include "quarkbot/strategy_main.hpp"
 #include <chrono>
+#include <memory>
 #include <quarkbot/abstract/backtest_data_source.hpp>
 #include <filesystem>
 #include <variant>
@@ -22,6 +26,8 @@ struct SimulationParams {
     std::chrono::system_clock::duration latency = {};   
     
 };
+
+using DebuggerFactory = std::function<std::shared_ptr<IBacktestDebugger>()>;
 
 ///Backtest environment 
 class BacktestEnv {
@@ -134,6 +140,8 @@ public:
     auto get_exchange() const {return _exchange;}
     auto get_account() const {return _account;}
     auto get_stop_token() const {return stop_src.get_token();}
+
+    
     
     ///Launch custom fragment in context of backtest (not strategy)
     void launch(StrategyFragment fragment) {
@@ -151,16 +159,20 @@ public:
 
     void join();
 
+    std::shared_ptr<IBacktestDebugger> enable_debugger();
+
 protected:
     ExecutionWorker _worker;
     Exchange _exchange;
     Account _account;
     std::stop_source stop_src;
     StrategyFragmentGroup _strategy_group;
+    std::shared_ptr<BasicDebuggerImpl> _debugger;
 
 
     void init_context_basic(std::span<const std::string_view> instruments, StrategyContext &ctx);
     void init_context_basic( StrategyContext &ctx);
+
 
 };
 }

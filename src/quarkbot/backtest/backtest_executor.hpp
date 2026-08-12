@@ -39,6 +39,17 @@ public:
     ///Set current time processing all scheduled task and also flushes the queue
     void set_time(std::chrono::system_clock::time_point tp);
 
+    ///advance time towards time point
+    /**
+        Difference between set_time and advance_time is, that advance_time don't need to reach the time, it
+        will process one time event and stop
+
+        @param tp target time
+        @retval true reached and all task scheduled for this time point was executed
+        @retval false not reached yet (still processing events)
+    */
+    bool advance_time(std::chrono::system_clock::time_point tp);
+
     ///returns true, if empty (task scheduled to exact time are not counted)
     bool empty() const ;
 
