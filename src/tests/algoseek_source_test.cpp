@@ -319,12 +319,102 @@ static void test_spec_parsing() {
             parse_algoseek_spec("IBM.csv.gz?bogus=1"));
 }
 
+static void test_row_errors() {
+    std::cout << "--- test_row_errors" << std::endl;
+
+    // missing header column
+    {
+        const std::string path = "/tmp/test_algoseek_badheader.csv.gz";
+        write_gz(path, "Date,Timestamp,EventType,Ticker,Price,Quantity,Exchange\n"
+                       "20230609,10:00:00.000000000,TRADE,IBM,47.60,100,NYSE\n");
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+                std::string_view(e.what()).find("Conditions") != std::string_view::npos,
+                AlgoseekDataSource src(parse_algoseek_spec(path)));
+    }
+
+    // nine fields: a Price rewritten with a comma decimal separator shifts the
+    // columns, so Conditions ends up holding the exchange name
+    {
+        const std::string path = "/tmp/test_algoseek_shifted.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "20230609,10:00:00.000000000,TRADE,IBM,242,54,6,EDGX,80002000\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+                std::string_view(e.what()).find("Conditions") != std::string_view::npos,
+                src(ev));
+    }
+
+    // Conditions that is not hexadecimal
+    {
+        const std::string path = "/tmp/test_algoseek_badcond.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "20230609,10:00:00.000000000,TRADE,IBM,47.60,100,NYSE,zzzzzzzz\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+
+    // an empty required field
+    {
+        const std::string path = "/tmp/test_algoseek_empty.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "20230609,10:00:00.000000000,TRADE,IBM,,100,NYSE,00000001\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+                std::string_view(e.what()).find("Price") != std::string_view::npos,
+                src(ev));
+    }
+
+    // a malformed timestamp
+    {
+        const std::string path = "/tmp/test_algoseek_badtime.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "20230609,10:00:00,TRADE,IBM,47.60,100,NYSE,00000001\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+
+    // a decreasing timestamp would corrupt the merged timeline
+    {
+        const std::string path = "/tmp/test_algoseek_unordered.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "20230609,10:00:01.000000000,TRADE,IBM,47.60,100,NYSE,00000001\n"
+                "20230609,10:00:00.000000000,TRADE,IBM,47.61,100,NYSE,00000001\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+
+    // a changing Ticker would let a symbol override merge two instruments
+    {
+        const std::string path = "/tmp/test_algoseek_twotickers.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "20230609,10:00:00.000000000,TRADE,IBM,47.60,100,NYSE,00000001\n"
+                "20230609,10:00:01.000000000,TRADE,MSFT,47.61,100,NYSE,00000001\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+                std::string_view(e.what()).find("MSFT") != std::string_view::npos,
+                src(ev));
+    }
+
+    // a nonexistent file fails when the source is constructed
+    CHECK_EXCEPTION(std::runtime_error,
+            AlgoseekDataSource src(parse_algoseek_spec("/tmp/does_not_exist_algoseek.csv.gz")));
+}
+
 int main() {
     test_spec_parsing();
     test_local_time_converter();
     test_trades();
     test_auctions_and_skips();
     test_exchange_filter_and_symbol();
+    test_row_errors();
     std::cout << "All tests passed" << std::endl;
     return 0;
 }

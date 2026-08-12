@@ -106,6 +106,10 @@ protected:
     ///number of the row last read; the header is row 1
     std::uint64_t _line = 1;
     bool _eof = false;
+    ///Ticker seen on the first row, used to reject concatenated files
+    std::string _first_ticker;
+    ///timestamp of the last emitted event, used to reject unordered input
+    std::chrono::system_clock::time_point _last_time = {};
 
     static CSVSource init_source(const std::filesystem::path &file);
     static CSVFieldIndexMapping<Data> map_columns(CSVReader<CSVSource> &csv,
@@ -113,6 +117,8 @@ protected:
 
     ///throw a runtime_error naming the file and the current row
     [[noreturn]] void row_error(std::string_view message) const;
+    ///throw unless every column of the current row carries a value
+    void check_required_fields() const;
     ///parse the Conditions column, throws on anything but 8 hex digits
     std::uint32_t parse_conditions() const;
     ///combine the Date and Timestamp columns into a local timestamp

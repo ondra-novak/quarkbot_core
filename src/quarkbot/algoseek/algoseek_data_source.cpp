@@ -90,6 +90,20 @@ void AlgoseekDataSource::row_error(std::string_view message) const {
         "Algoseek source {}: row {}: {}", _spec.file.string(), _line, message));
 }
 
+void AlgoseekDataSource::check_required_fields() const {
+    auto check = [&](std::string_view name, const std::string &value) {
+        if (value.empty()) row_error(std::format("column {} is empty", name));
+    };
+    check("Date", _row.date);
+    check("Timestamp", _row.timestamp);
+    check("EventType", _row.event_type);
+    check("Ticker", _row.ticker);
+    check("Price", _row.price);
+    check("Quantity", _row.quantity);
+    check("Exchange", _row.exchange);
+    check("Conditions", _row.conditions);
+}
+
 std::uint32_t AlgoseekDataSource::parse_conditions() const {
     std::string_view s = _row.conditions;
     std::uint32_t value = 0;
@@ -139,8 +153,16 @@ std::chrono::local_time<std::chrono::nanoseconds> AlgoseekDataSource::parse_loca
 }
 
 void AlgoseekDataSource::log_summary() const {
-    logInfo("Algoseek source {}: {} trades, {} auctions", _spec.file.string(),
-            _counters.trades, _counters.auctions);
+    bool suspicious = _counters.cancelled > 0
+            || _counters.unknown_event > 0
+            || (_counters.trades == 0 && _counters.auctions == 0);
+    auto level = suspicious ? LogLevel::warning : LogLevel::info;
+    logOutput(level, "Algoseek source {}: {} trades, {} auctions; skipped: "
+            "{} cancelled, {} unknown event, {} other exchange, {} zero quantity, "
+            "{} zero price, {} official print",
+            _spec.file.string(), _counters.trades, _counters.auctions,
+            _counters.cancelled, _counters.unknown_event, _counters.filtered_exchange,
+            _counters.zero_qty, _counters.zero_price, _counters.official_print);
 }
 
 bool AlgoseekDataSource::operator()(BacktestEvent &ev) {
@@ -153,6 +175,14 @@ bool AlgoseekDataSource::operator()(BacktestEvent &ev) {
             return false;
         }
         ++_line;
+
+        check_required_fields();
+        if (_first_ticker.empty()) {
+            _first_ticker = _row.ticker;
+        } else if (_row.ticker != _first_ticker) {
+            row_error(std::format("Ticker changed from '{}' to '{}'; one file must "
+                    "hold one ticker", _first_ticker, _row.ticker));
+        }
 
         //cancellations cannot be undone once replayed, so the cancelling row is
         //dropped and the cancelled trade stays; see the design spec for why a
@@ -210,6 +240,11 @@ bool AlgoseekDataSource::operator()(BacktestEvent &ev) {
         }
 
         auto time = _tz.to_sys(parse_local_time());
+        if (time < _last_time) {
+            row_error(std::format("timestamp {} is earlier than the previous event at {}; "
+                    "MergedDataSource requires each source to be ordered", time, _last_time));
+        }
+        _last_time = time;
         ev.symbol = _spec.symbol.empty() ? _row.ticker : _spec.symbol;
         ev.time = time;
 
