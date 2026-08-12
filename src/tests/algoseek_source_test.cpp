@@ -408,6 +408,109 @@ static void test_row_errors() {
             AlgoseekDataSource src(parse_algoseek_spec("/tmp/does_not_exist_algoseek.csv.gz")));
 }
 
+///count emitted events by kind
+struct EventCounts {
+    std::size_t total = 0;
+    std::size_t trades = 0;
+    std::size_t opening = 0;
+    std::size_t closing = 0;
+    std::size_t unscheduled = 0;
+};
+
+static EventCounts count_events(const std::string &spec) {
+    AlgoseekDataSource src(parse_algoseek_spec(spec));
+    EventCounts c;
+    for (const auto &ev: drain(src)) {
+        ++c.total;
+        if (std::holds_alternative<Trade>(ev.data)) {
+            ++c.trades;
+        } else if (std::holds_alternative<Auction>(ev.data)) {
+            switch (std::get<Auction>(ev.data).auction_type) {
+                case AuctionType::opening: ++c.opening; break;
+                case AuctionType::closing: ++c.closing; break;
+                case AuctionType::unscheduled: ++c.unscheduled; break;
+                default: break;
+            }
+        }
+    }
+    return c;
+}
+
+static void test_real_files() {
+    std::cout << "--- test_real_files" << std::endl;
+
+    const std::string dhil = std::string(TEST_DATA_PATH) + "/20240418_NASDAQ_DHIL.csv.gz";
+    const std::string bipc = std::string(TEST_DATA_PATH) + "/20230609_BIPC.csv.gz";
+    //the same parameter as the only one, and appended to another
+    const std::string tz_only = "?tzone=America/New_York";
+    const std::string tz_more = "&tzone=America/New_York";
+
+    // DHIL, 594 data rows: 588 trades + 2 auctions emitted, 4 official prints dropped
+    {
+        auto c = count_events(dhil + tz_only);
+        CHECK_EQUAL(c.total, std::size_t(590));
+        CHECK_EQUAL(c.trades, std::size_t(588));
+        CHECK_EQUAL(c.opening, std::size_t(1));
+        CHECK_EQUAL(c.closing, std::size_t(1));
+        CHECK_EQUAL(c.unscheduled, std::size_t(0));
+    }
+    // restricted to NASDAQ: 321 rows belong to other venues
+    {
+        auto c = count_events(dhil + "?exchange=NASDAQ" + tz_more);
+        CHECK_EQUAL(c.total, std::size_t(271));
+        CHECK_EQUAL(c.trades, std::size_t(269));
+        CHECK_EQUAL(c.opening, std::size_t(1));
+        CHECK_EQUAL(c.closing, std::size_t(1));
+    }
+
+    // BIPC, 5627 data rows: 9 official prints and 3 zero quantity rows dropped
+    {
+        auto c = count_events(bipc + tz_only);
+        CHECK_EQUAL(c.total, std::size_t(5615));
+        CHECK_EQUAL(c.trades, std::size_t(5613));
+        CHECK_EQUAL(c.opening, std::size_t(1));
+        CHECK_EQUAL(c.closing, std::size_t(1));
+    }
+    // restricted to NYSE: 4737 rows belong to other venues, 5 official prints
+    // and the 3 zero quantity rows remain on NYSE and are dropped
+    {
+        auto c = count_events(bipc + "?exchange=NYSE" + tz_more);
+        CHECK_EQUAL(c.total, std::size_t(882));
+        CHECK_EQUAL(c.trades, std::size_t(880));
+        CHECK_EQUAL(c.opening, std::size_t(1));
+        CHECK_EQUAL(c.closing, std::size_t(1));
+    }
+
+    // the auctions carry the expected values, converted from Eastern to UTC.
+    // The closing print 47.92 x 23455 appears four more times in this file as an
+    // official close, the last at 19:00; exactly one closing auction must survive.
+    {
+        AlgoseekDataSource src(parse_algoseek_spec(bipc + "?exchange=NYSE" + tz_more));
+        const Auction *opening = nullptr;
+        const Auction *closing = nullptr;
+        auto evs = drain(src);
+        for (const auto &ev: evs) {
+            if (!std::holds_alternative<Auction>(ev.data)) continue;
+            const auto &a = std::get<Auction>(ev.data);
+            if (a.auction_type == AuctionType::opening) opening = &a;
+            if (a.auction_type == AuctionType::closing) closing = &a;
+        }
+        CHECK(opening != nullptr);
+        CHECK(opening->price == Decimal::from_string("47.58"));
+        CHECK(opening->quantity == Decimal::from_string("4000"));
+        CHECK(opening->time == mk_utc("2023-06-09 13:30:00.791480832"));
+        CHECK(closing != nullptr);
+        CHECK(closing->price == Decimal::from_string("47.92"));
+        CHECK(closing->quantity == Decimal::from_string("23455"));
+        CHECK(closing->time == mk_utc("2023-06-09 20:00:02.164273920"));
+
+        // events come out ordered, which MergedDataSource depends on
+        for (std::size_t i = 1; i < evs.size(); ++i) {
+            CHECK(evs[i-1].time <= evs[i].time);
+        }
+    }
+}
+
 int main() {
     test_spec_parsing();
     test_local_time_converter();
@@ -415,6 +518,7 @@ int main() {
     test_auctions_and_skips();
     test_exchange_filter_and_symbol();
     test_row_errors();
+    test_real_files();
     std::cout << "All tests passed" << std::endl;
     return 0;
 }
