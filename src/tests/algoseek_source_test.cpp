@@ -9,6 +9,12 @@
 using namespace quarkbot;
 
 #include "quarkbot/algoseek/local_time_converter.hpp"
+#include "quarkbot/algoseek/algoseek_data_source.hpp"
+#include "quarkbot/decimal.hpp"
+#include "quarkbot/stream/trade.hpp"
+#include "quarkbot/abstract/backtest_data_source.hpp"
+#include <zlib.h>
+#include <variant>
 
 ///build a local_time from Y/M/D and a time of day, for readable test data
 static std::chrono::local_time<std::chrono::nanoseconds> mk_local(
@@ -78,6 +84,62 @@ static void test_local_time_converter() {
     }
 }
 
+static void write_gz(const std::string &path, std::string_view content) {
+    gzFile f = gzopen(path.c_str(), "wb");
+    if (!f) { std::cerr << "Cannot open gz for write: " << path << std::endl; exit(1); }
+    gzwrite(f, content.data(), static_cast<unsigned>(content.size()));
+    gzclose(f);
+}
+
+static const std::string_view ALGOSEEK_HEADER =
+    "Date,Timestamp,EventType,Ticker,Price,Quantity,Exchange,Conditions\n";
+
+static void test_trades() {
+    std::cout << "--- test_trades" << std::endl;
+
+    const std::string path = "/tmp/test_algoseek_trades.csv.gz";
+    write_gz(path, std::string(ALGOSEEK_HEADER) +
+        "20230609,04:00:00.010833553,TRADE,IBM,242.54,6,EDGX,80002000\n"
+        "20230609,09:30:01.500000000,TRADE NB,IBM,243.10,250,NASDAQ,20002020\n");
+
+    auto spec = parse_algoseek_spec(path + "?tzone=America/New_York");
+    AlgoseekDataSource src(std::move(spec));
+
+    BacktestEvent e1;
+    CHECK(src(e1));
+    CHECK_EQUAL(e1.symbol, std::string("IBM"));
+    CHECK(e1.time == mk_utc("2023-06-09 08:00:00.010833553"));
+    CHECK(std::holds_alternative<Trade>(e1.data));
+    {
+        auto &t = std::get<Trade>(e1.data);
+        CHECK(t.price == Decimal::from_string("242.54"));
+        CHECK(t.size == Decimal::from_string("6"));
+        CHECK(t.side == Side::undetermined);
+        CHECK(t.time == e1.time);
+    }
+
+    // TRADE NB is a real trade too, not a duplicate of a TRADE row
+    BacktestEvent e2;
+    CHECK(src(e2));
+    CHECK(std::holds_alternative<Trade>(e2.data));
+    CHECK(std::get<Trade>(e2.data).price == Decimal::from_string("243.10"));
+    CHECK(e2.time == mk_utc("2023-06-09 13:30:01.500000000"));
+
+    BacktestEvent e3;
+    CHECK(!src(e3));
+    // exhausted source keeps returning false
+    CHECK(!src(e3));
+
+    // usable as a BacktestDataSource
+    {
+        BacktestDataSource ds = AlgoseekDataSource(
+                parse_algoseek_spec(path + "?tzone=America/New_York"));
+        BacktestEvent ev;
+        CHECK(ds(ev));
+        CHECK(std::holds_alternative<Trade>(ev.data));
+    }
+}
+
 static void test_spec_parsing() {
     std::cout << "--- test_spec_parsing" << std::endl;
 
@@ -142,6 +204,7 @@ static void test_spec_parsing() {
 int main() {
     test_spec_parsing();
     test_local_time_converter();
+    test_trades();
     std::cout << "All tests passed" << std::endl;
     return 0;
 }
