@@ -12,9 +12,11 @@ using namespace quarkbot;
 #include "quarkbot/algoseek/algoseek_data_source.hpp"
 #include "quarkbot/decimal.hpp"
 #include "quarkbot/stream/trade.hpp"
+#include "quarkbot/stream/auction.hpp"
 #include "quarkbot/abstract/backtest_data_source.hpp"
 #include <zlib.h>
 #include <variant>
+#include <vector>
 
 ///build a local_time from Y/M/D and a time of day, for readable test data
 static std::chrono::local_time<std::chrono::nanoseconds> mk_local(
@@ -140,6 +142,122 @@ static void test_trades() {
     }
 }
 
+///drain a source into a vector, for tests that care about the whole sequence
+static std::vector<BacktestEvent> drain(AlgoseekDataSource &src) {
+    std::vector<BacktestEvent> out;
+    BacktestEvent ev;
+    while (src(ev)) out.push_back(std::move(ev));
+    return out;
+}
+
+static void test_auctions_and_skips() {
+    std::cout << "--- test_auctions_and_skips" << std::endl;
+
+    const std::string path = "/tmp/test_algoseek_auctions.csv.gz";
+    write_gz(path, std::string(ALGOSEEK_HEADER) +
+        // opening print, bit 6 (0x40)
+        "20230609,09:30:00.791480832,TRADE NB,BIPC,47.58,4000,NYSE,20000040\n"
+        // official open re-broadcast, bit 26 (0x04000000) - dropped
+        "20230609,09:30:00.791483904,TRADE,BIPC,47.58,4000,NYSE,04000000\n"
+        // ordinary trade
+        "20230609,10:00:00.000000000,TRADE,BIPC,47.60,100,NYSE,00000001\n"
+        // reopening print, bit 8 (0x100)
+        "20230609,11:00:00.000000000,TRADE,BIPC,47.20,500,NYSE,00000100\n"
+        // trade that a later row cancels; it is emitted and never taken back
+        "20230609,12:00:00.000000000,TRADE,BIPC,47.70,42,NYSE,00000001\n"
+        // closing print, bit 7 (0x80), also carrying official_close bit 24:
+        // the auction reading must win
+        "20230609,16:00:02.164273920,TRADE NB,BIPC,47.92,23455,NYSE,21000080\n"
+        // quantity 0 close re-broadcast, as the real files emit at 16:10 - dropped
+        "20230609,16:10:00.002849536,TRADE NB,BIPC,47.92,0,NYSE,60000000\n"
+        // the cancellation row itself - dropped
+        "20230609,16:30:00.000000000,TRADE CANCELLED,BIPC,47.70,42,NYSE,00000001\n"
+        // unexpected event type - dropped
+        "20230609,16:31:00.000000000,QUOTE BID,BIPC,47.70,42,NYSE,00000001\n");
+
+    {
+        AlgoseekDataSource src(parse_algoseek_spec(path + "?tzone=America/New_York"));
+        auto evs = drain(src);
+        CHECK_EQUAL(evs.size(), std::size_t(5));
+
+        // 1: opening auction
+        CHECK(std::holds_alternative<Auction>(evs[0].data));
+        {
+            auto &a = std::get<Auction>(evs[0].data);
+            CHECK(a.auction_type == AuctionType::opening);
+            CHECK(a.final);
+            CHECK(a.price == Decimal::from_string("47.58"));
+            CHECK(a.quantity == Decimal::from_string("4000"));
+            CHECK(a.quantity_traded == a.quantity);
+            CHECK(a.imbalance == Decimal(0));
+            CHECK(a.time == mk_utc("2023-06-09 13:30:00.791480832"));
+        }
+
+        // 2: ordinary trade (the official open row in between was dropped)
+        CHECK(std::holds_alternative<Trade>(evs[1].data));
+        CHECK(std::get<Trade>(evs[1].data).price == Decimal::from_string("47.60"));
+
+        // 3: reopening auction maps to unscheduled
+        CHECK(std::holds_alternative<Auction>(evs[2].data));
+        CHECK(std::get<Auction>(evs[2].data).auction_type == AuctionType::unscheduled);
+
+        // 4: the cancelled trade survives
+        CHECK(std::holds_alternative<Trade>(evs[3].data));
+        CHECK(std::get<Trade>(evs[3].data).size == Decimal::from_string("42"));
+
+        // 5: closing auction wins over the official_close bit on the same row
+        CHECK(std::holds_alternative<Auction>(evs[4].data));
+        {
+            auto &a = std::get<Auction>(evs[4].data);
+            CHECK(a.auction_type == AuctionType::closing);
+            CHECK(a.final);
+            CHECK(a.quantity == Decimal::from_string("23455"));
+            CHECK(a.time == mk_utc("2023-06-09 20:00:02.164273920"));
+        }
+    }
+}
+
+static void test_exchange_filter_and_symbol() {
+    std::cout << "--- test_exchange_filter_and_symbol" << std::endl;
+
+    const std::string path = "/tmp/test_algoseek_filter.csv.gz";
+    write_gz(path, std::string(ALGOSEEK_HEADER) +
+        "20230609,10:00:00.000000000,TRADE,IBM,47.60,100,NASDAQ,00000001\n"
+        "20230609,10:00:01.000000000,TRADE,IBM,47.61,200,ARCA,00000001\n"
+        "20230609,10:00:02.000000000,TRADE,IBM,47.62,300,FINRA,00000001\n"
+        "20230609,10:00:03.000000000,TRADE,IBM,47.63,400,NASDAQ,00000001\n");
+
+    // no filter: every venue passes through
+    {
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        CHECK_EQUAL(drain(src).size(), std::size_t(4));
+    }
+
+    // filter keeps one venue only
+    {
+        AlgoseekDataSource src(parse_algoseek_spec(path + "?exchange=NASDAQ"));
+        auto evs = drain(src);
+        CHECK_EQUAL(evs.size(), std::size_t(2));
+        CHECK(std::get<Trade>(evs[0].data).price == Decimal::from_string("47.60"));
+        CHECK(std::get<Trade>(evs[1].data).price == Decimal::from_string("47.63"));
+        CHECK_EQUAL(evs[0].symbol, std::string("IBM"));
+    }
+
+    // symbol override replaces the Ticker column
+    {
+        AlgoseekDataSource src(parse_algoseek_spec(path + "?exchange=ARCA&symbol=IBM.ARCA"));
+        auto evs = drain(src);
+        CHECK_EQUAL(evs.size(), std::size_t(1));
+        CHECK_EQUAL(evs[0].symbol, std::string("IBM.ARCA"));
+    }
+
+    // an unmatched exchange yields nothing rather than an error
+    {
+        AlgoseekDataSource src(parse_algoseek_spec(path + "?exchange=NASDQ"));
+        CHECK_EQUAL(drain(src).size(), std::size_t(0));
+    }
+}
+
 static void test_spec_parsing() {
     std::cout << "--- test_spec_parsing" << std::endl;
 
@@ -205,6 +323,8 @@ int main() {
     test_spec_parsing();
     test_local_time_converter();
     test_trades();
+    test_auctions_and_skips();
+    test_exchange_filter_and_symbol();
     std::cout << "All tests passed" << std::endl;
     return 0;
 }

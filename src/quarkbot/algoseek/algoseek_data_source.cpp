@@ -154,24 +154,86 @@ bool AlgoseekDataSource::operator()(BacktestEvent &ev) {
         }
         ++_line;
 
-        if (_row.event_type != "TRADE" && _row.event_type != "TRADE NB") continue;
+        //cancellations cannot be undone once replayed, so the cancelling row is
+        //dropped and the cancelled trade stays; see the design spec for why a
+        //look-ahead window would not work
+        if (_row.event_type == "TRADE CANCELLED") {
+            ++_counters.cancelled;
+            continue;
+        }
+        if (_row.event_type != "TRADE" && _row.event_type != "TRADE NB") {
+            if (_counters.unknown_event == 0) {
+                logWarning("Algoseek source {}: row {}: unexpected EventType '{}', "
+                        "skipping (further occurrences are only counted)",
+                        _spec.file.string(), _line, _row.event_type);
+            }
+            ++_counters.unknown_event;
+            continue;
+        }
+        if (!_spec.exchange.empty() && _row.exchange != _spec.exchange) {
+            ++_counters.filtered_exchange;
+            continue;
+        }
 
         auto quantity = Decimal::from_string(_row.quantity);
+        if (quantity <= 0) {
+            ++_counters.zero_qty;
+            continue;
+        }
         auto price = Decimal::from_string(_row.price);
-        //parsed here only to validate the row; Task 4 acts on the flags
+        if (price <= 0) {
+            ++_counters.zero_price;
+            continue;
+        }
+
         auto flags = parse_conditions();
-        (void)flags;
+
+        AuctionType auction_type = AuctionType::unknown;
+        if (has_flag(flags, AlgoseekTradeFlag::opening_prints)) {
+            auction_type = AuctionType::opening;
+        } else if (has_flag(flags, AlgoseekTradeFlag::closing_prints)) {
+            auction_type = AuctionType::closing;
+        } else if (has_flag(flags, AlgoseekTradeFlag::reopening_prints)) {
+            //a reopening auction follows a halt, so it is unscheduled rather
+            //than a scheduled midday auction
+            auction_type = AuctionType::unscheduled;
+        }
+
+        //official open/close rows repeat the price of a real print, sometimes
+        //hours later; they are not executions. Checked after the auction flags
+        //so that a row carrying both is read as the auction it reports.
+        if (auction_type == AuctionType::unknown
+                && (has_flag(flags, AlgoseekTradeFlag::official_close)
+                    || has_flag(flags, AlgoseekTradeFlag::official_open))) {
+            ++_counters.official_print;
+            continue;
+        }
 
         auto time = _tz.to_sys(parse_local_time());
         ev.symbol = _spec.symbol.empty() ? _row.ticker : _spec.symbol;
         ev.time = time;
 
-        Trade &t = ev.data.emplace<Trade>();
-        t.price = price;
-        t.size = quantity;
-        t.time = time;
-        t.side = Side::undetermined;
-        ++_counters.trades;
+        if (auction_type != AuctionType::unknown) {
+            Auction &a = ev.data.emplace<Auction>();
+            a.auction_type = auction_type;
+            //the export carries no indicative data, so the print is final and
+            //the unavailable fields take defaults
+            a.final = true;
+            a.price = price;
+            a.quantity = quantity;
+            a.quantity_traded = quantity;
+            a.imbalance = 0;
+            a.time = time;
+            ++_counters.auctions;
+        } else {
+            Trade &t = ev.data.emplace<Trade>();
+            t.price = price;
+            t.size = quantity;
+            t.time = time;
+            //the export carries no aggressor side
+            t.side = Side::undetermined;
+            ++_counters.trades;
+        }
         return true;
     }
 }
