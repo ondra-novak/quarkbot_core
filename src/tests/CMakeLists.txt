@@ -9,6 +9,7 @@ set(BASIC_TESTS
     strategy_publisher.cpp
     mem_storage_test.cpp
     tardis_source_test.cpp
+    algoseek_source_test.cpp
     merged_source_test.cpp
     serializer.cpp
     signals.cpp
@@ -35,6 +36,7 @@ foreach (testFile ${BASIC_TESTS})
     target_link_libraries(${executable_name} PRIVATE quarkbot::sdk quarkbot::backtest)
     target_compile_definitions(${executable_name} PRIVATE
         MODULE_PATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+        TEST_DATA_PATH="${CMAKE_CURRENT_LIST_DIR}/data"
     )
     add_test(NAME "tests/${filename}" COMMAND ${executable_name})
 endforeach()
