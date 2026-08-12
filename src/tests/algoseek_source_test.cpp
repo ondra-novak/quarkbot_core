@@ -53,6 +53,29 @@ static void test_local_time_converter() {
     LocalTimeConverter utc(std::chrono::locate_zone("UTC"));
     CHECK(utc.to_sys(mk_local(2026, 4, 9, 4, 0, 0, 10833553))
             == mk_utc("2026-04-09 04:00:00.010833553"));
+
+    // an ambiguous local time (the repeated hour of the autumn transition)
+    // must resolve to the earlier of the two instants
+    {
+        LocalTimeConverter amb(std::chrono::locate_zone("America/New_York"));
+        CHECK(amb.to_sys(mk_local(2023, 11, 5, 1, 30, 0, 0))
+                == mk_utc("2023-11-05 05:30:00"));
+    }
+
+    // a nonexistent local time (the skipped hour of the spring transition)
+    // resolves using the offset in effect before the transition
+    {
+        LocalTimeConverter gap(std::chrono::locate_zone("America/New_York"));
+        CHECK(gap.to_sys(mk_local(2023, 3, 12, 2, 30, 0, 0))
+                == mk_utc("2023-03-12 07:30:00"));
+    }
+
+    // a pre-epoch local time must still take the lookup path
+    {
+        LocalTimeConverter old(std::chrono::locate_zone("America/New_York"));
+        CHECK(old.to_sys(mk_local(1969, 12, 31, 23, 59, 59, 500000000))
+                == mk_utc("1970-01-01 04:59:59.500000000"));
+    }
 }
 
 static void test_spec_parsing() {

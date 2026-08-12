@@ -31,17 +31,21 @@ public:
     ///convert a local timestamp to UTC
     std::chrono::system_clock::time_point to_sys(
             std::chrono::local_time<std::chrono::nanoseconds> lt) {
-        auto candidate = std::chrono::sys_time<std::chrono::nanoseconds>(
-                lt.time_since_epoch() - _offset);
-        if (candidate < _begin || candidate >= _end) {
+        auto ns = lt.time_since_epoch() - _offset;
+        //compare in seconds: the sys_info bounds of the first and last offset
+        //interval are sys_seconds min/max, which cannot be promoted to
+        //nanoseconds without signed overflow
+        auto secs = std::chrono::floor<std::chrono::seconds>(
+                std::chrono::sys_time<std::chrono::nanoseconds>(ns));
+        if (secs < _begin || secs >= _end) {
             auto info = _tz->get_info(lt);
             _offset = info.first.offset;
             _begin = info.first.begin;
             _end = info.first.end;
-            candidate = std::chrono::sys_time<std::chrono::nanoseconds>(
-                    lt.time_since_epoch() - _offset);
+            ns = lt.time_since_epoch() - _offset;
         }
-        return std::chrono::time_point_cast<std::chrono::system_clock::duration>(candidate);
+        return std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                std::chrono::sys_time<std::chrono::nanoseconds>(ns));
     }
 
 protected:
