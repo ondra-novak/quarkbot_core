@@ -153,8 +153,7 @@ std::chrono::local_time<std::chrono::nanoseconds> AlgoseekDataSource::parse_loca
 }
 
 void AlgoseekDataSource::log_summary() const {
-    bool suspicious = _counters.cancelled > 0
-            || _counters.unknown_event > 0
+    bool suspicious = _counters.unknown_event > 0
             || (_counters.trades == 0 && _counters.auctions == 0);
     auto level = suspicious ? LogLevel::warning : LogLevel::info;
     logOutput(level, "Algoseek source {}: {} trades, {} auctions; skipped: "
