@@ -115,7 +115,7 @@ Decimal AlgoseekDataSource::parse_decimal(const std::string &value, std::string_
     }
     //unreachable: row_error is [[noreturn]], but the compiler cannot see through
     //the catch block to know that, so keep it happy about the return type
-    __builtin_unreachable();
+    std::unreachable();
 }
 
 std::uint32_t AlgoseekDataSource::parse_conditions() const {
