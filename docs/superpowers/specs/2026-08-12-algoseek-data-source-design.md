@@ -319,10 +319,14 @@ For a trade replay, silently skipping malformed rows is worse than failing:
 prices and volumes drift and the backtest believes the result. The reference data
 is clean across 900 000 rows, so a bad row means a bad file.
 
-The `Conditions` check doubles as the guard against shifted columns. A file whose
-`Price` was rewritten with a comma decimal separator (as happens when an export
-passes through a spreadsheet in a European locale) has nine fields per row, which
-shifts `Conditions` to `EDGX` — not hex, so it fails loudly on the first row.
+The `Conditions` check doubles as the guard against shifted columns, for the
+*unquoted* comma-decimal variant: a file whose `Price` was rewritten with a comma
+decimal separator (as happens when an export passes through a spreadsheet in a
+European locale) has nine fields per row, which shifts `Conditions` to `EDGX` —
+not hex, so it fails loudly on the first row. A spreadsheet that instead quotes
+the field (`…,BIPC,"47,58",4000,NYSE,20000040`) keeps eight fields, so this check
+does not fire; that variant is caught by the numeric parse of `Price` instead,
+which also fails loudly and names the row and column.
 
 Monotonicity is enforced because `MergedDataSource` is a k-way merge over source
 heads; unordered input would corrupt the merged timeline without any other
@@ -334,16 +338,19 @@ transition (01:00–02:00 in a US zone) would have non-decreasing local times bu
 decreasing UTC times, and would trip the monotonicity check. Algoseek trading
 data spans 04:00–20:00 ET, so this cannot arise in practice.
 
-**EOF summary** via `logInfo`, or `logWarning` when `cancelled > 0`,
-`unknown_event > 0`, or `trades + auctions == 0`. Counters: `trades`,
-`auctions`, `cancelled`, `unknown_event`, `filtered_exchange`, `zero_qty`,
-`zero_price`, `official_print`.
+**EOF summary** via `logInfo`, or `logWarning` when `unknown_event > 0` or
+`trades + auctions == 0`. Counters: `trades`, `auctions`, `cancelled`,
+`unknown_event`, `filtered_exchange`, `zero_qty`, `zero_price`,
+`official_print`.
 
 The zero-event warning is what catches a misspelled `exchange` value, which is
 otherwise indistinguishable from a venue that genuinely never traded.
 
-Cancelled trades can never be taken back, so the `cancelled` counter is the only
-feedback that any were present — hence a warning rather than a debug line.
+Cancellations are routine in real exports — 6 of the 9 reference files contain
+one (1, 75, 34, 2, 7 and 5 occurrences) — so warning whenever `cancelled > 0`
+would fire on most healthy files and drown out the two conditions above that
+actually indicate a problem. The `cancelled` counter is still reported in every
+summary line, just at whichever level the other counters set.
 
 ## Testing
 

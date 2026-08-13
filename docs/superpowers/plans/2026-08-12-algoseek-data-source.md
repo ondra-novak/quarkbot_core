@@ -1389,8 +1389,7 @@ Replace `log_summary` with the full version:
 
 ```cpp
 void AlgoseekDataSource::log_summary() const {
-    bool suspicious = _counters.cancelled > 0
-            || _counters.unknown_event > 0
+    bool suspicious = _counters.unknown_event > 0
             || (_counters.trades == 0 && _counters.auctions == 0);
     auto level = suspicious ? LogLevel::warning : LogLevel::info;
     logOutput(level, "Algoseek source {}: {} trades, {} auctions; skipped: "
@@ -1403,7 +1402,12 @@ void AlgoseekDataSource::log_summary() const {
 ```
 
 A source that emitted nothing at all is reported as a warning because that is the
-only visible symptom of a misspelled `exchange` value.
+only visible symptom of a misspelled `exchange` value. Cancellations are not part
+of the warning condition: they are routine in real exports (6 of the 9 reference
+files contain them), so warning on `cancelled > 0` would fire on most healthy
+files and drown out the two conditions that actually indicate a problem. They are
+still counted and reported in the summary line, just at whichever level the other
+counters set.
 
 - [ ] **Step 5: Run the test to verify it passes**
 
