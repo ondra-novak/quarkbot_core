@@ -80,7 +80,9 @@ static void test_spec_parsing() {
         CHECK(s.exchange.empty());
         CHECK(s.symbol.empty());
         CHECK(s.tz != nullptr);
-        CHECK_EQUAL(std::string(s.tz->name()), std::string("UTC"));
+        // compare by identity, not by name: "UTC" is a tzdata link whose
+        // canonical name is "Etc/UTC", so asserting on name() would fail
+        CHECK(s.tz == std::chrono::locate_zone("UTC"));
     }
 
     // all parameters
@@ -104,7 +106,7 @@ static void test_spec_parsing() {
     {
         auto s = parse_algoseek_spec("IBM.csv.gz?");
         CHECK(s.exchange.empty());
-        CHECK_EQUAL(std::string(s.tz->name()), std::string("UTC"));
+        CHECK(s.tz == std::chrono::locate_zone("UTC"));
     }
 
     // trailing '&' is tolerated
@@ -350,6 +352,24 @@ static void test_local_time_converter() {
     LocalTimeConverter utc(std::chrono::locate_zone("UTC"));
     CHECK(utc.to_sys(mk_local(2026, 4, 9, 4, 0, 0, 10833553))
             == mk_utc("2026-04-09 04:00:00.010833553"));
+
+    // the two DST rules the class documents, each on a cold cache
+    {
+        LocalTimeConverter amb(std::chrono::locate_zone("America/New_York"));
+        CHECK(amb.to_sys(mk_local(2023, 11, 5, 1, 30, 0, 0))
+                == mk_utc("2023-11-05 05:30:00"));
+    }
+    {
+        LocalTimeConverter gap(std::chrono::locate_zone("America/New_York"));
+        CHECK(gap.to_sys(mk_local(2023, 3, 12, 2, 30, 0, 0))
+                == mk_utc("2023-03-12 07:30:00"));
+    }
+    // a pre-epoch local time must still take the lookup path
+    {
+        LocalTimeConverter old(std::chrono::locate_zone("America/New_York"));
+        CHECK(old.to_sys(mk_local(1969, 12, 31, 23, 59, 59, 500000000))
+                == mk_utc("1970-01-01 04:59:59.500000000"));
+    }
 }
 ```
 
@@ -411,23 +431,29 @@ public:
     ///convert a local timestamp to UTC
     std::chrono::system_clock::time_point to_sys(
             std::chrono::local_time<std::chrono::nanoseconds> lt) {
-        auto candidate = std::chrono::sys_time<std::chrono::nanoseconds>(
-                lt.time_since_epoch() - _offset);
-        if (candidate < _begin || candidate >= _end) {
+        auto ns = lt.time_since_epoch() - _offset;
+        //compare in seconds: the sys_info bounds of the first and last offset
+        //interval are sys_seconds min/max, which cannot be promoted to
+        //nanoseconds without signed overflow
+        auto secs = std::chrono::floor<std::chrono::seconds>(
+                std::chrono::sys_time<std::chrono::nanoseconds>(ns));
+        if (secs < _begin || secs >= _end) {
             auto info = _tz->get_info(lt);
             _offset = info.first.offset;
             _begin = info.first.begin;
             _end = info.first.end;
-            candidate = std::chrono::sys_time<std::chrono::nanoseconds>(
-                    lt.time_since_epoch() - _offset);
+            ns = lt.time_since_epoch() - _offset;
         }
-        return std::chrono::time_point_cast<std::chrono::system_clock::duration>(candidate);
+        return std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                std::chrono::sys_time<std::chrono::nanoseconds>(ns));
     }
 
 protected:
     const std::chrono::time_zone *_tz;
     std::chrono::seconds _offset = {};
-    //an empty interval, so the first conversion always performs a lookup
+    //an empty interval, so the first conversion always performs a lookup.
+    //The seconds-domain comparison in to_sys() is what makes this safe for
+    //every input, including pre-epoch ones.
     std::chrono::sys_seconds _begin{std::chrono::seconds::max()};
     std::chrono::sys_seconds _end{std::chrono::seconds::min()};
 };
@@ -1045,8 +1071,11 @@ Add `#include <vector>` to the test includes, and call both new functions from
 cmake --build build --target test_algoseek_source_test -j$(nproc) && ./build/tests/test_algoseek_source_test
 ```
 
-Expected: FAIL at `CHECK_EQUAL(evs.size(), std::size_t(5))` reporting 8, because
-every `TRADE`/`TRADE NB` row is still emitted as a `Trade`.
+Expected: FAIL at `CHECK_EQUAL(evs.size(), std::size_t(5))` reporting 7, because
+every `TRADE`/`TRADE NB` row is still emitted as a `Trade`. Seven, not nine: the
+`TRADE CANCELLED` and `QUOTE BID` rows are already dropped by Task 3's
+`EventType` check — which does so without counting them, until this task adds
+the counters.
 
 - [ ] **Step 3: Replace the `operator()` body**
 
@@ -1522,10 +1551,12 @@ static void test_real_files() {
         CHECK(closing->quantity == Decimal::from_string("23455"));
         CHECK(closing->time == mk_utc("2023-06-09 20:00:02.164273920"));
 
-        // events come out ordered, which MergedDataSource depends on
-        for (std::size_t i = 1; i < evs.size(); ++i) {
-            CHECK(evs[i-1].time <= evs[i].time);
-        }
+        // the real files come out ordered, which MergedDataSource depends on.
+        // One assertion, not one per element: the harness prints a line per
+        // CHECK, and a per-element loop would emit 881 identical lines.
+        CHECK(std::is_sorted(evs.begin(), evs.end(),
+                [](const BacktestEvent &a, const BacktestEvent &b){
+                    return a.time < b.time; }));
     }
 }
 ```
