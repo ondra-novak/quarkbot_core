@@ -176,6 +176,89 @@ static void test_side_optional() {
     CHECK(std::get<Trade>(ev.data).side == Side::undetermined);
 }
 
+static void test_row_errors() {
+    using namespace quarkbot;
+    const std::string_view head =
+        "exchange,symbol,timestamp,local_timestamp,id,side,price,amount\n";
+
+    // a non-numeric price names the file, the row and the column
+    write_gz("/tmp/test_tardis_badprice.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,buy,abc,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_badprice.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+            std::string_view(e.what()).find("price") != std::string_view::npos
+            && std::string_view(e.what()).find("badprice") != std::string_view::npos,
+            src(ev));
+    }
+    // a short row
+    write_gz("/tmp/test_tardis_short.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,1585699203957000\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_short.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+    // an unrecognised side
+    write_gz("/tmp/test_tardis_badside.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,sideways,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_badside.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+            std::string_view(e.what()).find("sideways") != std::string_view::npos,
+            src(ev));
+    }
+    // a non-numeric timestamp must not silently become epoch 0
+    write_gz("/tmp/test_tardis_badtime.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,notanumber,aaa,buy,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_badtime.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+            std::string_view(e.what()).find("local_timestamp") != std::string_view::npos,
+            src(ev));
+    }
+    // an empty timestamp, same reasoning
+    write_gz("/tmp/test_tardis_emptytime.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,,aaa,buy,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_emptytime.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+    // a timestamp too large for system_clock::duration: accumulating it would
+    // overflow, and duration_cast to nanoseconds multiplies by another 1000
+    write_gz("/tmp/test_tardis_hugetime.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,99999999999999999999,aaa,buy,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_hugetime.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+    // a negative timestamp: std::from_chars accepts a leading '-'
+    write_gz("/tmp/test_tardis_negtime.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,-1585699203957000,aaa,buy,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_negtime.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+    // the row number identifies the offending line; the header is row 1
+    write_gz("/tmp/test_tardis_row3.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,buy,6425.5,12\n"
+        "bitmex,XBTUSD,1585699203957000,1585699204957000,bbb,buy,xyz,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_row3.csv.gz");
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+            std::string_view(e.what()).find("row 3") != std::string_view::npos,
+            src(ev));
+    }
+}
+
 static void test_movable() {
     using namespace quarkbot;
     static_assert(std::is_move_constructible_v<TardisTradesDataSource>);
@@ -199,6 +282,7 @@ int main() {
     test_header_only();
     test_real_exports();
     test_side_optional();
+    test_row_errors();
 
     std::cout << "All tardis source tests passed" << std::endl;
 }

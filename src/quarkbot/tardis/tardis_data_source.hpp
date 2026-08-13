@@ -1,5 +1,8 @@
 #pragma once
 #include "quarkbot/abstract/backtest_data_source.hpp"
+#include "quarkbot/decimal.hpp"
+#include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -29,13 +32,25 @@ protected:
     const std::filesystem::path &path() const {return _path;}
     ///symbol of the current row as exchange:symbol, cached from the first row
     const std::string &row_symbol(std::string_view exchange, std::string_view symbol);
+    ///throw a runtime_error naming the file and the row last read
+    [[noreturn]] void row_error(std::string_view message) const;
+    ///parse a decimal column, turning a parse failure into a row_error
+    Decimal parse_decimal(std::string_view value, std::string_view column) const;
+    ///parse a microsecond unix timestamp column, rejecting anything but digits
+    ///that fit system_clock::duration
+    std::chrono::system_clock::time_point parse_us_timestamp(
+            std::string_view value, std::string_view column) const;
 
 private:
+    bool read_line_raw(std::string &out);
+
     std::string _symbol;
     std::filesystem::path _path;
     gzFile_s *_gz = nullptr;
     std::vector<std::string> _header;
     std::string _missing;
+    ///number of the row last read; the header is row 1
+    std::uint64_t _line = 0;
 };
 
 ///Backtest data source that generates Trade events from a Tardis trades CSV export

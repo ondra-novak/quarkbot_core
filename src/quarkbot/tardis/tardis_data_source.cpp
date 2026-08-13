@@ -2,6 +2,7 @@
 #include "tardis_data_source.hpp"
 #include <zlib.h>
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <format>
 #include <stdexcept>
@@ -20,18 +21,6 @@ static std::vector<std::string_view> split_csv(std::string_view line) {
         line.remove_prefix(pos + 1);
     }
     return cols;
-}
-
-// Parse a Tardis microsecond unix timestamp to system_clock::time_point
-static std::chrono::system_clock::time_point parse_us_timestamp(std::string_view s) {
-    long long us = 0;
-    for (char c : s) {
-        if (c < '0' || c > '9') break;
-        us = us * 10 + (c - '0');
-    }
-    return std::chrono::system_clock::time_point(
-        std::chrono::duration_cast<std::chrono::system_clock::duration>(
-            std::chrono::microseconds(us)));
 }
 
 // Strip trailing \r\n from a string in-place
@@ -65,7 +54,8 @@ TardisCsvDataSource::TardisCsvDataSource(TardisCsvDataSource &&other) noexcept
     ,_path(std::move(other._path))
     ,_gz(std::exchange(other._gz, nullptr))
     ,_header(std::move(other._header))
-    ,_missing(std::move(other._missing)) {}
+    ,_missing(std::move(other._missing))
+    ,_line(other._line) {}
 
 int TardisCsvDataSource::optional_column(std::string_view name) const {
     for (std::size_t i = 0; i < _header.size(); ++i)
@@ -96,7 +86,7 @@ const std::string &TardisCsvDataSource::row_symbol(
     return _symbol;
 }
 
-bool TardisCsvDataSource::read_line(std::string &out) {
+bool TardisCsvDataSource::read_line_raw(std::string &out) {
     out.clear();
     char buf[4096];
     while (true) {
@@ -116,6 +106,45 @@ bool TardisCsvDataSource::read_line(std::string &out) {
         }
         // buffer was full without a newline — loop to get rest of line
     }
+}
+
+bool TardisCsvDataSource::read_line(std::string &out) {
+    bool ok = read_line_raw(out);
+    if (ok) ++_line;
+    return ok;
+}
+
+void TardisCsvDataSource::row_error(std::string_view message) const {
+    throw std::runtime_error(std::format(
+        "Tardis source: {} in file {}, row {}", message, _path.string(), _line));
+}
+
+Decimal TardisCsvDataSource::parse_decimal(std::string_view value, std::string_view column) const {
+    try {
+        return Decimal::from_string(value);
+    } catch (const std::exception &) {
+        row_error(std::format("column {} is not a number: '{}'", column, value));
+    }
+}
+
+std::chrono::system_clock::time_point TardisCsvDataSource::parse_us_timestamp(
+        std::string_view value, std::string_view column) const {
+    long long us = 0;
+    auto res = std::from_chars(value.data(), value.data() + value.size(), us);
+    if (res.ec != std::errc{} || res.ptr != value.data() + value.size() || us < 0) {
+        row_error(std::format(
+            "column {} is not a microsecond timestamp: '{}'", column, value));
+    }
+    //system_clock::duration is nanoseconds here, so duration_cast multiplies by
+    //1000; anything above this bound overflows instead of converting
+    constexpr long long max_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::duration::max()).count();
+    if (us > max_us) {
+        row_error(std::format("column {} is out of range: '{}'", column, value));
+    }
+    return std::chrono::system_clock::time_point(
+        std::chrono::duration_cast<std::chrono::system_clock::duration>(
+            std::chrono::microseconds(us)));
 }
 
 TardisTradesDataSource::TardisTradesDataSource(std::filesystem::path p)
@@ -152,22 +181,20 @@ bool TardisTradesDataSource::operator()(BacktestEvent &ev) {
     while (read_line(line)) {
         if (line.empty()) continue;
         auto cols = split_csv(line);
-        if (cols.size() < _min_cols) continue;
+        if (cols.size() < _min_cols) row_error("truncated row");
 
-        auto tp = parse_us_timestamp(cols[static_cast<std::size_t>(_col_local_timestamp)]);
-        Decimal price, amount;
-        try {
-            price  = Decimal::from_string(cols[static_cast<std::size_t>(_col_price)]);
-            amount = Decimal::from_string(cols[static_cast<std::size_t>(_col_amount)]);
-        } catch (...) { continue; }
+        auto tp = parse_us_timestamp(
+            cols[static_cast<std::size_t>(_col_local_timestamp)], "local_timestamp");
 
         Trade trade;
-        trade.price = price;
-        trade.size  = amount;
+        trade.price = parse_decimal(cols[static_cast<std::size_t>(_col_price)], "price");
+        trade.size  = parse_decimal(cols[static_cast<std::size_t>(_col_amount)], "amount");
         trade.time  = tp;
         if (_col_side >= 0 && cols.size() > static_cast<std::size_t>(_col_side)) {
-            auto s = string_lookup<Side>(cols[static_cast<std::size_t>(_col_side)]);
-            trade.side = s.value_or(Side::undetermined);
+            auto raw = cols[static_cast<std::size_t>(_col_side)];
+            auto s = string_lookup<Side>(raw);
+            if (!s) row_error(std::format("unknown side value: '{}'", raw));
+            trade.side = *s;
         }
         ev.symbol = row_symbol(cols[static_cast<std::size_t>(_col_exchange)],
                                cols[static_cast<std::size_t>(_col_symbol)]);
@@ -183,22 +210,16 @@ bool TardisQuotesDataSource::operator()(BacktestEvent &ev) {
     while (read_line(line)) {
         if (line.empty()) continue;
         auto cols = split_csv(line);
-        if (cols.size() < _min_cols) continue;
+        if (cols.size() < _min_cols) row_error("truncated row");
 
-        auto tp = parse_us_timestamp(cols[static_cast<std::size_t>(_col_local_timestamp)]);
-        Decimal bid, bid_size, ask, ask_size;
-        try {
-            bid      = Decimal::from_string(cols[static_cast<std::size_t>(_col_bid_price)]);
-            bid_size = Decimal::from_string(cols[static_cast<std::size_t>(_col_bid_amount)]);
-            ask      = Decimal::from_string(cols[static_cast<std::size_t>(_col_ask_price)]);
-            ask_size = Decimal::from_string(cols[static_cast<std::size_t>(_col_ask_amount)]);
-        } catch (...) { continue; }
+        auto tp = parse_us_timestamp(
+            cols[static_cast<std::size_t>(_col_local_timestamp)], "local_timestamp");
 
         Quote quote;
-        quote.bid      = bid;
-        quote.bid_size = bid_size;
-        quote.ask      = ask;
-        quote.ask_size = ask_size;
+        quote.bid      = parse_decimal(cols[static_cast<std::size_t>(_col_bid_price)], "bid_price");
+        quote.bid_size = parse_decimal(cols[static_cast<std::size_t>(_col_bid_amount)], "bid_amount");
+        quote.ask      = parse_decimal(cols[static_cast<std::size_t>(_col_ask_price)], "ask_price");
+        quote.ask_size = parse_decimal(cols[static_cast<std::size_t>(_col_ask_amount)], "ask_amount");
         quote.time     = tp;
         ev.symbol = row_symbol(cols[static_cast<std::size_t>(_col_exchange)],
                                cols[static_cast<std::size_t>(_col_symbol)]);
