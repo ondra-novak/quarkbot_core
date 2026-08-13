@@ -3,7 +3,10 @@
 #include "tests/check.h"
 #include <zlib.h>
 #include <cstdio>
+#include <filesystem>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 #include <type_traits>
 
 static void write_gz(const std::string &path, std::string_view content) {
@@ -13,72 +16,140 @@ static void write_gz(const std::string &path, std::string_view content) {
     gzclose(f);
 }
 
+///parse "2020-04-01 00:00:03.089980" into a time_point
+static std::chrono::system_clock::time_point mk_utc(std::string_view text) {
+    std::istringstream in{std::string(text)};
+    std::chrono::sys_time<std::chrono::microseconds> tp;
+    in >> std::chrono::parse("%F %T", tp);
+    if (in.fail()) { std::cerr << "bad test instant: " << text << std::endl; exit(1); }
+    return std::chrono::time_point_cast<std::chrono::system_clock::duration>(tp);
+}
+
+// the real CSV header, with local_timestamp deliberately 1 second after
+// timestamp so that reading the wrong column fails the assertions
 static const std::string_view TRADES_CSV =
-    "exchange,symbol,timestamp,localTimestamp,id,side,price,amount\n"
-    "binance,BTCUSDT,1617235200000000000,1617235200001000000,1,buy,58000.50,0.001\n"
-    "binance,BTCUSDT,1617235260000000000,1617235260001000000,2,sell,58100.00,0.002\n";
+    "exchange,symbol,timestamp,local_timestamp,id,side,price,amount\n"
+    "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,buy,6425.5,12\n"
+    "bitmex,XBTUSD,1585699203957000,1585699204957000,bbb,sell,6425,150\n";
 
 static const std::string_view QUOTES_CSV =
-    "exchange,symbol,timestamp,localTimestamp,bidPrice,bidSize,askPrice,askSize\n"
-    "binance,BTCUSDT,1617235200000000000,1617235200001000000,57999.00,1.5,58001.00,0.8\n"
-    "binance,BTCUSDT,1617235260000000000,1617235260001000000,58050.00,2.0,58052.00,1.2\n";
+    "exchange,symbol,timestamp,local_timestamp,ask_amount,ask_price,bid_price,bid_amount\n"
+    "huobi-dm-swap,BTC-USD,1585699201147000,1585699202147000,86,6423,6422.9,112\n"
+    "huobi-dm-swap,BTC-USD,1585699202147000,1585699203147000,88,6424,6423.9,114\n";
 
 static void test_trades() {
     using namespace quarkbot;
+    write_gz("/tmp/test_tardis_trades.csv.gz", TRADES_CSV);
+    TardisTradesDataSource src("BTCUSDT", "/tmp/test_tardis_trades.csv.gz");
 
-    write_gz("/tmp/test_trades.csv.gz", TRADES_CSV);
-    {
-        TardisTradesDataSource src("BTCUSDT", "/tmp/test_trades.csv.gz");
+    BacktestEvent e1;
+    CHECK(src(e1));
+    CHECK(std::holds_alternative<Trade>(e1.data));
+    // microseconds, and local_timestamp rather than timestamp
+    CHECK(e1.time == mk_utc("2020-04-01 00:00:03.957000"));
+    CHECK(std::get<Trade>(e1.data).price == Decimal::from_string("6425.5"));
+    CHECK(std::get<Trade>(e1.data).size == Decimal::from_string("12"));
 
-        BacktestEvent e1;
-        CHECK(src(e1));
-        CHECK_EQUAL(e1.symbol, std::string("BTCUSDT"));
-        CHECK(std::holds_alternative<Trade>(e1.data));
-        auto &t1 = std::get<Trade>(e1.data);
-        CHECK(t1.price == Decimal::from_string("58000.50"));
-        CHECK(t1.size == Decimal::from_string("0.001"));
-
-        BacktestEvent e2;
-        CHECK(src(e2));
-        auto &t2 = std::get<Trade>(e2.data);
-        CHECK(t2.price == Decimal::from_string("58100.00"));
-        CHECK(t2.size == Decimal::from_string("0.002"));
-
-        BacktestEvent e3;
-        CHECK(!src(e3));
-    }
-    std::remove("/tmp/test_trades.csv.gz");
+    BacktestEvent e2;
+    CHECK(src(e2));
+    CHECK(e2.time == mk_utc("2020-04-01 00:00:04.957000"));
+    BacktestEvent e3;
+    CHECK(!src(e3));
 }
 
 static void test_quotes() {
     using namespace quarkbot;
+    write_gz("/tmp/test_tardis_quotes.csv.gz", QUOTES_CSV);
+    TardisQuotesDataSource src("BTC-USD", "/tmp/test_tardis_quotes.csv.gz");
 
-    write_gz("/tmp/test_quotes.csv.gz", QUOTES_CSV);
+    BacktestEvent q1;
+    CHECK(src(q1));
+    CHECK(std::holds_alternative<Quote>(q1.data));
+    CHECK(q1.time == mk_utc("2020-04-01 00:00:02.147000"));
+    auto &quote = std::get<Quote>(q1.data);
+    // the columns are mirrored outside-in; bid and ask must not be transposed
+    CHECK(quote.bid == Decimal::from_string("6422.9"));
+    CHECK(quote.bid_size == Decimal::from_string("112"));
+    CHECK(quote.ask == Decimal::from_string("6423"));
+    CHECK(quote.ask_size == Decimal::from_string("86"));
+}
+
+static void test_construction_errors() {
+    using namespace quarkbot;
+    // amount is absent: today this indexes cols[size_t(-1)], it must throw instead
+    write_gz("/tmp/test_tardis_nocol.csv.gz",
+        "exchange,symbol,timestamp,local_timestamp,id,side,price\n"
+        "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,buy,6425.5\n");
+    CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+        std::string_view(e.what()).find("amount") != std::string_view::npos,
+        TardisTradesDataSource src("XBTUSD", "/tmp/test_tardis_nocol.csv.gz"));
+
+    // a nonexistent file fails when the source is constructed, naming the path
+    CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+        std::string_view(e.what()).find("does_not_exist_tardis") != std::string_view::npos,
+        TardisTradesDataSource src("XBTUSD", "/tmp/does_not_exist_tardis.csv.gz"));
+}
+
+///a valid header with no data rows is an empty source, not an error
+static void test_header_only() {
+    using namespace quarkbot;
+    write_gz("/tmp/test_tardis_headeronly.csv.gz",
+        "exchange,symbol,timestamp,local_timestamp,id,side,price,amount\n");
+    TardisTradesDataSource src("XBTUSD", "/tmp/test_tardis_headeronly.csv.gz");
+    BacktestEvent ev;
+    CHECK(!src(ev));
+}
+
+static void test_real_exports() {
+    using namespace quarkbot;
+    const std::filesystem::path dir = TEST_DATA_PATH;
+
+    // bitmex trades, 2000 rows
     {
-        TardisQuotesDataSource src("BTCUSDT", "/tmp/test_quotes.csv.gz");
-
-        BacktestEvent q1;
-        CHECK(src(q1));
-        CHECK_EQUAL(q1.symbol, std::string("BTCUSDT"));
-        CHECK(std::holds_alternative<Quote>(q1.data));
-        auto &quote1 = std::get<Quote>(q1.data);
-        CHECK(quote1.bid == Decimal::from_string("57999.00"));
-        CHECK(quote1.bid_size == Decimal::from_string("1.5"));
-        CHECK(quote1.ask == Decimal::from_string("58001.00"));
-        CHECK(quote1.ask_size == Decimal::from_string("0.8"));
-
-        BacktestEvent q2;
-        CHECK(src(q2));
-        auto &quote2 = std::get<Quote>(q2.data);
-        CHECK(quote2.bid == Decimal::from_string("58050.00"));
-        CHECK(quote2.bid_size == Decimal::from_string("2.0"));
-        CHECK(quote2.ask == Decimal::from_string("58052.00"));
-        CHECK(quote2.ask_size == Decimal::from_string("1.2"));
-
-        BacktestEvent q3;
-        CHECK(!src(q3));
+        TardisTradesDataSource src("XBTUSD",
+            dir/"bitmex_trades_2020-04-01_XBTUSD.csv.gz");
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK(ev.time == mk_utc("2020-04-01 00:00:03.089980"));
+        CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("6425.5"));
+        std::size_t n = 1;
+        while (src(ev)) ++n;
+        CHECK_EQUAL(n, std::size_t(2000));
+        CHECK(ev.time == mk_utc("2020-04-01 00:00:21.951810"));
+        CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("6428.5"));
+        CHECK(std::get<Trade>(ev.data).size == Decimal::from_string("2000"));
     }
-    std::remove("/tmp/test_quotes.csv.gz");
+    // huobi quotes, 2000 rows
+    {
+        TardisQuotesDataSource src("BTC-USD",
+            dir/"huobi-dm-swap_quotes_2020-04-01_BTC-USD.csv.gz");
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK(ev.time == mk_utc("2020-04-01 00:00:01.270777"));
+        CHECK(std::get<Quote>(ev.data).bid == Decimal::from_string("6422.9"));
+        CHECK(std::get<Quote>(ev.data).ask == Decimal::from_string("6423"));
+        std::size_t n = 1;
+        while (src(ev)) ++n;
+        CHECK_EQUAL(n, std::size_t(2000));
+        CHECK(ev.time == mk_utc("2020-04-01 00:03:53.783935"));
+        CHECK(std::get<Quote>(ev.data).bid == Decimal::from_string("6432.4"));
+        CHECK(std::get<Quote>(ev.data).ask == Decimal::from_string("6432.5"));
+    }
+    // binance-futures book_ticker: same schema as quotes, read by the same class
+    {
+        TardisQuotesDataSource src("ETHUSDT",
+            dir/"binance-futures_book_ticker_2024-04-01_ETHUSDT.csv.gz");
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK(ev.time == mk_utc("2024-04-01 00:00:00.011559"));
+        CHECK(std::get<Quote>(ev.data).bid == Decimal::from_string("3648.79"));
+        CHECK(std::get<Quote>(ev.data).ask == Decimal::from_string("3648.8"));
+        std::size_t n = 1;
+        while (src(ev)) ++n;
+        CHECK_EQUAL(n, std::size_t(2000));
+        CHECK(ev.time == mk_utc("2024-04-01 00:00:14.408782"));
+        CHECK(std::get<Quote>(ev.data).bid == Decimal::from_string("3646.29"));
+    }
 }
 
 static void test_movable() {
@@ -100,6 +171,9 @@ int main() {
     test_trades();
     test_quotes();
     test_movable();
+    test_construction_errors();
+    test_header_only();
+    test_real_exports();
 
     std::cout << "All tardis source tests passed" << std::endl;
 }
