@@ -275,6 +275,45 @@ static void test_row_errors() {
     }
 }
 
+static void test_ordering_and_identity() {
+    using namespace quarkbot;
+    const std::string_view head =
+        "exchange,symbol,timestamp,local_timestamp,id,side,price,amount\n";
+
+    // a decreasing local_timestamp would corrupt the merged timeline
+    write_gz("/tmp/test_tardis_unordered.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,1585699204957000,aaa,buy,6425.5,12\n"
+        "bitmex,XBTUSD,1585699203957000,1585699203957000,bbb,buy,6426.0,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_unordered.csv.gz");
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+    // an equal timestamp is fine, ticks share a microsecond routinely
+    write_gz("/tmp/test_tardis_equal.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,buy,6425.5,12\n"
+        "bitmex,XBTUSD,1585699202957000,1585699203957000,bbb,buy,6426.0,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_equal.csv.gz");
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK(src(ev));
+    }
+    // two instruments concatenated into one file
+    write_gz("/tmp/test_tardis_twosyms.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,buy,6425.5,12\n"
+        "bitmex,ETHUSD,1585699203957000,1585699204957000,bbb,buy,140.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_twosyms.csv.gz");
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+            std::string_view(e.what()).find("ETHUSD") != std::string_view::npos,
+            src(ev));
+    }
+}
+
 static void test_movable() {
     using namespace quarkbot;
     static_assert(std::is_move_constructible_v<TardisTradesDataSource>);
@@ -299,6 +338,7 @@ int main() {
     test_real_exports();
     test_side_optional();
     test_row_errors();
+    test_ordering_and_identity();
 
     std::cout << "All tardis source tests passed" << std::endl;
 }

@@ -55,7 +55,8 @@ TardisCsvDataSource::TardisCsvDataSource(TardisCsvDataSource &&other) noexcept
     ,_gz(std::exchange(other._gz, nullptr))
     ,_header(std::move(other._header))
     ,_missing(std::move(other._missing))
-    ,_line(other._line) {}
+    ,_line(other._line)
+    ,_last_time(other._last_time) {}
 
 int TardisCsvDataSource::optional_column(std::string_view name) const {
     for (std::size_t i = 0; i < _header.size(); ++i)
@@ -82,8 +83,18 @@ const std::string &TardisCsvDataSource::row_symbol(
         std::string_view exchange, std::string_view symbol) {
     if (_symbol.empty()) {
         _symbol.append(exchange).append(":").append(symbol);
+    } else if (_symbol.size() != exchange.size() + 1 + symbol.size()
+            || !_symbol.starts_with(exchange)
+            || _symbol[exchange.size()] != ':'
+            || !_symbol.ends_with(symbol)) {
+        row_error(std::format("symbol changed from {} to {}:{}", _symbol, exchange, symbol));
     }
     return _symbol;
+}
+
+void TardisCsvDataSource::check_order(std::chrono::system_clock::time_point t) {
+    if (t < _last_time) row_error("local_timestamp is lower than on the previous row");
+    _last_time = t;
 }
 
 bool TardisCsvDataSource::read_line_raw(std::string &out) {
@@ -188,6 +199,7 @@ bool TardisTradesDataSource::operator()(BacktestEvent &ev) {
 
         auto tp = parse_us_timestamp(
             cols[static_cast<std::size_t>(_col_local_timestamp)], "local_timestamp");
+        check_order(tp);
 
         Trade trade;
         trade.price = parse_decimal(cols[static_cast<std::size_t>(_col_price)], "price");
@@ -217,6 +229,7 @@ bool TardisQuotesDataSource::operator()(BacktestEvent &ev) {
 
         auto tp = parse_us_timestamp(
             cols[static_cast<std::size_t>(_col_local_timestamp)], "local_timestamp");
+        check_order(tp);
 
         Quote quote;
         quote.bid      = parse_decimal(cols[static_cast<std::size_t>(_col_bid_price)], "bid_price");

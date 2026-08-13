@@ -40,6 +40,8 @@ protected:
     ///that fit system_clock::duration
     std::chrono::system_clock::time_point parse_us_timestamp(
             std::string_view value, std::string_view column) const;
+    ///throw when the timestamp is below the previous row's
+    void check_order(std::chrono::system_clock::time_point t);
 
 private:
     bool read_line_raw(std::string &out);
@@ -51,6 +53,7 @@ private:
     std::string _missing;
     ///number of the row last read; the header is row 1
     std::uint64_t _line = 0;
+    std::chrono::system_clock::time_point _last_time = {};
 };
 
 ///Backtest data source that generates Trade events from a Tardis trades CSV export
