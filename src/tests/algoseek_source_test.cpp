@@ -1,5 +1,6 @@
 #include "quarkbot/algoseek/algoseek_spec.hpp"
 #include "check.h"
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -504,10 +505,10 @@ static void test_real_files() {
         CHECK(closing->quantity == Decimal::from_string("23455"));
         CHECK(closing->time == mk_utc("2023-06-09 20:00:02.164273920"));
 
-        // events come out ordered, which MergedDataSource depends on
-        for (std::size_t i = 1; i < evs.size(); ++i) {
-            CHECK(evs[i-1].time <= evs[i].time);
-        }
+        // the real files come out ordered, which MergedDataSource depends on
+        CHECK(std::is_sorted(evs.begin(), evs.end(),
+                [](const BacktestEvent &a, const BacktestEvent &b){
+                    return a.time < b.time; }));
     }
 }
 
