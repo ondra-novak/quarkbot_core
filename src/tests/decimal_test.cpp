@@ -1,6 +1,8 @@
 #include <quarkbot/decimal.hpp>
+#include "check.h"
 #include <iostream>
 #include <iterator>
+#include <stdexcept>
 #include <vector>
 
 constexpr std::string_view to_string_number(Decimal m, std::vector<char> &buff, int decimals) {
@@ -120,7 +122,18 @@ static_assert(round(0.00000062_dec) == 0_dec);
 static_assert(round(-0.00000082_dec) == 0_dec);
 
 
-int main() {    
+static void test_from_string_errors() {
+    // Decimal lives in the global namespace in this header (no `quarkbot::` here);
+    // a bare `throw "..."` is not caught by this handler, so this asserts the type
+    CHECK_EXCEPTION(std::runtime_error, Decimal::from_string("12.5x"));
+    CHECK_EXCEPTION(std::runtime_error, Decimal::from_string("not a number"));
+    // valid literals must keep working, including at compile time
+    static_assert(Decimal::from_string("6425.5") == 6425.5_dec);
+    CHECK(Decimal::from_string("-0.001") == Decimal::from_string("-0.001"));
+}
+
+int main() {
+    test_from_string_errors();
     std::vector<char> buff;
     std::cout << Decimal(-3.141592).to_string() << std::endl;
     std::cout << Decimal(-3.0141592).to_string() << std::endl;
