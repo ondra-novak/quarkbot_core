@@ -808,7 +808,9 @@ git commit -m "feat(tardis): map the trade side column to Trade::side"
 
 ### Task 6: Row errors instead of silent skips
 
-Three silent-skip paths remain: a short row, an unparseable number, and an unrecognised `side`. Each drops data with no counter and no message.
+Four silent paths remain: a short row, an unparseable number, an unrecognised `side`, and — worst of the four — an unparseable timestamp. Each drops or corrupts data with no counter and no message.
+
+`parse_us_timestamp` as written in Task 3 stops at the first non-digit and returns what it accumulated, so an empty or non-numeric `local_timestamp` yields epoch 0 and the row is **emitted** at that time rather than rejected; the parse sits outside the `try`/`catch` that guards the `Decimal` conversions, so nothing catches it. It also accumulates digits without a length bound, which is signed overflow on a long field, and `duration_cast` to `system_clock::duration` multiplies by 1000, which overflows for a large value. The Algoseek reader already guards exactly these cases (`algoseek_data_source.cpp:135-172`, commit `6b79470`); this brings Tardis in line.
 
 **Files:**
 - Modify: `src/quarkbot/tardis/tardis_data_source.hpp`, `src/quarkbot/tardis/tardis_data_source.cpp`
@@ -816,7 +818,7 @@ Three silent-skip paths remain: a short row, an unparseable number, and an unrec
 
 **Interfaces:**
 - Consumes: everything from Tasks 3–5, and `Decimal::from_string` throwing `std::runtime_error` from Task 1.
-- Produces: `TardisCsvDataSource::row_error(std::string_view message) const` marked `[[noreturn]]`, and `parse_decimal(std::string_view value, std::string_view column) const -> Decimal`. A row counter `_line` where the header is row 1.
+- Produces: `TardisCsvDataSource::row_error(std::string_view message) const` marked `[[noreturn]]`, `parse_decimal(std::string_view value, std::string_view column) const -> Decimal`, and `parse_us_timestamp(std::string_view value, std::string_view column) const -> std::chrono::system_clock::time_point` as a member replacing the Task 3 file-static free function. A row counter `_line` where the header is row 1.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -855,6 +857,41 @@ static void test_row_errors() {
             std::string_view(e.what()).find("sideways") != std::string_view::npos,
             src(ev));
     }
+    // a non-numeric timestamp must not silently become epoch 0
+    write_gz("/tmp/test_tardis_badtime.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,notanumber,aaa,buy,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_badtime.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+            std::string_view(e.what()).find("local_timestamp") != std::string_view::npos,
+            src(ev));
+    }
+    // an empty timestamp, same reasoning
+    write_gz("/tmp/test_tardis_emptytime.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,,aaa,buy,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_emptytime.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+    // a timestamp too large for system_clock::duration: accumulating it would
+    // overflow, and duration_cast to nanoseconds multiplies by another 1000
+    write_gz("/tmp/test_tardis_hugetime.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,99999999999999999999,aaa,buy,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_hugetime.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+    // a negative timestamp: std::from_chars accepts a leading '-'
+    write_gz("/tmp/test_tardis_negtime.csv.gz", std::string(head) +
+        "bitmex,XBTUSD,1585699202957000,-1585699203957000,aaa,buy,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_negtime.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
     // the row number identifies the offending line; the header is row 1
     write_gz("/tmp/test_tardis_row3.csv.gz", std::string(head) +
         "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,buy,6425.5,12\n"
@@ -886,7 +923,13 @@ Expected: FAIL — each bad row is skipped, `src(ev)` returns `false` without th
     [[noreturn]] void row_error(std::string_view message) const;
     ///parse a decimal column, turning a parse failure into a row_error
     Decimal parse_decimal(std::string_view value, std::string_view column) const;
+    ///parse a microsecond unix timestamp column, rejecting anything but digits
+    ///that fit system_clock::duration
+    std::chrono::system_clock::time_point parse_us_timestamp(
+            std::string_view value, std::string_view column) const;
 ```
+
+Delete the file-static `parse_us_timestamp` free function that Task 3 added; this member replaces it. Add `#include <charconv>` and `#include <chrono>` to the .cpp.
 
 private section:
 
@@ -925,6 +968,39 @@ Decimal TardisCsvDataSource::parse_decimal(std::string_view value, std::string_v
 ```
 
 `catch (const std::exception &)` is correct only because Task 1 changed what `Decimal` throws.
+
+Replace the free `parse_us_timestamp` with the guarded member:
+
+```cpp
+std::chrono::system_clock::time_point TardisCsvDataSource::parse_us_timestamp(
+        std::string_view value, std::string_view column) const {
+    long long us = 0;
+    auto res = std::from_chars(value.data(), value.data() + value.size(), us);
+    if (res.ec != std::errc{} || res.ptr != value.data() + value.size() || us < 0) {
+        row_error(std::format(
+            "column {} is not a microsecond timestamp: '{}'", column, value));
+    }
+    //system_clock::duration is nanoseconds here, so duration_cast multiplies by
+    //1000; anything above this bound overflows instead of converting
+    constexpr long long max_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::duration::max()).count();
+    if (us > max_us) {
+        row_error(std::format("column {} is out of range: '{}'", column, value));
+    }
+    return std::chrono::system_clock::time_point(
+        std::chrono::duration_cast<std::chrono::system_clock::duration>(
+            std::chrono::microseconds(us)));
+}
+```
+
+`std::from_chars` reports overflow as `std::errc::result_out_of_range`, and the `res.ptr` check rejects trailing garbage that the digit loop used to ignore. An empty value fails on `res.ec`. A leading `-` parses, which is why `us < 0` is tested separately.
+
+Both `operator()` bodies now call it with the column name:
+
+```cpp
+        auto tp = parse_us_timestamp(
+            cols[static_cast<std::size_t>(_col_local_timestamp)], "local_timestamp");
+```
 
 In both `operator()` bodies replace the short-row skip:
 
