@@ -42,8 +42,8 @@ static void strip_newline(std::string &s) {
 
 namespace quarkbot {
 
-TardisCsvDataSource::TardisCsvDataSource(std::string instrument, std::filesystem::path csv_gz_path)
-    : _instrument(std::move(instrument)), _path(std::move(csv_gz_path)) {
+TardisCsvDataSource::TardisCsvDataSource(std::filesystem::path csv_gz_path)
+    : _path(std::move(csv_gz_path)) {
     #ifdef _WIN32
     _gz = reinterpret_cast<gzFile_s *>(gzopen_w(_path.c_str(), "rb"));
     #else
@@ -61,7 +61,7 @@ TardisCsvDataSource::~TardisCsvDataSource() {
 }
 
 TardisCsvDataSource::TardisCsvDataSource(TardisCsvDataSource &&other) noexcept
-    :_instrument(std::move(other._instrument))
+    :_symbol(std::move(other._symbol))
     ,_path(std::move(other._path))
     ,_gz(std::exchange(other._gz, nullptr))
     ,_header(std::move(other._header))
@@ -88,6 +88,14 @@ void TardisCsvDataSource::check_columns() const {
             "Tardis source: missing column(s) {} in file {}", _missing, _path.string()));
 }
 
+const std::string &TardisCsvDataSource::row_symbol(
+        std::string_view exchange, std::string_view symbol) {
+    if (_symbol.empty()) {
+        _symbol.append(exchange).append(":").append(symbol);
+    }
+    return _symbol;
+}
+
 bool TardisCsvDataSource::read_line(std::string &out) {
     out.clear();
     char buf[4096];
@@ -110,27 +118,31 @@ bool TardisCsvDataSource::read_line(std::string &out) {
     }
 }
 
-TardisTradesDataSource::TardisTradesDataSource(std::string instrument, std::filesystem::path p)
-    :TardisCsvDataSource(std::move(instrument), std::move(p))
+TardisTradesDataSource::TardisTradesDataSource(std::filesystem::path p)
+    :TardisCsvDataSource(std::move(p))
 {
+    _col_exchange = require_column("exchange");
+    _col_symbol = require_column("symbol");
     _col_local_timestamp = require_column("local_timestamp");
     _col_price = require_column("price");
     _col_amount = require_column("amount");
     check_columns();
     _min_cols = static_cast<std::size_t>(
-        std::max({_col_local_timestamp, _col_price, _col_amount})) + 1;
+        std::max({_col_exchange, _col_symbol, _col_local_timestamp, _col_price, _col_amount})) + 1;
 }
 
-TardisQuotesDataSource::TardisQuotesDataSource(std::string instrument, std::filesystem::path p)
-    :TardisCsvDataSource(std::move(instrument), std::move(p))
+TardisQuotesDataSource::TardisQuotesDataSource(std::filesystem::path p)
+    :TardisCsvDataSource(std::move(p))
 {
+    _col_exchange = require_column("exchange");
+    _col_symbol = require_column("symbol");
     _col_local_timestamp = require_column("local_timestamp");
     _col_bid_price  = require_column("bid_price");
     _col_bid_amount = require_column("bid_amount");
     _col_ask_price  = require_column("ask_price");
     _col_ask_amount = require_column("ask_amount");
     check_columns();
-    _min_cols = static_cast<std::size_t>(std::max({_col_local_timestamp,
+    _min_cols = static_cast<std::size_t>(std::max({_col_exchange, _col_symbol, _col_local_timestamp,
         _col_bid_price, _col_bid_amount, _col_ask_price, _col_ask_amount})) + 1;
 }
 
@@ -152,7 +164,8 @@ bool TardisTradesDataSource::operator()(BacktestEvent &ev) {
         trade.price = price;
         trade.size  = amount;
         trade.time  = tp;
-        ev.symbol = instrument();
+        ev.symbol = row_symbol(cols[static_cast<std::size_t>(_col_exchange)],
+                               cols[static_cast<std::size_t>(_col_symbol)]);
         ev.time = tp;
         ev.data = trade;
         return true;
@@ -182,7 +195,8 @@ bool TardisQuotesDataSource::operator()(BacktestEvent &ev) {
         quote.ask      = ask;
         quote.ask_size = ask_size;
         quote.time     = tp;
-        ev.symbol = instrument();
+        ev.symbol = row_symbol(cols[static_cast<std::size_t>(_col_exchange)],
+                               cols[static_cast<std::size_t>(_col_symbol)]);
         ev.time = tp;
         ev.data = quote;
         return true;

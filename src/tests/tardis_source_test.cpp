@@ -40,7 +40,7 @@ static const std::string_view QUOTES_CSV =
 static void test_trades() {
     using namespace quarkbot;
     write_gz("/tmp/test_tardis_trades.csv.gz", TRADES_CSV);
-    TardisTradesDataSource src("BTCUSDT", "/tmp/test_tardis_trades.csv.gz");
+    TardisTradesDataSource src("/tmp/test_tardis_trades.csv.gz");
 
     BacktestEvent e1;
     CHECK(src(e1));
@@ -49,6 +49,7 @@ static void test_trades() {
     CHECK(e1.time == mk_utc("2020-04-01 00:00:03.957000"));
     CHECK(std::get<Trade>(e1.data).price == Decimal::from_string("6425.5"));
     CHECK(std::get<Trade>(e1.data).size == Decimal::from_string("12"));
+    CHECK_EQUAL(e1.symbol, std::string("bitmex:XBTUSD"));
 
     BacktestEvent e2;
     CHECK(src(e2));
@@ -60,7 +61,7 @@ static void test_trades() {
 static void test_quotes() {
     using namespace quarkbot;
     write_gz("/tmp/test_tardis_quotes.csv.gz", QUOTES_CSV);
-    TardisQuotesDataSource src("BTC-USD", "/tmp/test_tardis_quotes.csv.gz");
+    TardisQuotesDataSource src("/tmp/test_tardis_quotes.csv.gz");
 
     BacktestEvent q1;
     CHECK(src(q1));
@@ -72,6 +73,7 @@ static void test_quotes() {
     CHECK(quote.bid_size == Decimal::from_string("112"));
     CHECK(quote.ask == Decimal::from_string("6423"));
     CHECK(quote.ask_size == Decimal::from_string("86"));
+    CHECK_EQUAL(q1.symbol, std::string("huobi-dm-swap:BTC-USD"));
 }
 
 static void test_construction_errors() {
@@ -82,12 +84,12 @@ static void test_construction_errors() {
         "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,buy,6425.5\n");
     CHECK_EXCEPTION_EXPR(std::runtime_error, e,
         std::string_view(e.what()).find("amount") != std::string_view::npos,
-        TardisTradesDataSource src("XBTUSD", "/tmp/test_tardis_nocol.csv.gz"));
+        TardisTradesDataSource src("/tmp/test_tardis_nocol.csv.gz"));
 
     // a nonexistent file fails when the source is constructed, naming the path
     CHECK_EXCEPTION_EXPR(std::runtime_error, e,
         std::string_view(e.what()).find("does_not_exist_tardis") != std::string_view::npos,
-        TardisTradesDataSource src("XBTUSD", "/tmp/does_not_exist_tardis.csv.gz"));
+        TardisTradesDataSource src("/tmp/does_not_exist_tardis.csv.gz"));
 }
 
 ///a valid header with no data rows is an empty source, not an error
@@ -95,7 +97,7 @@ static void test_header_only() {
     using namespace quarkbot;
     write_gz("/tmp/test_tardis_headeronly.csv.gz",
         "exchange,symbol,timestamp,local_timestamp,id,side,price,amount\n");
-    TardisTradesDataSource src("XBTUSD", "/tmp/test_tardis_headeronly.csv.gz");
+    TardisTradesDataSource src("/tmp/test_tardis_headeronly.csv.gz");
     BacktestEvent ev;
     CHECK(!src(ev));
 }
@@ -106,49 +108,55 @@ static void test_real_exports() {
 
     // bitmex trades, 2000 rows
     {
-        TardisTradesDataSource src("XBTUSD",
+        TardisTradesDataSource src(
             dir/"bitmex_trades_2020-04-01_XBTUSD.csv.gz");
         BacktestEvent ev;
         CHECK(src(ev));
         CHECK(ev.time == mk_utc("2020-04-01 00:00:03.089980"));
         CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("6425.5"));
+        CHECK_EQUAL(ev.symbol, std::string("bitmex:XBTUSD"));
         std::size_t n = 1;
         while (src(ev)) ++n;
         CHECK_EQUAL(n, std::size_t(2000));
         CHECK(ev.time == mk_utc("2020-04-01 00:00:21.951810"));
         CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("6428.5"));
         CHECK(std::get<Trade>(ev.data).size == Decimal::from_string("2000"));
+        CHECK_EQUAL(ev.symbol, std::string("bitmex:XBTUSD"));
     }
     // huobi quotes, 2000 rows
     {
-        TardisQuotesDataSource src("BTC-USD",
+        TardisQuotesDataSource src(
             dir/"huobi-dm-swap_quotes_2020-04-01_BTC-USD.csv.gz");
         BacktestEvent ev;
         CHECK(src(ev));
         CHECK(ev.time == mk_utc("2020-04-01 00:00:01.270777"));
         CHECK(std::get<Quote>(ev.data).bid == Decimal::from_string("6422.9"));
         CHECK(std::get<Quote>(ev.data).ask == Decimal::from_string("6423"));
+        CHECK_EQUAL(ev.symbol, std::string("huobi-dm-swap:BTC-USD"));
         std::size_t n = 1;
         while (src(ev)) ++n;
         CHECK_EQUAL(n, std::size_t(2000));
         CHECK(ev.time == mk_utc("2020-04-01 00:03:53.783935"));
         CHECK(std::get<Quote>(ev.data).bid == Decimal::from_string("6432.4"));
         CHECK(std::get<Quote>(ev.data).ask == Decimal::from_string("6432.5"));
+        CHECK_EQUAL(ev.symbol, std::string("huobi-dm-swap:BTC-USD"));
     }
     // binance-futures book_ticker: same schema as quotes, read by the same class
     {
-        TardisQuotesDataSource src("ETHUSDT",
+        TardisQuotesDataSource src(
             dir/"binance-futures_book_ticker_2024-04-01_ETHUSDT.csv.gz");
         BacktestEvent ev;
         CHECK(src(ev));
         CHECK(ev.time == mk_utc("2024-04-01 00:00:00.011559"));
         CHECK(std::get<Quote>(ev.data).bid == Decimal::from_string("3648.79"));
         CHECK(std::get<Quote>(ev.data).ask == Decimal::from_string("3648.8"));
+        CHECK_EQUAL(ev.symbol, std::string("binance-futures:ETHUSDT"));
         std::size_t n = 1;
         while (src(ev)) ++n;
         CHECK_EQUAL(n, std::size_t(2000));
         CHECK(ev.time == mk_utc("2024-04-01 00:00:14.408782"));
         CHECK(std::get<Quote>(ev.data).bid == Decimal::from_string("3646.29"));
+        CHECK_EQUAL(ev.symbol, std::string("binance-futures:ETHUSDT"));
     }
 }
 
@@ -160,10 +168,10 @@ static void test_movable() {
 
     write_gz("/tmp/test_tardis_movable.csv.gz", TRADES_CSV);
     // the point of the move constructor: a source has to survive being put here
-    BacktestDataSource ds = TardisTradesDataSource("BTCUSDT", "/tmp/test_tardis_movable.csv.gz");
+    BacktestDataSource ds = TardisTradesDataSource("/tmp/test_tardis_movable.csv.gz");
     BacktestEvent ev;
     CHECK(ds(ev));
-    CHECK_EQUAL(ev.symbol, std::string("BTCUSDT"));
+    CHECK_EQUAL(ev.symbol, std::string("bitmex:XBTUSD"));
     std::remove("/tmp/test_tardis_movable.csv.gz");
 }
 
