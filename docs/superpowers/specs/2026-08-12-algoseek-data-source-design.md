@@ -118,45 +118,64 @@ fraction of cases, and unbounded look-ahead means buffering the whole day.
 
 ## Configuration syntax
 
-A data source entry is a file path with an optional URL-style query string:
+An `algoseek=` entry is a bare file path, resolved relative to the directory of
+the INI file exactly as the other keys are. The options are separate `algoseek.*`
+keys of the same section:
 
 ```ini
 [data-source]
-algoseek=IBM.csv.gz?exchange=NASDAQ&tzone=America/New_York
+algoseek.time_zone=America/New_York
+algoseek.exchange=NASDAQ
+algoseek=20230601/IBM.csv.gz
+algoseek=20230602/IBM.csv.gz
+algoseek=20230605/IBM.csv.gz
 ```
 
-The path is everything before the first `?`; it is resolved relative to the
-directory of the INI file, as with the other keys. Parameters are `&`-separated
-`key=value` pairs.
-
-| Parameter | Required | Default | Meaning |
+| Option key | Required | Default | Meaning |
 |---|---|---|---|
-| `exchange` | no | no filter | Emit only rows whose `Exchange` equals this value |
-| `tzone` | no | `UTC` | IANA zone name of the file's wall-clock timestamps |
-| `symbol` | no | `Ticker` column | Symbol reported on emitted events |
+| `algoseek.exchange` | no | no filter | Emit only rows whose `Exchange` equals this value |
+| `algoseek.time_zone` | no | `UTC` | IANA zone name of the file's wall-clock timestamps |
+| `algoseek.symbol` | no | `Ticker` column | Symbol reported on emitted events |
 
-An unknown parameter key is an error, not something to ignore — a typo in a
-config is worse silent than loud.
+**Why not a query string on the value.** The first design put the options into a
+URL-style query (`IBM.csv.gz?exchange=NASDAQ&tzone=America/New_York`). One
+Algoseek file is one ticker for one day, so any realistic backtest lists tens of
+files — a month is 20+ entries — and every one of them would have to repeat the
+same query. Repeating a setting 20 times is 20 chances to mistype it and no
+single place to change it. Separate option keys state each setting once.
 
-`exchange` is compared verbatim and case-sensitively against the `Exchange`
-column. Algoseek uses values such as `NASDAQ`, `NYSE`, `ARCA`, `EDGX`, `IEX`,
-`FINRA`, and also some containing a space (`BATS Y`, `MIAX PEARL`,
-`NASDAQ BX`); those are written literally, with no URL-style escaping. A typo
-here cannot be detected by comparison — an unrecognised venue name simply
-matches nothing — so the EOF summary warns when a source produced no events at
-all.
+The options are collected while the file is read and applied to every `algoseek=`
+key of that file once it has been read in full, so they may be written before or
+after the entries they configure. A repeated option overwrites the previous
+value. An unknown `algoseek.*` key is an error, not something to ignore — a typo
+in a config is worse silent than loud — and so is an unknown zone name; both
+errors name the configuration file.
 
-`tzone` defaults to UTC for predictability in tests. Real Algoseek exports are
-in `America/New_York` and must say so, otherwise every timestamp is off by four
-or five hours.
+The option block is scoped to one configuration file and is neither inherited
+from nor exported to files pulled in with `include=`, each of which runs its own
+collection. That scoping is the mechanism for expressing more than one setting
+combination: one file per group, tied together by `include=`.
 
-`symbol` exists to resolve a collision. Two entries such as
-`IBM.csv.gz?exchange=NASDAQ` and `IBM.csv.gz?exchange=ARCA` would both report
-symbol `IBM`, and `MergedDataSource` would fold them into a single instrument —
-which is exactly the venue mixing the exchange filter is meant to prevent. The
-`[symbol-mapping]` section cannot help, because it keys on the source symbol,
-which is identical for both. `symbol=IBM.ARCA` states the distinction
-explicitly. Note that `FINRA` as an `exchange` value selects the OTC/TRF prints
+`algoseek.exchange` is compared verbatim and case-sensitively against the
+`Exchange` column. Algoseek uses values such as `NASDAQ`, `NYSE`, `ARCA`, `EDGX`,
+`IEX`, `FINRA`, and also some containing a space (`BATS Y`, `MIAX PEARL`,
+`NASDAQ BX`); those are written literally, with no escaping — an INI value runs
+to the end of the line. A typo here cannot be detected by comparison — an
+unrecognised venue name simply matches nothing — so the EOF summary warns when a
+source produced no events at all.
+
+`algoseek.time_zone` defaults to UTC for predictability in tests. Real Algoseek
+exports are in `America/New_York` and must say so, otherwise every timestamp is
+off by four or five hours. Because the default is silent and wrong for real data,
+a set of `algoseek=` entries with no option keys at all is logged as a warning.
+
+`algoseek.symbol` exists to resolve a collision. Two groups both replaying `IBM`,
+one filtered to `NASDAQ` and one to `ARCA`, would both report symbol `IBM`, and
+`MergedDataSource` would fold them into a single instrument — which is exactly
+the venue mixing the exchange filter is meant to prevent. The `[symbol-mapping]`
+section cannot help, because it keys on the source symbol, which is identical for
+both. `algoseek.symbol=IBM.ARCA` in the ARCA include file states the distinction
+explicitly. Note that `FINRA` as an exchange value selects the OTC/TRF prints
 described above.
 
 ## Architecture
@@ -171,30 +190,33 @@ Three units, split along testability lines:
 
 | Unit | Responsibility | Dependencies |
 |---|---|---|
-| `algoseek_spec.hpp` / `.cpp` | Parse `<file>?exchange=…&tzone=…&symbol=…` | none — pure function, no I/O |
-| `local_time_converter.hpp` | Local wall clock → UTC with cached `sys_info` | `<chrono>` only |
+| `algoseek_spec.hpp` | `AlgoseekSpec` — the settings one source is opened with | `<chrono>`, `<filesystem>` |
+| `include/quarkbot/utils/local_time_converter.hpp` | Local wall clock → UTC with cached `sys_info` | `<chrono>` only |
 | `algoseek_data_source.hpp` / `.cpp` | gzip CSV reading, filtering, row → event | zlib, `CSVReader`, the two above |
 
 The timezone converter is a separate unit because it holds the only non-trivial
 logic with edge cases (DST transitions), and separating it means those cases can
-be tested without a file on disk.
+be tested without a file on disk. It lives in the public `utils` directory rather
+than under `algoseek/` because nothing about it is Algoseek-specific — any source
+carrying local wall-clock timestamps needs it.
 
 ### `AlgoseekSpec`
 
 ```cpp
 struct AlgoseekSpec {
     std::filesystem::path file;
-    std::string exchange;                // empty = no filter
-    const std::chrono::time_zone *tz;    // defaults to locate_zone("UTC")
-    std::string symbol;                  // empty = use the Ticker column
+    std::string exchange = {};                  // empty = no filter
+    const std::chrono::time_zone *tz = nullptr; // null = UTC
+    std::string symbol = {};                    // empty = use the Ticker column
 };
-
-AlgoseekSpec parse_algoseek_spec(std::string_view spec);
 ```
 
-An unknown key, a parameter without `=`, or an unknown zone name throws
-`std::runtime_error` carrying the offending key and the full spec string. The
-returned `file` is relative; the caller joins it with the config directory.
+A plain aggregate with no parser attached: the fields come straight from the
+`algoseek.*` keys, which `IniReader` has already split. `file` is joined with the
+config directory by the caller. A null `tz` is handled by `LocalTimeConverter`,
+which falls back to `locate_zone("UTC")` — the struct stays default-constructible
+without a tzdb lookup, which matters because tests build it by aggregate
+initialisation.
 
 ### `LocalTimeConverter`
 
@@ -261,28 +283,34 @@ side.
 
 ```
 [data-source]
-algoseek=IBM.csv.gz?exchange=NASDAQ&tzone=America/New_York
+algoseek.time_zone=America/New_York
+algoseek.exchange=NASDAQ
+algoseek=20230601/IBM.csv.gz
+algoseek=20230602/IBM.csv.gz
     │
     ▼
 configure_datasources()  (src/quarkbot/backtest/config_datasource.cpp)
-    └── add_algoseek(row.value)
-            ├── parse_algoseek_spec(value)     ← split the query off first
-            ├── spec.file = root / spec.file   ← only then join with config dir
-            └── sources.push_back(AlgoseekDataSource(spec))
+    └── SourceCollector::walk(config)
+            ├── algoseek.* → fields of one local AlgoseekSpec   ← while reading
+            ├── algoseek   → algoseek_sources.push_back(root/value)
+            └── after the whole file is read, for each collected path:
+                    spec.file = path
+                    sources.push_back(AlgoseekDataSource(spec))
     │
     ▼
 MergedDataSource → SymbologyMapping → BacktestDataSource
 ```
 
-`SourceCollector::walk` currently joins the path before dispatch
-(`add_tardis(root/row.value)`). That cannot work for this key, because
-`root/"IBM.csv.gz?exchange=NASDAQ"` would bake the query into the path. The
-`algoseek` branch passes the raw value and joins after parsing.
+The two-phase shape is what makes the options order-independent: nothing is
+constructed until the file has been read to its end, so an option written below
+the entries it configures still applies. Both the `AlgoseekSpec` and the path
+list are `walk()` locals, which is what scopes an option block to one file — a
+recursive `walk()` for an `include=` gets its own pair.
 
-The doc comment listing the recognised keys in `config_datasource.hpp` gains the
-`algoseek` entry. Note that `IniReader` only treats a line as a comment when it
-*starts* with `;` or `#`, so a trailing comment after a value becomes part of the
-value — the documentation examples must not use inline comments.
+The doc comment listing the recognised keys in `config_datasource.hpp` documents
+the `algoseek` key and its options. Note that `IniReader` only treats a line as a
+comment when it *starts* with `;` or `#`, so a trailing comment after a value
+becomes part of the value — configuration examples must not use inline comments.
 
 ## Error handling
 
@@ -295,9 +323,9 @@ logged at EOF.
 
 | Condition | Reaction |
 |---|---|
-| Unknown query parameter | `runtime_error` with the key and the spec string |
-| Parameter without `=` | `runtime_error` |
-| Unknown `tzone` | `runtime_error` wrapping the `locate_zone` failure |
+| Unknown `algoseek.*` option key | `runtime_error` with the key and the config file |
+| Unknown `algoseek.time_zone` | `runtime_error` wrapping the `locate_zone` failure, with the key and the config file |
+| `algoseek=` entries with no option key at all | warning — the UTC default is silently wrong for a real export |
 | `gzopen` fails | `runtime_error` with the path |
 | Required header column missing | `runtime_error` listing the missing columns (via `colmap.isMapped`) |
 
@@ -360,9 +388,11 @@ entry `tests/algoseek_source_test`. Assertions use `src/tests/check.h`;
 synthetic gzip inputs are written with `gzopen`/`gzwrite` as in
 `tardis_source_test.cpp`.
 
-**A. Spec parsing** (no I/O): bare path yields no filter, UTC and no symbol
-override; a fully specified query yields each value; unknown key, unknown zone
-and a parameter without `=` each throw; empty query after `?`.
+**A. Configuration wiring** (`configure_datasources` over a written INI): an
+option block applies to an entry written above it as well as below it; one option
+block serves several `algoseek=` entries, which merge into one timeline; an
+unknown `algoseek.*` key and an unknown zone name each throw with the config file
+named.
 
 **B. `LocalTimeConverter`**: EST (−05:00) and EDT (−04:00);
 `20260409 04:00:00.010833553` ET → `2026-04-09T08:00:00.010833553Z` (verified

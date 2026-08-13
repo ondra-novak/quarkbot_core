@@ -2,6 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Superseded in part — this plan is kept as a record of how the source was
+> built, not as a description of what it looks like now.** Task 1 below builds a
+> `parse_algoseek_spec()` parser for a URL-style value
+> (`IBM.csv.gz?exchange=NASDAQ&tzone=…`). That form was dropped after
+> implementation: one Algoseek file is one ticker for one day, so a real backtest
+> repeats the same query on tens of entries. The options became separate
+> `algoseek.time_zone` / `algoseek.exchange` / `algoseek.symbol` keys of the
+> `[data-source]` section, collected per configuration file and applied to every
+> `algoseek=` entry of that file; `algoseek_spec.cpp` and its parser are gone,
+> and `local_time_converter.hpp` moved to `include/quarkbot/utils/`. The design
+> spec describes the current form — read it, not Task 1.
+
 **Goal:** Add a backtest data source that replays Algoseek US equity "Trades Only" gzip CSV exports as `Trade` and final `Auction` events, configured from the INI `[data-source]` section.
 
 **Architecture:** A new component directory `src/quarkbot/algoseek/` contributing three units to `quarkbot_impl`: a pure spec-string parser, a DST-aware local-to-UTC converter with a cached offset, and the data source itself which reads the gzip CSV through the existing `CSVReader`. The `algoseek=` key in `config_datasource.cpp` wires it into the configuration.

@@ -74,7 +74,13 @@ public:
                 else if (row.key.starts_with("algoseek.")) {
                     auto  t= row.key.substr(9);
                     if (t == "time_zone") {
-                        algoseek_spec.tz = std::chrono::locate_zone(row.value);                        
+                        try {
+                            algoseek_spec.tz = std::chrono::locate_zone(row.value);
+                        } catch (const std::exception &e) {
+                            throw std::runtime_error(
+                                    std::format("Unknown time zone `{}` in key `{}` in config `{}`: {}",
+                                            row.value, row.key, fcan.string(), e.what()));
+                        }
                     } else if (t == "exchange") {
                         algoseek_spec.exchange = row.value;
                     } else if (t == "symbol") {
@@ -91,7 +97,7 @@ public:
                 std::string_view from_symbol;
                 std::string_view to_symbol;
                 if (row.key.ends_with('<')) {
-                    to_symbol = trim(row.key.substr(row.key.length()-1));
+                    to_symbol = trim(row.key.substr(0, row.key.length()-1));
                     from_symbol = row.value;
                 } else if (row.value.starts_with('>')) {
                     to_symbol = trim(row.value.substr(1));

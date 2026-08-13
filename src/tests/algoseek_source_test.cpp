@@ -110,7 +110,6 @@ static void test_trades() {
         "20230609,04:00:00.010833553,TRADE,IBM,242.54,6,EDGX,80002000\n"
         "20230609,09:30:01.500000000,TRADE NB,IBM,243.10,250,NASDAQ,20002020\n");
 
-//    auto spec = parse_algoseek_spec(path + "?tzone=America/New_York");
     AlgoseekDataSource src({path,{},std::chrono::locate_zone("America/New_York")});
 
     BacktestEvent e1;
@@ -553,6 +552,36 @@ static void test_config_wiring() {
     CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("47.62"));
     CHECK(!ds(ev));
 
+    // the reason the options are separate keys: one option block configures
+    // every algoseek key of the file, so a month of daily exports needs the
+    // exchange and the zone written once
+    write_gz((dir / "IBM_d2.csv.gz").string(), std::string(ALGOSEEK_HEADER) +
+        "20230612,10:00:00.000000000,TRADE,IBM,48.10,100,NASDAQ,00000001\n"
+        "20230612,10:00:01.000000000,TRADE,IBM,48.11,200,ARCA,00000001\n");
+    {
+        std::ofstream ini(dir / "multi.ini");
+        ini << "[data-source]\n"
+               "algoseek=IBM.csv.gz\n"
+               "algoseek=IBM_d2.csv.gz\n"
+               "algoseek.exchange=NASDAQ\n"
+               "algoseek.time_zone=America/New_York\n"
+               "algoseek.symbol=IBM.NASDAQ\n";
+    }
+    {
+        auto multi = configure_datasources(dir / "multi.ini");
+        std::vector<Decimal> prices;
+        BacktestEvent mev;
+        while (multi(mev)) {
+            CHECK_EQUAL(mev.symbol, std::string("IBM.NASDAQ"));
+            prices.push_back(std::get<Trade>(mev.data).price);
+        }
+        // both files filtered and zone-converted, merged into one timeline
+        CHECK_EQUAL(prices.size(), std::size_t(3));
+        CHECK(prices[0] == Decimal::from_string("47.60"));
+        CHECK(prices[1] == Decimal::from_string("47.62"));
+        CHECK(prices[2] == Decimal::from_string("48.10"));
+    }
+
     // a bad spec fails while the configuration is being read, and the error
     // names the config file so the failure can be traced back to it
     {
@@ -564,6 +593,18 @@ static void test_config_wiring() {
     CHECK_EXCEPTION_EXPR(std::runtime_error, e,
             std::string_view(e.what()).find("bad.ini") != std::string_view::npos,
             configure_datasources(dir / "bad.ini"));
+
+    // an unknown zone name must name the config file too, otherwise the bare
+    // locate_zone failure gives no hint which file to fix
+    {
+        std::ofstream ini(dir / "badzone.ini");
+        ini << "[data-source]\n"
+               "algoseek.time_zone=Mars/Olympus\n"
+               "algoseek=IBM.csv.gz\n";
+    }
+    CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+            std::string_view(e.what()).find("badzone.ini") != std::string_view::npos,
+            configure_datasources(dir / "badzone.ini"));
 
     std::filesystem::remove_all(dir);
 }

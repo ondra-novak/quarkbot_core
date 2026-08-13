@@ -12,25 +12,49 @@ Top level section:
 
 include=file - can repeat for every include
 
+Recognised keys of the data source section (the text after ';' explains the key,
+it must not be written into a real configuration file, see the note below):
+
 [data-source]
 quarkbot=file.gz     ;quarkbot replay format  - gzip + CSV
 tardis=file.gz       ;tardis trades and quotes gzip
 lseg=file.gz         ;lseg trades, quotes, auctions gzip
 trth=file.gz         ;trth trades, quotes, auctions gzip
-algoseek=file.csv.gz?exchange=NASDAQ&tzone=America/New_York&symbol=IBM.NASDAQ
+algoseek=file.csv.gz ;algoseek US equity "Trades Only" export - gzip CSV
 
-The algoseek key reads an Algoseek US equity "Trades Only" export and produces
-Trade and final Auction events. Its value is a file path with an optional query
-string; all three parameters are optional:
+The algoseek key reads an Algoseek US equity "Trades Only" export (one file per
+ticker per day) and produces Trade and final Auction events. It is configured by
+separate option keys rather than by parameters on the value, so that one option
+block can serve many files:
 
-  exchange - emit only rows of this venue, matched verbatim against the
-             Exchange column. Without it every venue is replayed, including
-             the off-exchange prints reported under FINRA.
-  tzone    - IANA name of the zone the file's wall clock timestamps are in.
-             Defaults to UTC; real exports are in America/New_York.
-  symbol   - symbol reported on events, instead of the Ticker column. Needed
-             when the same ticker is replayed from two venues, which would
-             otherwise collide on one instrument.
+[data-source]
+algoseek.time_zone=America/New_York
+algoseek.exchange=NASDAQ
+algoseek=20230601/IBM.csv.gz
+algoseek=20230602/IBM.csv.gz
+algoseek=20230605/IBM.csv.gz
+
+  algoseek.time_zone - IANA name of the zone the files' wall clock timestamps
+                       are in. Defaults to UTC; real exports are in
+                       America/New_York, so omitting it shifts every timestamp
+                       by four or five hours.
+  algoseek.exchange  - emit only rows of this venue, matched verbatim and case
+                       sensitively against the Exchange column. Without it
+                       every venue is replayed, including the off-exchange
+                       prints reported under FINRA.
+  algoseek.symbol    - symbol reported on events, instead of the Ticker column.
+                       Needed when the same ticker is replayed from two venues,
+                       which would otherwise collide on one instrument.
+
+All three options are optional and may appear anywhere in the section, before or
+after the algoseek keys they configure - they are collected first and applied to
+every algoseek key of the same configuration file afterwards. Repeating an
+option overwrites the previous value; an unknown algoseek.* key is an error.
+
+The option block is per configuration file and is not inherited by or from
+included files. To replay the same ticker from two venues, or two tickers with
+different settings, put each group in its own file and pull them in with
+include= - each included file then carries its own option block.
 
 Do not write a trailing comment after a value: only a line starting with ';'
 or '#' is treated as a comment, so it would become part of the value.

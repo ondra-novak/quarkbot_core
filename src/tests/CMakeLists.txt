@@ -10,6 +10,7 @@ set(BASIC_TESTS
     mem_storage_test.cpp
     tardis_source_test.cpp
     algoseek_source_test.cpp
+    config_datasource_test.cpp
     merged_source_test.cpp
     serializer.cpp
     signals.cpp
