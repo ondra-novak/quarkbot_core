@@ -69,7 +69,17 @@ public:
         while (ini.next(row)) {
             if (row.section == data_section_name) {
                 if (row.key == "quarkbot") add_quarkbot(root/row.value);
-                else if (row.key == "tardis") add_tardis(root/row.value);
+                else if (row.key.starts_with("tardis.")) {
+                    auto t = row.key.substr(7);
+                    if (t == "trades") sources.push_back(TardisTradesDataSource(root/row.value));
+                    else if (t == "quotes") sources.push_back(TardisQuotesDataSource(root/row.value));
+                    else throw std::runtime_error(std::format(
+                        "Unknown tardis data type: `{}`, Expected: trades, quotes in config `{}`",
+                        row.key, fcan.string()));
+                }
+                else if (row.key == "tardis") throw std::runtime_error(std::format(
+                    "Key `tardis` is no longer supported, use `tardis.trades` or "
+                    "`tardis.quotes` in config `{}`", fcan.string()));
                 else if (row.key == "lseg" || row.key == "trth") add_trth(root/row.value);
                 else if (row.key.starts_with("algoseek.")) {
                     auto  t= row.key.substr(9);
@@ -127,9 +137,6 @@ public:
         }
     }
 
-    void add_tardis(std::filesystem::path file) {
-        throw std::runtime_error(std::format("Can't open {}: Tardis support is not yet implemented", file.string()));
-    }
     void add_trth(std::filesystem::path file) {
         sources.push_back(TRTHEventSource(file));
         

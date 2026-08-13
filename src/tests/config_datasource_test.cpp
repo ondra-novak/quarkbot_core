@@ -2,12 +2,16 @@
 
 #include "check.h"
 #include "quarkbot/abstract/backtest_data_source.hpp"
+#include "quarkbot/stream/quote.hpp"
+#include "quarkbot/stream/trade.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <zlib.h>
 
 using namespace quarkbot;
@@ -82,8 +86,68 @@ static void test_symbol_mapping_directions() {
     std::filesystem::remove_all(dir);
 }
 
+///one INI, two data types, one instrument
+static void test_tardis_keys() {
+    std::cout << "--- test_tardis_keys" << std::endl;
+
+    auto dir = std::filesystem::temp_directory_path() / "qb_tardis_cfg_test";
+    std::filesystem::create_directories(dir);
+
+    write_gz((dir/"t.csv.gz").string(),
+        "exchange,symbol,timestamp,local_timestamp,id,side,price,amount\n"
+        "bitmex,XBTUSD,1585699200000000,1585699201000000,a,buy,100,1\n"
+        "bitmex,XBTUSD,1585699202000000,1585699203000000,b,sell,102,1\n");
+    write_gz((dir/"q.csv.gz").string(),
+        "exchange,symbol,timestamp,local_timestamp,ask_amount,ask_price,bid_price,bid_amount\n"
+        "bitmex,XBTUSD,1585699201000000,1585699202000000,5,101,100.5,5\n"
+        "bitmex,XBTUSD,1585699203000000,1585699204000000,5,103,102.5,5\n");
+    {
+        std::ofstream ini(dir/"both.ini");
+        ini << "[data-source]\n"
+               "tardis.quotes=q.csv.gz\n"
+               "tardis.trades=t.csv.gz\n";
+    }
+
+    auto ds = configure_datasources(dir/"both.ini");
+    std::string order;
+    BacktestEvent ev;
+    std::chrono::system_clock::time_point prev = {};
+    while (ds(ev)) {
+        CHECK_EQUAL(ev.symbol, std::string("bitmex:XBTUSD"));
+        CHECK(ev.time >= prev);
+        prev = ev.time;
+        order.push_back(std::holds_alternative<quarkbot::Trade>(ev.data) ? 'T' : 'Q');
+    }
+    // trades and quotes interleave, which only happens if both landed in one heap
+    CHECK_EQUAL(order, std::string("TQTQ"));
+
+    // an unknown data type names the key and the config file
+    {
+        std::ofstream ini(dir/"badtype.ini");
+        ini << "[data-source]\n"
+               "tardis.orderbook=q.csv.gz\n";
+    }
+    CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+        std::string_view(e.what()).find("tardis.orderbook") != std::string_view::npos
+        && std::string_view(e.what()).find("badtype.ini") != std::string_view::npos,
+        configure_datasources(dir/"badtype.ini"));
+
+    // the retired bare key says what to use instead
+    {
+        std::ofstream ini(dir/"legacy.ini");
+        ini << "[data-source]\n"
+               "tardis=t.csv.gz\n";
+    }
+    CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+        std::string_view(e.what()).find("tardis.trades") != std::string_view::npos,
+        configure_datasources(dir/"legacy.ini"));
+
+    std::filesystem::remove_all(dir);
+}
+
 int main() {
     test_symbol_mapping_directions();
+    test_tardis_keys();
     std::cout << "All config datasource tests passed" << std::endl;
     return 0;
 }
