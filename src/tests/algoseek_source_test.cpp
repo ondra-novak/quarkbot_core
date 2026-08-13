@@ -1,6 +1,8 @@
 #include "quarkbot/algoseek/algoseek_spec.hpp"
 #include "check.h"
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -11,6 +13,7 @@ using namespace quarkbot;
 
 #include "quarkbot/algoseek/local_time_converter.hpp"
 #include "quarkbot/algoseek/algoseek_data_source.hpp"
+#include "quarkbot/backtest/config_datasource.hpp"
 #include "quarkbot/decimal.hpp"
 #include "quarkbot/stream/trade.hpp"
 #include "quarkbot/stream/auction.hpp"
@@ -512,6 +515,45 @@ static void test_real_files() {
     }
 }
 
+static void test_config_wiring() {
+    std::cout << "--- test_config_wiring" << std::endl;
+
+    auto dir = std::filesystem::temp_directory_path() / "algoseek_cfg_test";
+    std::filesystem::create_directories(dir);
+
+    // the data file sits next to the config, referenced by a relative path
+    write_gz((dir / "IBM.csv.gz").string(), std::string(ALGOSEEK_HEADER) +
+        "20230609,10:00:00.000000000,TRADE,IBM,47.60,100,NASDAQ,00000001\n"
+        "20230609,10:00:01.000000000,TRADE,IBM,47.61,200,ARCA,00000001\n"
+        "20230609,10:00:02.000000000,TRADE,IBM,47.62,300,NASDAQ,00000001\n");
+
+    {
+        std::ofstream ini(dir / "backtest.ini");
+        ini << "[data-source]\n"
+               "algoseek=IBM.csv.gz?exchange=NASDAQ&tzone=America/New_York\n";
+    }
+
+    auto ds = configure_datasources(dir / "backtest.ini");
+    BacktestEvent ev;
+    CHECK(ds(ev));
+    CHECK_EQUAL(ev.symbol, std::string("IBM"));
+    CHECK(ev.time == mk_utc("2023-06-09 14:00:00"));
+    CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("47.60"));
+    CHECK(ds(ev));
+    CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("47.62"));
+    CHECK(!ds(ev));
+
+    // a bad spec fails while the configuration is being read
+    {
+        std::ofstream ini(dir / "bad.ini");
+        ini << "[data-source]\n"
+               "algoseek=IBM.csv.gz?bogus=1\n";
+    }
+    CHECK_EXCEPTION(std::runtime_error, configure_datasources(dir / "bad.ini"));
+
+    std::filesystem::remove_all(dir);
+}
+
 int main() {
     test_spec_parsing();
     test_local_time_converter();
@@ -520,6 +562,7 @@ int main() {
     test_exchange_filter_and_symbol();
     test_row_errors();
     test_real_files();
+    test_config_wiring();
     std::cout << "All tests passed" << std::endl;
     return 0;
 }

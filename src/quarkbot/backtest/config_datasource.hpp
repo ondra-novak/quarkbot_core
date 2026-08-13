@@ -12,11 +12,28 @@ Top level section:
 
 include=file - can repeat for every include
 
-[data-source]    
+[data-source]
 quarkbot=file.gz     ;quarkbot replay format  - gzip + CSV
 tardis=file.gz       ;tardis trades and quotes gzip
 lseg=file.gz         ;lseg trades, quotes, auctions gzip
 trth=file.gz         ;trth trades, quotes, auctions gzip
+algoseek=file.csv.gz?exchange=NASDAQ&tzone=America/New_York&symbol=IBM.NASDAQ
+
+The algoseek key reads an Algoseek US equity "Trades Only" export and produces
+Trade and final Auction events. Its value is a file path with an optional query
+string; all three parameters are optional:
+
+  exchange - emit only rows of this venue, matched verbatim against the
+             Exchange column. Without it every venue is replayed, including
+             the off-exchange prints reported under FINRA.
+  tzone    - IANA name of the zone the file's wall clock timestamps are in.
+             Defaults to UTC; real exports are in America/New_York.
+  symbol   - symbol reported on events, instead of the Ticker column. Needed
+             when the same ticker is replayed from two venues, which would
+             otherwise collide on one instrument.
+
+Do not write a trailing comment after a value: only a line starting with ';'
+or '#' is treated as a comment, so it would become part of the value.
 
 [symbol-mapping]
 SYM1=>SYM2

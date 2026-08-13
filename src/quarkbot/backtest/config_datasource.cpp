@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "../algoseek/algoseek_data_source.hpp"
 #include "../tardis/tardis_data_source.hpp"
 #include "../trth/trth_event_source.hpp"
 
@@ -60,6 +61,7 @@ public:
                 if (row.key == "quarkbot") add_quarkbot(root/row.value);
                 else if (row.key == "tardis") add_tardis(root/row.value);
                 else if (row.key == "lseg" || row.key == "trth") add_trth(root/row.value);
+                else if (row.key == "algoseek") add_algoseek(root, row.value);
                 else throw std::runtime_error(std::format("Unknown key {} in config {}", row.key, fcan.string()));
             } else if (row.section == mapping_section_name) {
                 std::string_view from_symbol;
@@ -94,6 +96,12 @@ public:
     }
     void add_quarkbot(std::filesystem::path file) {
         sources.push_back(ReplayCSVDataSource(file));
+    }
+    ///the value carries a query string, so the path can only be joined after parsing
+    void add_algoseek(const std::filesystem::path &root, std::string_view value) {
+        auto spec = parse_algoseek_spec(value);
+        spec.file = root / spec.file;
+        sources.push_back(AlgoseekDataSource(std::move(spec)));
     }
 
 
