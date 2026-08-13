@@ -1,6 +1,7 @@
 #include "algoseek_data_source.hpp"
 
 #include "quarkbot/log.hpp"
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <format>
@@ -104,6 +105,18 @@ void AlgoseekDataSource::check_required_fields() const {
     check("Conditions", _row.conditions);
 }
 
+Decimal AlgoseekDataSource::parse_decimal(const std::string &value, std::string_view column) const {
+    try {
+        return Decimal::from_string(value);
+    } catch (...) {
+        //Decimal::from_string throws a bare const char*, so catch everything
+        row_error(std::format("column {} value '{}' is not a number", column, value));
+    }
+    //unreachable: row_error is [[noreturn]], but the compiler cannot see through
+    //the catch block to know that, so keep it happy about the return type
+    __builtin_unreachable();
+}
+
 std::uint32_t AlgoseekDataSource::parse_conditions() const {
     std::string_view s = _row.conditions;
     std::uint32_t value = 0;
@@ -118,6 +131,11 @@ std::uint32_t AlgoseekDataSource::parse_conditions() const {
 
 std::chrono::local_time<std::chrono::nanoseconds> AlgoseekDataSource::parse_local_time() const {
     auto number = [&](std::string_view s) {
+        //no field in this format is ever signed; reject a leading '-' or '+'
+        //outright rather than let std::from_chars accept it
+        if (s.empty() || !std::ranges::all_of(s, [](char c){ return c >= '0' && c <= '9'; })) {
+            row_error(std::format("'{}' is not a number", s));
+        }
         int v = 0;
         auto res = std::from_chars(s.data(), s.data() + s.size(), v);
         if (res.ec != std::errc{} || res.ptr != s.data() + s.size()) {
@@ -128,8 +146,16 @@ std::chrono::local_time<std::chrono::nanoseconds> AlgoseekDataSource::parse_loca
 
     std::string_view date = _row.date;
     if (date.size() != 8) row_error(std::format("Date '{}' is not YYYYMMDD", date));
+    int year = number(date.substr(0, 4));
+    //local_days{ymd}.time_since_epoch() is promoted to nanoseconds below, which
+    //only spans roughly 1678-2262; ymd.ok() alone would accept any year 0-9999
+    //and overflow into a garbage timestamp instead of failing loudly
+    if (year < 1678 || year > 2261) {
+        row_error(std::format("Date '{}' has a year outside the representable range "
+                "1678-2261", date));
+    }
     std::chrono::year_month_day ymd{
-        std::chrono::year{number(date.substr(0, 4))},
+        std::chrono::year{year},
         std::chrono::month{static_cast<unsigned>(number(date.substr(4, 2)))},
         std::chrono::day{static_cast<unsigned>(number(date.substr(6, 2)))}};
     if (!ymd.ok()) row_error(std::format("Date '{}' is not a valid date", date));
@@ -204,12 +230,12 @@ bool AlgoseekDataSource::operator()(BacktestEvent &ev) {
             continue;
         }
 
-        auto quantity = Decimal::from_string(_row.quantity);
+        auto quantity = parse_decimal(_row.quantity, "Quantity");
         if (quantity <= 0) {
             ++_counters.zero_qty;
             continue;
         }
-        auto price = Decimal::from_string(_row.price);
+        auto price = parse_decimal(_row.price, "Price");
         if (price <= 0) {
             ++_counters.zero_price;
             continue;

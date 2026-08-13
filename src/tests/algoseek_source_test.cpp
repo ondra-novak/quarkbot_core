@@ -165,6 +165,9 @@ static void test_auctions_and_skips() {
         "20230609,09:30:00.791483904,TRADE,BIPC,47.58,4000,NYSE,04000000\n"
         // ordinary trade
         "20230609,10:00:00.000000000,TRADE,BIPC,47.60,100,NYSE,00000001\n"
+        // zero price, a corrupt-export row the reference fixtures never
+        // exercise - dropped, same as zero quantity
+        "20230609,10:30:00.000000000,TRADE,BIPC,0,100,NYSE,00000001\n"
         // reopening print, bit 8 (0x100)
         "20230609,11:00:00.000000000,TRADE,BIPC,47.20,500,NYSE,00000100\n"
         // trade that a later row cancels; it is emitted and never taken back
@@ -182,6 +185,8 @@ static void test_auctions_and_skips() {
     {
         AlgoseekDataSource src(parse_algoseek_spec(path + "?tzone=America/New_York"));
         auto evs = drain(src);
+        // 10 data rows in, 5 dropped (official open, zero price, zero quantity,
+        // the cancellation row, the unexpected event type) leaves 5 events
         CHECK_EQUAL(evs.size(), std::size_t(5));
 
         // 1: opening auction
@@ -381,6 +386,58 @@ static void test_row_errors() {
         CHECK_EXCEPTION(std::runtime_error, src(ev));
     }
 
+    // a non-numeric Price: Decimal::from_string throws a bare `const char*`
+    // that must be caught and rethrown as a runtime_error naming the column,
+    // otherwise it terminates the process with no message at all
+    {
+        const std::string path = "/tmp/test_algoseek_badprice.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "20230609,10:00:00.000000000,TRADE,IBM,abc,100,NYSE,00000001\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+                std::string_view(e.what()).find("Price") != std::string_view::npos,
+                src(ev));
+    }
+
+    // a non-numeric Quantity, same reasoning as above
+    {
+        const std::string path = "/tmp/test_algoseek_badqty.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "20230609,10:00:00.000000000,TRADE,IBM,47.60,abc,NYSE,00000001\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+                std::string_view(e.what()).find("Quantity") != std::string_view::npos,
+                src(ev));
+    }
+
+    // a negative timestamp component: std::from_chars<int> accepts a leading
+    // '-', so without an explicit digit-only check this passes every
+    // structural check (18 characters, separators in place) and would
+    // silently shift the event an hour backwards instead of failing
+    {
+        const std::string path = "/tmp/test_algoseek_negtime.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "20230609,-1:00:00.000000000,TRADE,IBM,47.60,100,NYSE,00000001\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+
+    // an out-of-range year: year_month_day::ok() accepts any year 0-9999, but
+    // the nanosecond-resolution sys_time used downstream only spans roughly
+    // 1678-2262, so a wider year overflows into a garbage timestamp instead
+    // of failing (UBSan: signed integer overflow multiplying by 1e9)
+    {
+        const std::string path = "/tmp/test_algoseek_badyear.csv.gz";
+        write_gz(path, std::string(ALGOSEEK_HEADER) +
+                "99991231,10:00:00.000000000,TRADE,IBM,47.60,100,NYSE,00000001\n");
+        AlgoseekDataSource src(parse_algoseek_spec(path));
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
+
     // a decreasing timestamp would corrupt the merged timeline
     {
         const std::string path = "/tmp/test_algoseek_unordered.csv.gz";
@@ -496,8 +553,18 @@ static void test_real_files() {
         for (const auto &ev: evs) {
             if (!std::holds_alternative<Auction>(ev.data)) continue;
             const auto &a = std::get<Auction>(ev.data);
-            if (a.auction_type == AuctionType::opening) opening = &a;
-            if (a.auction_type == AuctionType::closing) closing = &a;
+            if (a.auction_type == AuctionType::opening) {
+                // self-contained: fails here if a second opening auction ever
+                // survives, rather than relying on the aggregate count check below
+                CHECK(opening == nullptr);
+                opening = &a;
+            }
+            if (a.auction_type == AuctionType::closing) {
+                // ditto for the four official-close re-broadcasts of the same
+                // print, which must all be filtered before this loop runs
+                CHECK(closing == nullptr);
+                closing = &a;
+            }
         }
         CHECK(opening != nullptr);
         CHECK(opening->price == Decimal::from_string("47.58"));

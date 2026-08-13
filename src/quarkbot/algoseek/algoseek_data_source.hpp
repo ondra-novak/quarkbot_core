@@ -123,6 +123,9 @@ protected:
     std::uint32_t parse_conditions() const;
     ///combine the Date and Timestamp columns into a local timestamp
     std::chrono::local_time<std::chrono::nanoseconds> parse_local_time() const;
+    ///parse a decimal column, wrapping Decimal::from_string's bare `throw "..."`
+    ///into a row_error naming the file, row and column
+    Decimal parse_decimal(const std::string &value, std::string_view column) const;
     ///log the skip counters
     void log_summary() const;
 };
