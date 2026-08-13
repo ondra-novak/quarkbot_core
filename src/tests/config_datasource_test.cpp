@@ -139,7 +139,8 @@ static void test_tardis_keys() {
                "tardis=t.csv.gz\n";
     }
     CHECK_EXCEPTION_EXPR(std::runtime_error, e,
-        std::string_view(e.what()).find("tardis.trades") != std::string_view::npos,
+        std::string_view(e.what()).find("tardis.trades") != std::string_view::npos
+        && std::string_view(e.what()).find("legacy.ini") != std::string_view::npos,
         configure_datasources(dir/"legacy.ini"));
 
     std::filesystem::remove_all(dir);

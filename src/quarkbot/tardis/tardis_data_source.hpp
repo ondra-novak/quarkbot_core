@@ -30,7 +30,8 @@ protected:
     ///throw naming every column require_column() did not find
     void check_columns() const;
     const std::filesystem::path &path() const {return _path;}
-    ///symbol of the current row as exchange:symbol, cached from the first row
+    ///symbol of the current row as exchange:symbol, cached from the first row;
+    ///throws if a later row's exchange/symbol differs from the first row's
     const std::string &row_symbol(std::string_view exchange, std::string_view symbol);
     ///throw a runtime_error naming the file and the row last read
     [[noreturn]] void row_error(std::string_view message) const;

@@ -84,8 +84,13 @@ const std::string &TardisCsvDataSource::row_symbol(
     if (_symbol.empty()) {
         _symbol.append(exchange).append(":").append(symbol);
     } else if (_symbol.size() != exchange.size() + 1 + symbol.size()
+            // the separator must land at the position fixed by the *first* row,
+            // not merely wherever this row's exchange.size() happens to point -
+            // otherwise a ':' embedded in a field can alias two different splits
+            // of the same characters (e.g. exchange="a",symbol="b:c" vs.
+            // exchange="a:b",symbol="c" both stringify to "a:b:c")
+            || exchange.size() != _symbol.find(':')
             || !_symbol.starts_with(exchange)
-            || _symbol[exchange.size()] != ':'
             || !_symbol.ends_with(symbol)) {
         row_error(std::format("symbol changed from {} to {}:{}", _symbol, exchange, symbol));
     }
@@ -106,7 +111,12 @@ bool TardisCsvDataSource::read_line_raw(std::string &out) {
             gzerror(reinterpret_cast<gzFile>(_gz), &errnum);
             // Z_OK or Z_STREAM_END both indicate clean EOF (behaviour varies by zlib version)
             if (errnum != Z_OK && errnum != Z_STREAM_END)
-                throw std::runtime_error("gz read error in TardisCsvDataSource::read_line");
+                // not routed through row_error: _line is only incremented on a
+                // successful read, so it still names the last row read *before*
+                // this failed attempt, not the row this error is "on" - say so
+                throw std::runtime_error(std::format(
+                    "Tardis source: gz read error in file {}, after row {}",
+                    _path.string(), _line));
             return !out.empty();
         }
         out += buf;
@@ -205,7 +215,7 @@ bool TardisTradesDataSource::operator()(BacktestEvent &ev) {
         trade.price = parse_decimal(cols[static_cast<std::size_t>(_col_price)], "price");
         trade.size  = parse_decimal(cols[static_cast<std::size_t>(_col_amount)], "amount");
         trade.time  = tp;
-        if (_col_side >= 0 && cols.size() > static_cast<std::size_t>(_col_side)) {
+        if (_col_side >= 0) {
             auto raw = cols[static_cast<std::size_t>(_col_side)];
             auto s = string_lookup<Side>(raw);
             if (!s) row_error(std::format("unknown side value: '{}'", raw));

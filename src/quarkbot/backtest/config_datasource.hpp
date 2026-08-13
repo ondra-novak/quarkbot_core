@@ -73,6 +73,13 @@ schema. Trades and quotes of one instrument need no pairing in the configuration
 tardis.trades=bitmex_trades_2020-04-01_XBTUSD.csv.gz
 tardis.quotes=bitmex_quotes_2020-04-01_XBTUSD.csv.gz
 
+Each tardis.trades/tardis.quotes file must already be sorted by local_timestamp
+and cover a single instrument: a row whose local_timestamp is lower than the
+previous row's, or whose exchange/symbol differs from the file's first row, is
+rejected with an error rather than accepted silently. Concatenating two daily
+exports, or two instruments, into one file will hit this - keep them as
+separate files (and separate tardis.trades=/tardis.quotes= lines) instead.
+
 Do not write a trailing comment after a value: only a line starting with ';'
 or '#' is treated as a comment, so it would become part of the value.
 

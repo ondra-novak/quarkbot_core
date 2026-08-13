@@ -312,6 +312,19 @@ static void test_ordering_and_identity() {
             std::string_view(e.what()).find("ETHUSD") != std::string_view::npos,
             src(ev));
     }
+    // a colon embedded in a field must not let a differently-split exchange:symbol
+    // alias the cached value: exchange="a",symbol="b:c" and exchange="a:b",symbol="c"
+    // both stringify to "a:b:c", so a naive prefix/suffix check would miss this
+    write_gz("/tmp/test_tardis_colonalias.csv.gz", std::string(head) +
+        "a,b:c,1585699202957000,1585699203957000,aaa,buy,6425.5,12\n"
+        "a:b,c,1585699203957000,1585699204957000,bbb,buy,140.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_colonalias.csv.gz");
+        BacktestEvent ev;
+        CHECK(src(ev));
+        CHECK_EQUAL(ev.symbol, std::string("a:b:c"));
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
+    }
 }
 
 static void test_movable() {
