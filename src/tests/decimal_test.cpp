@@ -124,7 +124,9 @@ static_assert(round(-0.00000082_dec) == 0_dec);
 
 static void test_from_string_errors() {
     // Decimal lives in the global namespace in this header (no `quarkbot::` here);
-    // a bare `throw "..."` is not caught by this handler, so this asserts the type
+    // from_string used to throw a bare `throw "..."`, which this handler would
+    // not have caught - CHECK_EXCEPTION's type check is kept to guard against
+    // that regression, now that from_string throws std::runtime_error
     CHECK_EXCEPTION(std::runtime_error, Decimal::from_string("12.5x"));
     CHECK_EXCEPTION(std::runtime_error, Decimal::from_string("not a number"));
     // valid literals must keep working, including at compile time

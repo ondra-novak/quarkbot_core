@@ -109,7 +109,8 @@ Decimal AlgoseekDataSource::parse_decimal(const std::string &value, std::string_
     try {
         return Decimal::from_string(value);
     } catch (...) {
-        //Decimal::from_string throws a bare const char*, so catch everything
+        //Decimal::from_string now throws std::runtime_error on a bad value;
+        //catch-all is broader than strictly necessary but not wrong, so it stays
         row_error(std::format("column {} value '{}' is not a number", column, value));
     }
     //unreachable: row_error is [[noreturn]], but the compiler cannot see through

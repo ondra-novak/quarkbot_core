@@ -325,9 +325,10 @@ static void test_row_errors() {
         CHECK_EXCEPTION(std::runtime_error, src(ev));
     }
 
-    // a non-numeric Price: Decimal::from_string throws a bare `const char*`
-    // that must be caught and rethrown as a runtime_error naming the column,
-    // otherwise it terminates the process with no message at all
+    // a non-numeric Price: Decimal::from_string throws std::runtime_error with
+    // no context, so it must be caught and rethrown as a runtime_error naming
+    // the column, otherwise the failure carries no indication of which value
+    // or column was bad
     {
         const std::string path = "/tmp/test_algoseek_badprice.csv.gz";
         write_gz(path, std::string(ALGOSEEK_HEADER) +
