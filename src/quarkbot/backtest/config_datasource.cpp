@@ -61,7 +61,7 @@ public:
                 if (row.key == "quarkbot") add_quarkbot(root/row.value);
                 else if (row.key == "tardis") add_tardis(root/row.value);
                 else if (row.key == "lseg" || row.key == "trth") add_trth(root/row.value);
-                else if (row.key == "algoseek") add_algoseek(root, row.value);
+                else if (row.key == "algoseek") add_algoseek(fcan, row.value);
                 else throw std::runtime_error(std::format("Unknown key {} in config {}", row.key, fcan.string()));
             } else if (row.section == mapping_section_name) {
                 std::string_view from_symbol;
@@ -98,9 +98,14 @@ public:
         sources.push_back(ReplayCSVDataSource(file));
     }
     ///the value carries a query string, so the path can only be joined after parsing
-    void add_algoseek(const std::filesystem::path &root, std::string_view value) {
-        auto spec = parse_algoseek_spec(value);
-        spec.file = root / spec.file;
+    void add_algoseek(const std::filesystem::path &config_file, std::string_view value) {
+        AlgoseekSpec spec;
+        try {
+            spec = parse_algoseek_spec(value);
+        } catch (const std::exception &e) {
+            throw std::runtime_error(std::format("Algoseek source in config {}: {}", config_file.string(), e.what()));
+        }
+        spec.file = config_file.parent_path() / spec.file;
         sources.push_back(AlgoseekDataSource(std::move(spec)));
     }
 

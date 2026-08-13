@@ -543,13 +543,16 @@ static void test_config_wiring() {
     CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("47.62"));
     CHECK(!ds(ev));
 
-    // a bad spec fails while the configuration is being read
+    // a bad spec fails while the configuration is being read, and the error
+    // names the config file so the failure can be traced back to it
     {
         std::ofstream ini(dir / "bad.ini");
         ini << "[data-source]\n"
                "algoseek=IBM.csv.gz?bogus=1\n";
     }
-    CHECK_EXCEPTION(std::runtime_error, configure_datasources(dir / "bad.ini"));
+    CHECK_EXCEPTION_EXPR(std::runtime_error, e,
+            std::string_view(e.what()).find("bad.ini") != std::string_view::npos,
+            configure_datasources(dir / "bad.ini"));
 
     std::filesystem::remove_all(dir);
 }
