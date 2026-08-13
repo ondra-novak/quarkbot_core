@@ -17,7 +17,8 @@ it must not be written into a real configuration file, see the note below):
 
 [data-source]
 quarkbot=file.gz     ;quarkbot replay format  - gzip + CSV
-tardis=file.gz       ;tardis trades and quotes gzip
+tardis.trades=file.csv.gz  ;tardis.dev trades export - gzip CSV
+tardis.quotes=file.csv.gz  ;tardis.dev quotes or book_ticker export - gzip CSV
 lseg=file.gz         ;lseg trades, quotes, auctions gzip
 trth=file.gz         ;trth trades, quotes, auctions gzip
 algoseek=file.csv.gz ;algoseek US equity "Trades Only" export - gzip CSV
@@ -55,6 +56,22 @@ The option block is per configuration file and is not inherited by or from
 included files. To replay the same ticker from two venues, or two tickers with
 different settings, put each group in its own file and pull them in with
 include= - each included file then carries its own option block.
+
+The tardis.trades and tardis.quotes keys read tardis.dev CSV exports. Both may
+repeat and both are independent of order. There are no tardis.* option keys: the
+symbol is taken from the file's own exchange and symbol columns as
+`exchange:symbol` (rename it in [symbol-mapping] if a strategy needs another
+name), the timestamps are microseconds by the vendor's definition, and the event
+time is always the local_timestamp column - the instant the data arrived, which
+is the earliest a strategy could have acted on it.
+
+tardis.quotes also accepts a book_ticker export; the two data types share one
+schema. Trades and quotes of one instrument need no pairing in the configuration
+- both report the same symbol, so they merge into one instrument on their own:
+
+[data-source]
+tardis.trades=bitmex_trades_2020-04-01_XBTUSD.csv.gz
+tardis.quotes=bitmex_quotes_2020-04-01_XBTUSD.csv.gz
 
 Do not write a trailing comment after a value: only a line starting with ';'
 or '#' is treated as a comment, so it would become part of the value.

@@ -24,7 +24,7 @@ ctest --test-dir build
 ./build/tests/test_hub
 
 # Enable optional components (off by default) and rebuild
-cmake -DQUARKBOT_NETWORK=ON -DQUARKBOT_LEVELDB=ON -DQUARKBOT_TARDIS=ON -DQUARKBOT_TRTH=ON ..
+cmake -DQUARKBOT_NETWORK=ON -DQUARKBOT_LEVELDB=ON ..
 
 # Build with clang (edit default_build_profile.conf or pass directly)
 cmake -DCMAKE_CXX_COMPILER=clang++ ..
@@ -32,7 +32,7 @@ cmake -DCMAKE_CXX_COMPILER=clang++ ..
 
 Test binaries are in `build/tests/`, all other executables (strategy backtests) in `build/bin/`, libraries in `build/lib/`.
 
-`QUARKBOT_TESTS` is ON by default when the project is built top-level, and it force-enables the network/tardis/trth components so the full test suite can compile. The other component options (`QUARKBOT_NETWORK`, `QUARKBOT_LEVELDB`, `QUARKBOT_TARDIS`, `QUARKBOT_TRTH`) are OFF by default because they pull in external deps (openssl, leveldb, zlib).
+`QUARKBOT_TESTS` is ON by default when the project is built top-level, and it force-enables the network component so the full test suite can compile. `QUARKBOT_NETWORK` and `QUARKBOT_LEVELDB` are OFF by default because they pull in external deps (openssl, leveldb). The tardis, trth and algoseek components are always built; zlib is required unconditionally at the top level.
 
 To add a compiler flag override, edit `default_build_profile.conf` (one `-DVariable=Value` per line).
 
@@ -95,8 +95,9 @@ Compiled `.cpp` sources, organized into component subdirectories (each its own `
 - **`common/`** — cross-cutting runtime: `logger`, `MemStorage` (in `mem_storage.hpp`), `order_trigger`, `somodule` (shared-object plugin loader), `thread_executor` (`ThreadExecutor`).
 - **`streaming/`** (header-only) — `LockFreePublisher<T>` (ring-buffer publisher), `QueueEventStream` (buffered subscriber), publisher managers, orderbook state, bar-building lambdas, stream mapping.
 - **`network/`** (opt: `QUARKBOT_NETWORK`) — SSL, WebSocket, REST/HTTP client, URL/base64/string utils.
-- **`tardis/`** (opt: `QUARKBOT_TARDIS`) — `TardisDataSource` historical importer.
-- **`trth/`** (opt: `QUARKBOT_TRTH`) — Refinitiv TRTH event/raw source importers.
+- **`tardis/`** — `TardisTradesDataSource` / `TardisQuotesDataSource`, tardis.dev CSV export importers, wired to the `tardis.trades` / `tardis.quotes` config keys.
+- **`trth/`** — Refinitiv TRTH event/raw source importers.
+- **`algoseek/`** — `AlgoseekDataSource`, Algoseek US equity "Trades Only" importer, wired to the `algoseek` config key.
 - **`leveldb/`** (opt: `QUARKBOT_LEVELDB`) — `LevelDBStorage` key-value backend.
 
 ### Strategies and Executables
