@@ -50,10 +50,12 @@ static void test_trades() {
     CHECK(std::get<Trade>(e1.data).price == Decimal::from_string("6425.5"));
     CHECK(std::get<Trade>(e1.data).size == Decimal::from_string("12"));
     CHECK_EQUAL(e1.symbol, std::string("bitmex:XBTUSD"));
+    CHECK(std::get<Trade>(e1.data).side == Side::buy);
 
     BacktestEvent e2;
     CHECK(src(e2));
     CHECK(e2.time == mk_utc("2020-04-01 00:00:04.957000"));
+    CHECK(std::get<Trade>(e2.data).side == Side::sell);
     BacktestEvent e3;
     CHECK(!src(e3));
 }
@@ -115,6 +117,7 @@ static void test_real_exports() {
         CHECK(ev.time == mk_utc("2020-04-01 00:00:03.089980"));
         CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("6425.5"));
         CHECK_EQUAL(ev.symbol, std::string("bitmex:XBTUSD"));
+        CHECK(std::get<Trade>(ev.data).side == Side::buy);   // both boundary rows are buys
         std::size_t n = 1;
         while (src(ev)) ++n;
         CHECK_EQUAL(n, std::size_t(2000));
@@ -122,6 +125,7 @@ static void test_real_exports() {
         CHECK(std::get<Trade>(ev.data).price == Decimal::from_string("6428.5"));
         CHECK(std::get<Trade>(ev.data).size == Decimal::from_string("2000"));
         CHECK_EQUAL(ev.symbol, std::string("bitmex:XBTUSD"));
+        CHECK(std::get<Trade>(ev.data).side == Side::buy);   // both boundary rows are buys
     }
     // huobi quotes, 2000 rows
     {
@@ -160,6 +164,18 @@ static void test_real_exports() {
     }
 }
 
+///a trades file with no side column is valid; side stays undetermined
+static void test_side_optional() {
+    using namespace quarkbot;
+    write_gz("/tmp/test_tardis_noside.csv.gz",
+        "exchange,symbol,timestamp,local_timestamp,price,amount\n"
+        "bitmex,XBTUSD,1585699202957000,1585699203957000,6425.5,12\n");
+    TardisTradesDataSource src("/tmp/test_tardis_noside.csv.gz");
+    BacktestEvent ev;
+    CHECK(src(ev));
+    CHECK(std::get<Trade>(ev.data).side == Side::undetermined);
+}
+
 static void test_movable() {
     using namespace quarkbot;
     static_assert(std::is_move_constructible_v<TardisTradesDataSource>);
@@ -182,6 +198,7 @@ int main() {
     test_construction_errors();
     test_header_only();
     test_real_exports();
+    test_side_optional();
 
     std::cout << "All tardis source tests passed" << std::endl;
 }

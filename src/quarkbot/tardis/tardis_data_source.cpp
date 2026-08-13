@@ -127,6 +127,7 @@ TardisTradesDataSource::TardisTradesDataSource(std::filesystem::path p)
     _col_price = require_column("price");
     _col_amount = require_column("amount");
     check_columns();
+    _col_side = optional_column("side");
     _min_cols = static_cast<std::size_t>(
         std::max({_col_exchange, _col_symbol, _col_local_timestamp, _col_price, _col_amount})) + 1;
 }
@@ -164,6 +165,10 @@ bool TardisTradesDataSource::operator()(BacktestEvent &ev) {
         trade.price = price;
         trade.size  = amount;
         trade.time  = tp;
+        if (_col_side >= 0 && cols.size() > static_cast<std::size_t>(_col_side)) {
+            auto s = string_lookup<Side>(cols[static_cast<std::size_t>(_col_side)]);
+            trade.side = s.value_or(Side::undetermined);
+        }
         ev.symbol = row_symbol(cols[static_cast<std::size_t>(_col_exchange)],
                                cols[static_cast<std::size_t>(_col_symbol)]);
         ev.time = tp;

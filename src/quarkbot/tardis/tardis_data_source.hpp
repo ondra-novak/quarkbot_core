@@ -44,7 +44,7 @@ public:
     explicit TardisTradesDataSource(std::filesystem::path csv_gz_path);
     bool operator()(BacktestEvent &ev);
 private:
-    int _col_exchange, _col_symbol, _col_local_timestamp, _col_price, _col_amount;
+    int _col_exchange, _col_symbol, _col_local_timestamp, _col_price, _col_amount, _col_side;
     std::size_t _min_cols;
 };
 
