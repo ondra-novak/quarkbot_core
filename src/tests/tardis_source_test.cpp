@@ -182,14 +182,18 @@ static void test_row_errors() {
         "exchange,symbol,timestamp,local_timestamp,id,side,price,amount\n";
 
     // a non-numeric price names the file, the row and the column
-    write_gz("/tmp/test_tardis_badprice.csv.gz", std::string(head) +
+    // (the temp file is named so that "price" cannot appear via the path,
+    // and the message check requires "column price" together with the raw
+    // bad value, neither of which the path could supply)
+    write_gz("/tmp/test_tardis_badnum.csv.gz", std::string(head) +
         "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,buy,abc,12\n");
     {
-        TardisTradesDataSource src("/tmp/test_tardis_badprice.csv.gz");
+        TardisTradesDataSource src("/tmp/test_tardis_badnum.csv.gz");
         BacktestEvent ev;
         CHECK_EXCEPTION_EXPR(std::runtime_error, e,
-            std::string_view(e.what()).find("price") != std::string_view::npos
-            && std::string_view(e.what()).find("badprice") != std::string_view::npos,
+            std::string_view(e.what()).find("column price") != std::string_view::npos
+            && std::string_view(e.what()).find("'abc'") != std::string_view::npos
+            && std::string_view(e.what()).find("test_tardis_badnum.csv.gz") != std::string_view::npos,
             src(ev));
     }
     // a short row
@@ -256,6 +260,18 @@ static void test_row_errors() {
         CHECK_EXCEPTION_EXPR(std::runtime_error, e,
             std::string_view(e.what()).find("row 3") != std::string_view::npos,
             src(ev));
+    }
+    // side is present but placed LAST in the header, so _col_side is the
+    // highest mapped index; a row that stops one column short of it (present
+    // in every other required column) must still be a truncated row, not a
+    // silent Side::undetermined
+    write_gz("/tmp/test_tardis_sideshort.csv.gz",
+        "exchange,symbol,timestamp,local_timestamp,id,price,amount,side\n"
+        "bitmex,XBTUSD,1585699202957000,1585699203957000,aaa,6425.5,12\n");
+    {
+        TardisTradesDataSource src("/tmp/test_tardis_sideshort.csv.gz");
+        BacktestEvent ev;
+        CHECK_EXCEPTION(std::runtime_error, src(ev));
     }
 }
 

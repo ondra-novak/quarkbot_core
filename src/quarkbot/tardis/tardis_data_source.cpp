@@ -157,8 +157,11 @@ TardisTradesDataSource::TardisTradesDataSource(std::filesystem::path p)
     _col_amount = require_column("amount");
     check_columns();
     _col_side = optional_column("side");
-    _min_cols = static_cast<std::size_t>(
-        std::max({_col_exchange, _col_symbol, _col_local_timestamp, _col_price, _col_amount})) + 1;
+    int max_col = std::max({_col_exchange, _col_symbol, _col_local_timestamp, _col_price, _col_amount});
+    // side is optional: fold it into _min_cols only when the column is present,
+    // so a row too short to reach it is a truncated row, not a silent undetermined
+    if (_col_side >= 0) max_col = std::max(max_col, _col_side);
+    _min_cols = static_cast<std::size_t>(max_col) + 1;
 }
 
 TardisQuotesDataSource::TardisQuotesDataSource(std::filesystem::path p)
