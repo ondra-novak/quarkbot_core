@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 
 namespace quarkbot {
 
@@ -38,7 +39,11 @@ public:
         auto secs = std::chrono::floor<std::chrono::seconds>(
                 std::chrono::sys_time<std::chrono::nanoseconds>(ns));
         if (secs < _begin || secs >= _end) {
-            auto info = _tz->get_info(lt);
+            auto tz = _tz;
+            if (!tz) {
+                tz = std::chrono::locate_zone("UTC");
+            }
+            auto info = tz->get_info(lt);
             _offset = info.first.offset;
             _begin = info.first.begin;
             _end = info.first.end;
@@ -55,5 +60,7 @@ protected:
     std::chrono::sys_seconds _begin{std::chrono::seconds::max()};
     std::chrono::sys_seconds _end{std::chrono::seconds::min()};
 };
+
+
 
 }

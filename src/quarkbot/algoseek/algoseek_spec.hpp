@@ -12,11 +12,11 @@ struct AlgoseekSpec {
     ///path to the gzipped CSV file; relative paths must be resolved by the caller
     std::filesystem::path file;
     ///exchange filter matched verbatim against the Exchange column, empty means no filtering
-    std::string exchange;
+    std::string exchange = {};
     ///time zone of the file's wall clock timestamps
     const std::chrono::time_zone *tz = nullptr;
     ///symbol reported on emitted events, empty means use the Ticker column
-    std::string symbol;
+    std::string symbol = {};
 };
 
 ///Parse a data source specification
@@ -31,6 +31,6 @@ struct AlgoseekSpec {
     @exception std::runtime_error empty path, malformed parameter, unknown
         parameter key, or unknown time zone name
 */
-AlgoseekSpec parse_algoseek_spec(std::string_view spec);
+//AlgoseekSpec parse_algoseek_spec(std::string_view spec);
 
 }

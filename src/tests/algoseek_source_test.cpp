@@ -1,6 +1,8 @@
 #include "quarkbot/algoseek/algoseek_spec.hpp"
 #include "check.h"
 #include <algorithm>
+#include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -11,7 +13,7 @@
 
 using namespace quarkbot;
 
-#include "quarkbot/algoseek/local_time_converter.hpp"
+#include "quarkbot/utils/local_time_converter.hpp"
 #include "quarkbot/algoseek/algoseek_data_source.hpp"
 #include "quarkbot/backtest/config_datasource.hpp"
 #include "quarkbot/decimal.hpp"
@@ -108,8 +110,8 @@ static void test_trades() {
         "20230609,04:00:00.010833553,TRADE,IBM,242.54,6,EDGX,80002000\n"
         "20230609,09:30:01.500000000,TRADE NB,IBM,243.10,250,NASDAQ,20002020\n");
 
-    auto spec = parse_algoseek_spec(path + "?tzone=America/New_York");
-    AlgoseekDataSource src(std::move(spec));
+//    auto spec = parse_algoseek_spec(path + "?tzone=America/New_York");
+    AlgoseekDataSource src({path,{},std::chrono::locate_zone("America/New_York")});
 
     BacktestEvent e1;
     CHECK(src(e1));
@@ -138,8 +140,7 @@ static void test_trades() {
 
     // usable as a BacktestDataSource
     {
-        BacktestDataSource ds = AlgoseekDataSource(
-                parse_algoseek_spec(path + "?tzone=America/New_York"));
+        BacktestDataSource ds = AlgoseekDataSource({path, {}, std::chrono::locate_zone("America/New_York")});
         BacktestEvent ev;
         CHECK(ds(ev));
         CHECK(std::holds_alternative<Trade>(ev.data));
@@ -183,7 +184,7 @@ static void test_auctions_and_skips() {
         "20230609,16:31:00.000000000,QUOTE BID,BIPC,47.70,42,NYSE,00000001\n");
 
     {
-        AlgoseekDataSource src(parse_algoseek_spec(path + "?tzone=America/New_York"));
+        AlgoseekDataSource src({path,{},std::chrono::locate_zone("America/New_York")});
         auto evs = drain(src);
         // 10 data rows in, 5 dropped (official open, zero price, zero quantity,
         // the cancellation row, the unexpected event type) leaves 5 events
@@ -238,13 +239,13 @@ static void test_exchange_filter_and_symbol() {
 
     // no filter: every venue passes through
     {
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         CHECK_EQUAL(drain(src).size(), std::size_t(4));
     }
 
     // filter keeps one venue only
     {
-        AlgoseekDataSource src(parse_algoseek_spec(path + "?exchange=NASDAQ"));
+        AlgoseekDataSource src({path,"NASDAQ"});
         auto evs = drain(src);
         CHECK_EQUAL(evs.size(), std::size_t(2));
         CHECK(std::get<Trade>(evs[0].data).price == Decimal::from_string("47.60"));
@@ -254,7 +255,7 @@ static void test_exchange_filter_and_symbol() {
 
     // symbol override replaces the Ticker column
     {
-        AlgoseekDataSource src(parse_algoseek_spec(path + "?exchange=ARCA&symbol=IBM.ARCA"));
+        AlgoseekDataSource src({path ,"ARCA",{},"IBM.ARCA"});
         auto evs = drain(src);
         CHECK_EQUAL(evs.size(), std::size_t(1));
         CHECK_EQUAL(evs[0].symbol, std::string("IBM.ARCA"));
@@ -262,70 +263,9 @@ static void test_exchange_filter_and_symbol() {
 
     // an unmatched exchange yields nothing rather than an error
     {
-        AlgoseekDataSource src(parse_algoseek_spec(path + "?exchange=NASDQ"));
+        AlgoseekDataSource src({path,"NASDQ"});
         CHECK_EQUAL(drain(src).size(), std::size_t(0));
     }
-}
-
-static void test_spec_parsing() {
-    std::cout << "--- test_spec_parsing" << std::endl;
-
-    // bare path: no exchange filter, UTC, no symbol override
-    {
-        auto s = parse_algoseek_spec("IBM.csv.gz");
-        CHECK_EQUAL(s.file.string(), std::string("IBM.csv.gz"));
-        CHECK(s.exchange.empty());
-        CHECK(s.symbol.empty());
-        CHECK(s.tz != nullptr);
-        // "UTC" is a link to the canonical zone "Etc/UTC" in the IANA tzdata
-        // backward-compatibility table, so locate_zone("UTC")->name() reports
-        // "Etc/UTC" on every standards-conformant implementation. Compare by
-        // identity against the same lookup instead of asserting a name string
-        // that libstdc++ (and any implementation resolving tzdata links the
-        // same way) can never produce.
-        CHECK(s.tz == std::chrono::locate_zone("UTC"));
-    }
-
-    // all parameters
-    {
-        auto s = parse_algoseek_spec(
-            "data/IBM.csv.gz?exchange=NASDAQ&tzone=America/New_York&symbol=IBM.NASDAQ");
-        CHECK_EQUAL(s.file.string(), std::string("data/IBM.csv.gz"));
-        CHECK_EQUAL(s.exchange, std::string("NASDAQ"));
-        CHECK_EQUAL(s.symbol, std::string("IBM.NASDAQ"));
-        CHECK_EQUAL(std::string(s.tz->name()), std::string("America/New_York"));
-    }
-
-    // parameter order does not matter, exchange values may contain a space
-    {
-        auto s = parse_algoseek_spec("IBM.csv.gz?tzone=America/New_York&exchange=BATS Y");
-        CHECK_EQUAL(s.exchange, std::string("BATS Y"));
-        CHECK_EQUAL(std::string(s.tz->name()), std::string("America/New_York"));
-    }
-
-    // empty query after '?' behaves like a bare path
-    {
-        auto s = parse_algoseek_spec("IBM.csv.gz?");
-        CHECK(s.exchange.empty());
-        // see identity-comparison note above regarding "UTC" being a tzdata link
-        CHECK(s.tz == std::chrono::locate_zone("UTC"));
-    }
-
-    // trailing '&' is tolerated
-    {
-        auto s = parse_algoseek_spec("IBM.csv.gz?exchange=NYSE&");
-        CHECK_EQUAL(s.exchange, std::string("NYSE"));
-    }
-
-    CHECK_EXCEPTION(std::runtime_error, parse_algoseek_spec("IBM.csv.gz?bogus=1"));
-    CHECK_EXCEPTION(std::runtime_error, parse_algoseek_spec("IBM.csv.gz?exchange"));
-    CHECK_EXCEPTION(std::runtime_error, parse_algoseek_spec("IBM.csv.gz?tzone=Mars/Olympus"));
-    CHECK_EXCEPTION(std::runtime_error, parse_algoseek_spec("?exchange=NYSE"));
-
-    // the error message names the offending key
-    CHECK_EXCEPTION_EXPR(std::runtime_error, e,
-            std::string_view(e.what()).find("bogus") != std::string_view::npos,
-            parse_algoseek_spec("IBM.csv.gz?bogus=1"));
 }
 
 static void test_row_errors() {
@@ -338,7 +278,7 @@ static void test_row_errors() {
                        "20230609,10:00:00.000000000,TRADE,IBM,47.60,100,NYSE\n");
         CHECK_EXCEPTION_EXPR(std::runtime_error, e,
                 std::string_view(e.what()).find("Conditions") != std::string_view::npos,
-                AlgoseekDataSource src(parse_algoseek_spec(path)));
+                AlgoseekDataSource src({path}));
     }
 
     // nine fields: a Price rewritten with a comma decimal separator shifts the
@@ -347,7 +287,7 @@ static void test_row_errors() {
         const std::string path = "/tmp/test_algoseek_shifted.csv.gz";
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "20230609,10:00:00.000000000,TRADE,IBM,242,54,6,EDGX,80002000\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK_EXCEPTION_EXPR(std::runtime_error, e,
                 std::string_view(e.what()).find("Conditions") != std::string_view::npos,
@@ -359,7 +299,7 @@ static void test_row_errors() {
         const std::string path = "/tmp/test_algoseek_badcond.csv.gz";
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "20230609,10:00:00.000000000,TRADE,IBM,47.60,100,NYSE,zzzzzzzz\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK_EXCEPTION(std::runtime_error, src(ev));
     }
@@ -369,7 +309,7 @@ static void test_row_errors() {
         const std::string path = "/tmp/test_algoseek_empty.csv.gz";
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "20230609,10:00:00.000000000,TRADE,IBM,,100,NYSE,00000001\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK_EXCEPTION_EXPR(std::runtime_error, e,
                 std::string_view(e.what()).find("Price") != std::string_view::npos,
@@ -381,7 +321,7 @@ static void test_row_errors() {
         const std::string path = "/tmp/test_algoseek_badtime.csv.gz";
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "20230609,10:00:00,TRADE,IBM,47.60,100,NYSE,00000001\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK_EXCEPTION(std::runtime_error, src(ev));
     }
@@ -393,7 +333,7 @@ static void test_row_errors() {
         const std::string path = "/tmp/test_algoseek_badprice.csv.gz";
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "20230609,10:00:00.000000000,TRADE,IBM,abc,100,NYSE,00000001\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK_EXCEPTION_EXPR(std::runtime_error, e,
                 std::string_view(e.what()).find("Price") != std::string_view::npos,
@@ -405,7 +345,7 @@ static void test_row_errors() {
         const std::string path = "/tmp/test_algoseek_badqty.csv.gz";
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "20230609,10:00:00.000000000,TRADE,IBM,47.60,abc,NYSE,00000001\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK_EXCEPTION_EXPR(std::runtime_error, e,
                 std::string_view(e.what()).find("Quantity") != std::string_view::npos,
@@ -420,7 +360,7 @@ static void test_row_errors() {
         const std::string path = "/tmp/test_algoseek_negtime.csv.gz";
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "20230609,-1:00:00.000000000,TRADE,IBM,47.60,100,NYSE,00000001\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK_EXCEPTION(std::runtime_error, src(ev));
     }
@@ -433,7 +373,7 @@ static void test_row_errors() {
         const std::string path = "/tmp/test_algoseek_badyear.csv.gz";
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "99991231,10:00:00.000000000,TRADE,IBM,47.60,100,NYSE,00000001\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK_EXCEPTION(std::runtime_error, src(ev));
     }
@@ -444,7 +384,7 @@ static void test_row_errors() {
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "20230609,10:00:01.000000000,TRADE,IBM,47.60,100,NYSE,00000001\n"
                 "20230609,10:00:00.000000000,TRADE,IBM,47.61,100,NYSE,00000001\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK(src(ev));
         CHECK_EXCEPTION(std::runtime_error, src(ev));
@@ -456,7 +396,7 @@ static void test_row_errors() {
         write_gz(path, std::string(ALGOSEEK_HEADER) +
                 "20230609,10:00:00.000000000,TRADE,IBM,47.60,100,NYSE,00000001\n"
                 "20230609,10:00:01.000000000,TRADE,MSFT,47.61,100,NYSE,00000001\n");
-        AlgoseekDataSource src(parse_algoseek_spec(path));
+        AlgoseekDataSource src({path});
         BacktestEvent ev;
         CHECK(src(ev));
         CHECK_EXCEPTION_EXPR(std::runtime_error, e,
@@ -466,7 +406,7 @@ static void test_row_errors() {
 
     // a nonexistent file fails when the source is constructed
     CHECK_EXCEPTION(std::runtime_error,
-            AlgoseekDataSource src(parse_algoseek_spec("/tmp/does_not_exist_algoseek.csv.gz")));
+            AlgoseekDataSource src({"/tmp/does_not_exist_algoseek.csv.gz"}));
 }
 
 ///count emitted events by kind
@@ -478,8 +418,8 @@ struct EventCounts {
     std::size_t unscheduled = 0;
 };
 
-static EventCounts count_events(const std::string &spec) {
-    AlgoseekDataSource src(parse_algoseek_spec(spec));
+static EventCounts count_events(const AlgoseekSpec &spec) {
+    AlgoseekDataSource src(spec);
     EventCounts c;
     for (const auto &ev: drain(src)) {
         ++c.total;
@@ -500,15 +440,16 @@ static EventCounts count_events(const std::string &spec) {
 static void test_real_files() {
     std::cout << "--- test_real_files" << std::endl;
 
-    const std::string dhil = std::string(TEST_DATA_PATH) + "/20240418_NASDAQ_DHIL.csv.gz";
-    const std::string bipc = std::string(TEST_DATA_PATH) + "/20230609_BIPC.csv.gz";
+    std::filesystem::path dhil = std::filesystem::path(TEST_DATA_PATH)/"20240418_NASDAQ_DHIL.csv.gz";
+    std::filesystem::path bipc = std::filesystem::path(TEST_DATA_PATH) /"20230609_BIPC.csv.gz";
     //the same parameter as the only one, and appended to another
     const std::string tz_only = "?tzone=America/New_York";
     const std::string tz_more = "&tzone=America/New_York";
+    auto tz = std::chrono::locate_zone("America/New_York");
 
     // DHIL, 594 data rows: 588 trades + 2 auctions emitted, 4 official prints dropped
     {
-        auto c = count_events(dhil + tz_only);
+        auto c = count_events({dhil,{},tz});
         CHECK_EQUAL(c.total, std::size_t(590));
         CHECK_EQUAL(c.trades, std::size_t(588));
         CHECK_EQUAL(c.opening, std::size_t(1));
@@ -517,7 +458,7 @@ static void test_real_files() {
     }
     // restricted to NASDAQ: 321 rows belong to other venues
     {
-        auto c = count_events(dhil + "?exchange=NASDAQ" + tz_more);
+        auto c = count_events({dhil,"NASDAQ",tz});
         CHECK_EQUAL(c.total, std::size_t(271));
         CHECK_EQUAL(c.trades, std::size_t(269));
         CHECK_EQUAL(c.opening, std::size_t(1));
@@ -526,7 +467,7 @@ static void test_real_files() {
 
     // BIPC, 5627 data rows: 9 official prints and 3 zero quantity rows dropped
     {
-        auto c = count_events(bipc + tz_only);
+        auto c = count_events({bipc,{},tz});
         CHECK_EQUAL(c.total, std::size_t(5615));
         CHECK_EQUAL(c.trades, std::size_t(5613));
         CHECK_EQUAL(c.opening, std::size_t(1));
@@ -535,7 +476,7 @@ static void test_real_files() {
     // restricted to NYSE: 4737 rows belong to other venues, 5 official prints
     // and the 3 zero quantity rows remain on NYSE and are dropped
     {
-        auto c = count_events(bipc + "?exchange=NYSE" + tz_more);
+        auto c = count_events({bipc,"NYSE",tz});
         CHECK_EQUAL(c.total, std::size_t(882));
         CHECK_EQUAL(c.trades, std::size_t(880));
         CHECK_EQUAL(c.opening, std::size_t(1));
@@ -546,7 +487,7 @@ static void test_real_files() {
     // The closing print 47.92 x 23455 appears four more times in this file as an
     // official close, the last at 19:00; exactly one closing auction must survive.
     {
-        AlgoseekDataSource src(parse_algoseek_spec(bipc + "?exchange=NYSE" + tz_more));
+        AlgoseekDataSource src({bipc,"NYSE",tz});
         const Auction *opening = nullptr;
         const Auction *closing = nullptr;
         auto evs = drain(src);
@@ -597,7 +538,9 @@ static void test_config_wiring() {
     {
         std::ofstream ini(dir / "backtest.ini");
         ini << "[data-source]\n"
-               "algoseek=IBM.csv.gz?exchange=NASDAQ&tzone=America/New_York\n";
+               "algoseek.exchange=NASDAQ\n"
+               "algoseek=IBM.csv.gz\n"
+               "algoseek.time_zone=America/New_York\n";
     }
 
     auto ds = configure_datasources(dir / "backtest.ini");
@@ -615,7 +558,8 @@ static void test_config_wiring() {
     {
         std::ofstream ini(dir / "bad.ini");
         ini << "[data-source]\n"
-               "algoseek=IBM.csv.gz?bogus=1\n";
+               "algoseek.invalid=1\n"
+               "algoseek=IBM.csv.gz\n";
     }
     CHECK_EXCEPTION_EXPR(std::runtime_error, e,
             std::string_view(e.what()).find("bad.ini") != std::string_view::npos,
@@ -625,7 +569,6 @@ static void test_config_wiring() {
 }
 
 int main() {
-    test_spec_parsing();
     test_local_time_converter();
     test_trades();
     test_auctions_and_skips();

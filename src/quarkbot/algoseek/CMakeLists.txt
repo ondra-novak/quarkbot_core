@@ -1,7 +1,7 @@
 find_package(ZLIB REQUIRED)
 
 target_sources(quarkbot_impl PRIVATE
-        algoseek_spec.cpp
+      #  algoseek_spec.cpp
         algoseek_spec.hpp
         local_time_converter.hpp
         algoseek_data_source.cpp
