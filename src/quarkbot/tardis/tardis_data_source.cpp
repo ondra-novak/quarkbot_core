@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // Split a line by comma into string_view slices (line must remain valid during use)
@@ -53,6 +54,10 @@ TardisCsvDataSource::TardisCsvDataSource(std::string instrument, std::filesystem
 TardisCsvDataSource::~TardisCsvDataSource() {
     if (_gz) gzclose(reinterpret_cast<gzFile>(_gz));
 }
+
+TardisCsvDataSource::TardisCsvDataSource(TardisCsvDataSource &&other) noexcept
+    :_instrument(std::move(other._instrument))
+    ,_gz(std::exchange(other._gz, nullptr)) {}
 
 bool TardisCsvDataSource::read_line(std::string &out) {
     out.clear();

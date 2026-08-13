@@ -1,8 +1,10 @@
 #include "quarkbot/tardis/tardis_data_source.hpp"
+#include "quarkbot/abstract/backtest_data_source.hpp"
 #include "tests/check.h"
 #include <zlib.h>
 #include <cstdio>
 #include <iostream>
+#include <type_traits>
 
 static void write_gz(const std::string &path, std::string_view content) {
     gzFile f = gzopen(path.c_str(), "wb");
@@ -21,10 +23,9 @@ static const std::string_view QUOTES_CSV =
     "binance,BTCUSDT,1617235200000000000,1617235200001000000,57999.00,1.5,58001.00,0.8\n"
     "binance,BTCUSDT,1617235260000000000,1617235260001000000,58050.00,2.0,58052.00,1.2\n";
 
-int main() {
+static void test_trades() {
     using namespace quarkbot;
 
-    // --- Trades test ---
     write_gz("/tmp/test_trades.csv.gz", TRADES_CSV);
     {
         TardisTradesDataSource src("BTCUSDT", "/tmp/test_trades.csv.gz");
@@ -47,8 +48,11 @@ int main() {
         CHECK(!src(e3));
     }
     std::remove("/tmp/test_trades.csv.gz");
+}
 
-    // --- Quotes test ---
+static void test_quotes() {
+    using namespace quarkbot;
+
     write_gz("/tmp/test_quotes.csv.gz", QUOTES_CSV);
     {
         TardisQuotesDataSource src("BTCUSDT", "/tmp/test_quotes.csv.gz");
@@ -75,6 +79,27 @@ int main() {
         CHECK(!src(q3));
     }
     std::remove("/tmp/test_quotes.csv.gz");
+}
+
+static void test_movable() {
+    using namespace quarkbot;
+    static_assert(std::is_move_constructible_v<TardisTradesDataSource>);
+    static_assert(std::is_move_constructible_v<TardisQuotesDataSource>);
+    static_assert(BacktestDataSourceType<TardisTradesDataSource>);
+
+    write_gz("/tmp/test_tardis_movable.csv.gz", TRADES_CSV);
+    // the point of the move constructor: a source has to survive being put here
+    BacktestDataSource ds = TardisTradesDataSource("BTCUSDT", "/tmp/test_tardis_movable.csv.gz");
+    BacktestEvent ev;
+    CHECK(ds(ev));
+    CHECK_EQUAL(ev.symbol, std::string("BTCUSDT"));
+    std::remove("/tmp/test_tardis_movable.csv.gz");
+}
+
+int main() {
+    test_trades();
+    test_quotes();
+    test_movable();
 
     std::cout << "All tardis source tests passed" << std::endl;
 }

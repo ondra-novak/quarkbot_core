@@ -14,6 +14,7 @@ public:
     ~TardisCsvDataSource();
     TardisCsvDataSource(const TardisCsvDataSource &) = delete;
     TardisCsvDataSource &operator=(const TardisCsvDataSource &) = delete;
+    TardisCsvDataSource(TardisCsvDataSource &&other) noexcept;
 
 protected:
     const std::string &instrument() const { return _instrument; }
