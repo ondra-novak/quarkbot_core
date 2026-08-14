@@ -38,7 +38,7 @@ struct ParseLogRes {
     unsigned int line = 0;
 };
 
-static auto rg = std::regex(R"regexp(^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} debug \[([^\]]+)\] (.*) \{logger\.cpp:(\d+)\}$)regexp");
+static auto rg = std::regex(R"regexp(^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} debug \[([^\]]*)\] (.*) \{logger\.cpp:(\d+)\}$)regexp");
 
 ParseLogRes extract_log(std::string_view line) {
     ParseLogRes out;
@@ -88,7 +88,7 @@ int main() {
     logDebug("new\nline");
     TesterClass::test_log();
     logOutputCB(LogLevel::debug, []{
-        return std::pair(Logger::Location{"logger.cpp","void bbb::function()",123},  "test_callback");
+        return std::pair(Logger::Location{"bbb","logger.cpp","void function()",123},  "test_callback");
     });
 
     log_close();
@@ -99,14 +99,14 @@ int main() {
     std::string ln;
     std::getline(f,ln);
     auto ex = extract_log(ln);
-    CHECK_EQUAL(ex.context,"-");
+    CHECK_EQUAL(ex.context,"");
     CHECK_EQUAL(ex.payload,"{\"a\":10,\"b\":[1,2,3]}");
     CHECK_EQUAL(ex.line,86);
 
 
     std::getline(f,ln);
     ex = extract_log(ln);
-    CHECK_EQUAL(ex.context,"-");
+    CHECK_EQUAL(ex.context,"");
     CHECK_EQUAL(ex.payload,"x=12");
     CHECK_EQUAL(ex.line,87);
 

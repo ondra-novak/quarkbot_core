@@ -60,7 +60,7 @@ inline StorageTransaction &shared_transaction(Storage storage) {
             co_return;
         };
 
-        worker.run(flush_coro());
+        worker.run_on_idle(flush_coro());
     }
     trn = storage.write();
     return trn.value();

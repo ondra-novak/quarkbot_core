@@ -20,7 +20,6 @@ public:
             :context(std::move(context)) {}
 
     StrategyFragment main([[maybe_unused]]std::string_view example_argument) {
-        co_await StrategyFragment::set_location("aaaa","bbbb",211);
         std::vector<std::function<void()>> cleanup_actions;
 
         for (MarketInstrument instr: this->context.instruments) {
