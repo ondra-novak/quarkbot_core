@@ -486,9 +486,12 @@ StrategyFragment SimExecutor::cancel_order(POrder ord) {
     return cancel_order(ord.get());
 }
 StrategyFragment SimExecutor::cancel_order(IOrder *ord) {
-    if (co_await _timer.sleep_for(latency)){
-        cancel_order_internal(ord);
-    }
+    co_await _timer.sleep_for(latency); //if timer is cancelled, perform immediately cancel (backtest is finished)
+    cancel_order_internal(ord);    
+}
+
+void SimExecutor::stop_on(std::stop_token tkn) {
+    _timer.stop_on(tkn);
 }
 
 void SimExecutor::stop_latency_queue() {
@@ -505,10 +508,6 @@ StrategyFragment SimExecutor::expire_auction(PSimInstrument instrument, std::chr
             close_day(instrument);
         }
     }
-}
-
-SimExecutor::~SimExecutor() {
-    stop_latency_queue();
 }
 
 void SimExecutor::seed_random(std::chrono::system_clock::time_point tp) {

@@ -38,9 +38,7 @@ public:
     bool cancel_all(PTradableInstrument instrument);
     void set_slippage(double slippage) { _slippage = slippage; }
     void set_latency(std::chrono::system_clock::duration dur) {latency = dur;}
-
-    ~SimExecutor();
-
+    void stop_on(std::stop_token tkn);
 
     void set_report_sink(ReportSink rpt) {
         _report_sink = std::move(rpt);

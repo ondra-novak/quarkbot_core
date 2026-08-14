@@ -166,7 +166,7 @@ namespace _decimal_details {
             case 16: return a/10000000000000000LL;
             case 17: return a/100000000000000000LL;
             case 18: return a/1000000000000000000LL;
-            default: throw "exponent out of range";
+            default: throw std::runtime_error("Decimal: exponent out of range");
         }
     }
 
@@ -192,7 +192,7 @@ namespace _decimal_details {
             case 16: return a%10000000000000000LL;
             case 17: return a%100000000000000000LL;
             case 18: return a%1000000000000000000LL;
-            default: throw "exponent out of range";
+            default: throw std::runtime_error("Decimal: exponent out of range");
         }
     }
 
@@ -217,7 +217,7 @@ namespace _decimal_details {
             case 16: return a*10000000000000000LL;
             case 17: return a*100000000000000000LL;
             case 18: return a*1000000000000000000LL;
-            default: throw "exponent out of range";
+            default: throw std::runtime_error("Decimal: exponent out of range");
         }
     }
 
@@ -359,7 +359,7 @@ public:
             exp = s * exp;
             accum = scaleb10(accum, exp);
         }
-        if (iter != e) throw "Invalid number format";
+        if (iter != e) throw std::runtime_error("Decimal: invalid number format");
         if (neg) accum = -accum;
         return accum;
     }

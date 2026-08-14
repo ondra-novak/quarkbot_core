@@ -9,6 +9,8 @@
 /my_build_profile.conf
 /secret
 /.worktrees
+/.superpowers
 /.vscode
 /.claude
 /.clangd
+/data

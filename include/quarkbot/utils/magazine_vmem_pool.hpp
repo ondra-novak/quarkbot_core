@@ -259,6 +259,20 @@ public:
         bool operator==(const Allocator &) const {return true;}
     };
 
+    struct overrides {
+        template<typename ... Args>
+        void *operator new(std::size_t sz, Args && ...) {
+            return allocate(sz);
+        }
+        template<typename ... Args>
+        void operator delete(void *ptr, Args && ...) {
+            throw;
+        }
+        void operator delete(void *ptr, std::size_t sz) {
+            deallocate(ptr,sz);
+        }
+    };
+
 };
 
 inline MagazineVMemAllocator::DepotList MagazineVMemAllocator::depot_list;
