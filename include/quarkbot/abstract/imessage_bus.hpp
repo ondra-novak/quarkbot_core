@@ -2,13 +2,15 @@
 
 #include "ieventstream.hpp"
 #include "quarkbot/log.hpp"
+#include "quarkbot/utils/lookup.hpp"
 #include "quarkbot/utils/refcnt.hpp"
+#include <cstdint>
 
 
 namespace quarkbot {
 
 
-    using ConversationID = std::uint64_t;
+    using ConversationID = std::uint_least32_t;
 
 
     enum class MessageType {
@@ -95,15 +97,6 @@ namespace quarkbot {
         std::chrono::system_clock::time_point send_time = {};
         ///holds reference to snapshot to keep lifetime 
         RefCountPtr<RefCountInstanceWithDeleter> ownership = {};
-
-        ///Extract value to type, function checks for schema
-        /**
-            @param x variable that receives value
-            @retval true extracted
-            @retval false failed to extract, schema mismatch or parse error
-        */
-        template<typename T>
-        bool extract(T &x);
     };
 
     ///Class which handles sending and receiving messages

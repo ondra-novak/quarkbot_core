@@ -14,5 +14,7 @@ target_sources(quarkbot_impl PRIVATE
     storage_msgbus_replicator.hpp
     storage_msgbus_replicator.cpp
     strategy_config.cpp
+    msgbus_stdio.hpp
+    msgbus_stdio.cpp
 
 )
