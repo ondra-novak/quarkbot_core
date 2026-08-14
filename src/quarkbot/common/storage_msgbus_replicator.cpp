@@ -37,8 +37,8 @@ static void replicate_with_buffer(const Storage::ReplicatorEvent &event, std::ui
     std::size_t final_size = static_cast<std::size_t>(iter - buffer);
     bus.send(Message{
         MessageType::normal_message,{}, target, {reinterpret_cast<const char *>(buffer), final_size},
-        0,0,std::chrono::system_clock::now(),{}        
-    });
+        "text/plain",0,std::chrono::system_clock::now(),{}        
+});
 }
 
 Storage::Replicator::Connection attach_replicator(Storage storage, MessageBus bus, std::string target) {

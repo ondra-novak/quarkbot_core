@@ -1,8 +1,6 @@
 #pragma once
 
 #include "ieventstream.hpp"
-
-#include "../serializer/schema_fwd.hpp"
 #include "quarkbot/log.hpp"
 #include "quarkbot/utils/refcnt.hpp"
 
@@ -74,8 +72,9 @@ namespace quarkbot {
             Groups can have multiple directions, in this case, forwarding
             stops, when group still exists after direction removal
         */
-        no_route = 4
+        no_route = 4,
     };
+
 
     ///Message item (for message streams)
     struct Message {
@@ -88,10 +87,10 @@ namespace quarkbot {
         std::string_view target = {};
         ///Message payload
         std::string_view payload ={};
+        ///Optional content type MIME
+        std::string_view content_type = {};
         ///Conversation id
         ConversationID conversation_id ={};
-        ///Schema hash of payload
-        srl::SchemaHash schema = {};
         ///time on send side
         std::chrono::system_clock::time_point send_time = {};
         ///holds reference to snapshot to keep lifetime 
@@ -125,6 +124,7 @@ namespace quarkbot {
         */
         virtual void send(const Message &msg) = 0;
 
+
         class Null;
     };
 
@@ -135,8 +135,8 @@ namespace quarkbot {
             return IEventStream<Message>::Silent::create_instance();
         }
         virtual void send(const Message &msg) override {
-                logWarning("Message discarded: target={}, length={}, conversation_id={}, schema={:x}",
-                    msg.target, msg.payload.size(), msg.conversation_id, msg.schema
+                logWarning("Message discarded: target={}, length={}, conversation_id={}",
+                    msg.target, msg.payload.size(), msg.conversation_id
                 );            
         }        
     };
