@@ -194,6 +194,12 @@ void AlgoseekDataSource::log_summary() const {
 bool AlgoseekDataSource::operator()(BacktestEvent &ev) {
     if (_eof) return false;
 
+    if (_next_quote) {
+        ev = std::move(_next_quote).value();
+        _next_quote.reset();
+        return true;
+    }
+
     while (true) {
         if (!_csv.readRow(_colmap, _row)) {
             _eof = true;
@@ -294,6 +300,19 @@ bool AlgoseekDataSource::operator()(BacktestEvent &ev) {
             //the export carries no aggressor side
             t.side = Side::undetermined;
             ++_counters.trades;
+            
+            if (_spec.fake_quotes_distance) {
+                Quote q;
+                _next_quote.emplace();
+                q.ask =  t.price + *_spec.fake_quotes_distance;
+                q.bid =  t.price - *_spec.fake_quotes_distance;
+                q.ask_size = t.size;
+                q.bid_size = t.size;
+                q.time = t.time;
+                _next_quote->data = q;
+                _next_quote->symbol = ev.symbol;
+                _next_quote->time = ev.time;
+            }
         }
         return true;
     }

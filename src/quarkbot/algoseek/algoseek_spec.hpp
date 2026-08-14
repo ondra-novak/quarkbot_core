@@ -3,6 +3,7 @@
 #include <chrono>
 #include <filesystem>
 #include <string>
+#include <quarkbot/decimal.hpp>
 
 namespace quarkbot {
 
@@ -22,6 +23,8 @@ struct AlgoseekSpec {
     const std::chrono::time_zone *tz = nullptr;
     ///symbol reported on emitted events, empty means use the Ticker column
     std::string symbol = {};
+    ///algoseek import now only supports trades. This enables fake quotes. You need to specify distance from last
+    std::optional<Decimal> fake_quotes_distance = {};
 };
 
 }

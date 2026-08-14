@@ -95,9 +95,17 @@ public:
                         algoseek_spec.exchange = row.value;
                     } else if (t == "symbol") {
                         algoseek_spec.symbol = row.value;
+                    } else if (t == "fake_quotes") {
+                        try {
+                            algoseek_spec.fake_quotes_distance = Decimal::from_string(row.value);
+                        } catch (const std::exception &e) {
+                            throw std::runtime_error(
+                                    std::format("Invalid number format `{}` in key `{}` in config `{}`: {}",
+                                            row.value, row.key, fcan.string(), e.what()));
+                        }
                     } else {
                         throw std::runtime_error(
-                                std::format("Unknown algoseek option: `{}`, Expected: time_zone, exchange, symbol in config `{}`", row.key, fcan.string()));
+                                std::format("Unknown algoseek option: `{}`, Expected: time_zone, exchange, symbol, fake_quotes in config `{}`", row.key, fcan.string()));
                     }
                 }
 

@@ -103,6 +103,7 @@ protected:
     CSVFieldIndexMapping<Data> _colmap;
     Data _row = {};
     Counters _counters = {};
+    std::optional<BacktestEvent> _next_quote = {};
     ///number of the row last read; the header is row 1
     std::uint64_t _line = 1;
     bool _eof = false;
@@ -128,6 +129,7 @@ protected:
     Decimal parse_decimal(const std::string &value, std::string_view column) const;
     ///log the skip counters
     void log_summary() const;
+
 };
 
 }

@@ -29,6 +29,8 @@ namespace quarkbot {
             
         BacktestEvent event;
         if (!source(event)) return false;
+        executor->set_time(event.time);
+        executor->flush_queue();
         do {
             executor->set_time(event.time);
             selector(event.data, [&](const CustomBacktestEvent &ev){
