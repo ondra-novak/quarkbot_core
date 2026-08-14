@@ -265,7 +265,7 @@ public:
             return allocate(sz);
         }
         template<typename ... Args>
-        void operator delete(void *ptr, Args && ...) {
+        void operator delete(void *, Args && ...) {
             throw;
         }
         void operator delete(void *ptr, std::size_t sz) {
