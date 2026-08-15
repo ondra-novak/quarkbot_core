@@ -1,4 +1,5 @@
 
+#include "quarkbot/backtest/entry_point.hpp"
 #include "quarkbot/backtest/config_backtest.hpp"
 #include "quarkbot/backtest/config_datasource.hpp"
 #include "quarkbot/backtest/config_instrument.hpp"
@@ -46,7 +47,7 @@ namespace quarkbot {
     }
 
 
-    int entry_point(std::string_view program_name, std::span<const char *const > args, std::function<StrategyFragment(StrategyContext &&, const StrategyContext::Config &)> start_fn){
+    int entry_point(std::string_view program_name, std::span<const char *const > args, std::function<StrategyFragment(StrategyContext &&)> start_fn){
         //TODO - argv[1] = strategy config, argv[2] = backtest config + python config
     
         std::filesystem::path strategy_config_path;
@@ -78,30 +79,42 @@ namespace quarkbot {
             return 1;
         }
 
+        return backtest_entry_point({
+            std::move(strategy_config_path),
+            std::move(backtest_config_path),
+            std::move(start_fn),
+            dbg?std::function(simple_debugger):nullptr,
+            {}
+        });
+    }
+
+    int backtest_entry_point(BacktestStartParams params) {
+
         BacktestConfig cfg;
 
         try {
-            cfg = BacktestConfig::load(backtest_config_path);
+            cfg = BacktestConfig::load(params.backtest_config);
             cfg.configure_log();
         } catch (const std::exception &e) {
-            std::print(std::cerr, "Failed to initialize backtest config {}, exception {}\n", backtest_config_path.string(), e.what());
+            std::print(std::cerr, "Failed to initialize backtest config {}, exception {}\n", params.backtest_config.string(), e.what());
             return 2;
         }
 
         try {
 
-            BacktestEnv bt("backtest-account", cfg.configure_wallet(), configure_instruments(backtest_config_path), cfg.configure_simulation());
-            auto data_source = configure_datasources(backtest_config_path);
+            BacktestEnv bt("backtest-account", cfg.configure_wallet(), configure_instruments(params.backtest_config), cfg.configure_simulation());
+            auto data_source = configure_datasources(params.backtest_config);
             std::jthread dbgthr;
 
             StrategyContext ctx;
             ctx.storage = MemStorage::create(MemStorage::no_history);        
-            ctx.config = load_strategy_config(strategy_config_path);
-            bt.add_strategy([start_fn = std::move(start_fn), config = cfg.as_config()](StrategyContext &&context){
-                return start_fn(std::move(context), config);
+            ctx.config = load_strategy_config(params.strategy_config);
+            if (params.init_env) params.init_env(cfg.as_config());
+            bt.add_strategy([start_fn = std::move(params.start_fn)](StrategyContext &&context){
+                return start_fn(std::move(context));
             },  std::move(ctx));
 
-            if (dbg) dbgthr = std::jthread(simple_debugger, bt.enable_debugger());
+            if (params.debugger) dbgthr = std::jthread(params.debugger, bt.enable_debugger());
             logInfo("Backtest started");
             bt.run(std::move(data_source));
             logInfo("Backtest ended");        

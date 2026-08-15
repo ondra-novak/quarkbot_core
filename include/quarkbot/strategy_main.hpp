@@ -53,7 +53,7 @@ namespace quarkbot {
     template<typename _Strategy,  typename ... Args>
     requires(StrategyClass<_Strategy, StrategyContext, Args ...>)
     int strategy_main(std::string_view program_name, std::span<const char * const> args , Args ...  strategy_args) {
-        return entry_point(program_name, args, [strategy_args...](StrategyContext &&context, const StrategyContext::Config &){
+        return entry_point(program_name, args, [strategy_args...](StrategyContext &&context){
             return create_and_start_strategy<_Strategy>(std::move(context), std::move(strategy_args)...);
         });
     }
@@ -70,7 +70,7 @@ namespace quarkbot {
     /**
     
     */
-    int entry_point(std::string_view argv0, std::span<const char *const > args, std::function<StrategyFragment(StrategyContext &&, const StrategyContext::Config &)> start_fn);
+    int entry_point(std::string_view argv0, std::span<const char *const > args, std::function<StrategyFragment(StrategyContext &&)> start_fn);
 
 
 }
