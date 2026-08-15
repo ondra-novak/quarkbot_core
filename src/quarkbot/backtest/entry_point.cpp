@@ -1,13 +1,13 @@
 
-#include "quarkbot/backtest/entry_point.hpp"
-#include "quarkbot/backtest/config_backtest.hpp"
-#include "quarkbot/backtest/config_datasource.hpp"
-#include "quarkbot/backtest/config_instrument.hpp"
-#include "quarkbot/backtest/ibacktest_debugger.hpp"
-#include "quarkbot/common/strategy_config.hpp"
-#include "quarkbot/config.hpp"
+#include "entry_point.hpp"
+#include "config_backtest.hpp"
+#include "config_datasource.hpp"
+#include "config_instrument.hpp"
+#include "ibacktest_debugger.hpp"
+#include "simple_stdio_debugger.hpp"
+#include "../common/strategy_config.hpp"
+#include "../common/mem_storage.hpp"
 #include "quarkbot/utils/simple_ini.hpp"
-#include "quarkbot/common/mem_storage.hpp"
 #include "quarkbot/strategy_main.hpp"
 #include <chrono>
 #include <csignal>
@@ -19,32 +19,6 @@
 
 namespace quarkbot {
 
-    static std::atomic<bool> interrupted = {true};  //debugger starts interrupted
-
-
-
-    static void simple_debugger(std::stop_token tkn, std::shared_ptr<IBacktestDebugger> dbg) {
-        signal(SIGINT,[](int){
-            interrupted.store(true);
-        });
-        std::println(std::cout, "Debugger active, type 'help' for help");
-        while (!tkn.stop_requested()) {
-            if (interrupted.exchange(false)) {
-                dbg->set_running(false);
-            }
-            auto st = dbg->get_status();
-            std::print(std::cout, "Running: {:%Y%m%d %H%M%S} - press Ctrl+C to interrupt\r", st.time);
-            if (st.run_status == IBacktestDebugger::RunStatus::done) break;
-            if (st.run_status == IBacktestDebugger::RunStatus::paused) {
-
-
-
-
-            } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        }
-    }
 
 
     int entry_point(std::string_view program_name, std::span<const char *const > args, std::function<StrategyFragment(StrategyContext &&)> start_fn){
@@ -83,7 +57,7 @@ namespace quarkbot {
             std::move(strategy_config_path),
             std::move(backtest_config_path),
             std::move(start_fn),
-            dbg?std::function(simple_debugger):nullptr,
+            dbg?get_simple_stdio_debugger():nullptr,
             {}
         });
     }
@@ -103,8 +77,7 @@ namespace quarkbot {
         try {
 
             BacktestEnv bt("backtest-account", cfg.configure_wallet(), configure_instruments(params.backtest_config), cfg.configure_simulation());
-            auto data_source = configure_datasources(params.backtest_config);
-            std::jthread dbgthr;
+            auto data_source = configure_datasources(params.backtest_config);            
 
             StrategyContext ctx;
             ctx.storage = MemStorage::create(MemStorage::no_history);        
@@ -114,7 +87,7 @@ namespace quarkbot {
                 return start_fn(std::move(context));
             },  std::move(ctx));
 
-            if (params.debugger) dbgthr = std::jthread(params.debugger, bt.enable_debugger());
+            if (params.debugger) params.debugger(bt.enable_debugger(), ctx.storage);
             logInfo("Backtest started");
             bt.run(std::move(data_source));
             logInfo("Backtest ended");        

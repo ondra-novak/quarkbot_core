@@ -16,5 +16,5 @@ target_sources(quarkbot_impl PRIVATE
     strategy_config.cpp
     msgbus_stdio.hpp
     msgbus_stdio.cpp
-
+   deserialize_resolver.hpp
 )
