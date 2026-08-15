@@ -1,13 +1,12 @@
 #pragma once
 
 #include "awaitable_stop.hpp"
-#include "config.hpp"
+#include "quarkbot/config_backend_with_paths.hpp"
 #include "quarkbot/message_bus.hpp"
 #include "quarkbot/storage.hpp"
 #include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
 #include <concepts>
-#include <functional>
 #include <memory>
 #include "tradable_instrument.hpp"
 #include <utility>
@@ -31,7 +30,7 @@ namespace quarkbot {
 
     class StrategyContext {
     public:
-        using Config = ConfigT<ConfigBackend>;
+        using Config = ConfigT<ConfigBackendWithPaths>;
 
         ///List of tradable instruments available to the strategy
         /** the strategy can query for accounts and exchanges through the instruments */

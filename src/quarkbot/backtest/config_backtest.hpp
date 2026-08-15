@@ -2,6 +2,7 @@
 
 #include "backtest.hpp"
 #include "quarkbot/config.hpp"
+#include "quarkbot/config_backend_with_paths.hpp"
 #include "quarkbot/types.hpp"
 #include <filesystem>
 #include <map>
@@ -13,20 +14,10 @@ namespace quarkbot {
 ///manages config file for backtest environment
 struct BacktestConfig {
 
-    class ConfigMap final : public std::vector<std::pair<std::string, std::string> >, public IConfigBackend {
-    public:
-        using Super = std::vector<std::pair<std::string, std::string> >;
-        using Super::Super;
-        ConfigMap(Super &&other):Super(std::move(other)) {}
-        virtual std::optional<std::string_view> operator()(const std::string &key) const override;
-    };
-
-    using Config = ::quarkbot::ConfigT<ConfigBackend>;
+    using Config = ::quarkbot::ConfigT<ConfigBackendWithPaths>;
 
     ///configuration map (key value)
-    ConfigMap config;
-    ///base path
-    std::filesystem::path base_path;
+    std::shared_ptr<ConfigBackendWithPathsMap> config;
 
     ///load configuration from a file
     static BacktestConfig load(std::filesystem::path ini_config);
