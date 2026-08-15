@@ -23,7 +23,7 @@ protected:
     std::condition_variable _cv;
     bool _quit = false;
     
-    Status status = {RunStatus::paused,EventType::data,{},{},{}};
+    Status status = {RunStatus::running,EventType::data,{},TraceMode::step,{}};
 
 
 };

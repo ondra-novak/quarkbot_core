@@ -18,10 +18,9 @@ inline bool extract_srl(std::string_view value, T &out, srl::SchemaHash &type_ha
     std::copy(tail.begin(), tail.end(),buff.begin());
     value.remove_suffix(sizeof(srl::SchemaHash));
     
-    srl::SchemaHash record_hash = std::bit_cast<srl::SchemaHash>(buff);
-    type_hash = srl::schema_hash<T>;
+    type_hash = std::bit_cast<srl::SchemaHash>(buff);
     
-    if (record_hash != type_hash) return false;
+    if (type_hash != srl::schema_hash<T>) return false;
 
     bool valid = false;
     try {

@@ -169,6 +169,7 @@ protected:
     StrategyFragmentGroup _strategy_group;
     std::shared_ptr<BasicDebuggerImpl> _debugger;
 
+    struct UEGuard;
 
     void init_context_basic(std::span<const std::string_view> instruments, StrategyContext &ctx);
     void init_context_basic( StrategyContext &ctx);

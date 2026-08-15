@@ -1,9 +1,11 @@
 
 #include "entry_point.hpp"
+#include "basic_coro/exceptions.hpp"
 #include "config_backtest.hpp"
 #include "config_datasource.hpp"
 #include "config_instrument.hpp"
 #include "ibacktest_debugger.hpp"
+#include "quarkbot/log.hpp"
 #include "simple_stdio_debugger.hpp"
 #include "../common/strategy_config.hpp"
 #include "../common/mem_storage.hpp"
@@ -11,6 +13,7 @@
 #include "quarkbot/strategy_main.hpp"
 #include <chrono>
 #include <csignal>
+#include <exception>
 #include <fstream>
 #include <iostream>
 #include <ostream>
@@ -83,11 +86,12 @@ namespace quarkbot {
             ctx.storage = MemStorage::create(MemStorage::no_history);        
             ctx.config = load_strategy_config(params.strategy_config);
             if (params.init_env) params.init_env(cfg.as_config());
+            if (params.debugger) params.debugger(bt.enable_debugger(), ctx.storage);
             bt.add_strategy([start_fn = std::move(params.start_fn)](StrategyContext &&context){
                 return start_fn(std::move(context));
             },  std::move(ctx));
 
-            if (params.debugger) params.debugger(bt.enable_debugger(), ctx.storage);
+
             logInfo("Backtest started");
             bt.run(std::move(data_source));
             logInfo("Backtest ended");        

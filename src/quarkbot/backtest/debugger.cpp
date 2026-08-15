@@ -70,6 +70,9 @@ void BasicDebuggerImpl::set_breakpoint(Timestamp tp) {
 void BasicDebuggerImpl::quit() {
     std::unique_lock lk(_mx);   
     _quit = true;
+    _cv.notify_one();
+    status.trace_mode = TraceMode::disabled;
+    status.run_status = RunStatus::running;
 }
 
 }

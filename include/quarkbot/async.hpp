@@ -128,37 +128,7 @@ namespace quarkbot {
             
             void (*old_resume)(std::coroutine_handle<promise_type>) = nullptr;
 
-            static std::string_view short_name(std::string_view n){
-                auto sz = n.size();
-                int bc = 0;
-                while (true) {
-                    if (n.starts_with("static ")) {
-                       n = trim(n.substr(7));
-                    } else if (n.starts_with("struct ")) {
-                        n = trim(n.substr(7));
-                    } else if (n.starts_with("class ")) {
-                        n = trim(n.substr(6));
-                    } else if (n.starts_with("enum ")) {
-                        n = trim(n.substr(5));
-                    } else break;                
-                }
-                for (auto i = sz-sz; i < sz; ++i) {
-                    char c = n[i];
-                    if (isspace(c) && bc == 0) {
-                        n = n.substr(i);
-                        break;
-                    }
-                    if (c == '<') bc++;
-                    if (c == '>') bc--;                
-                }
-                n = trim(n);
-                if (n.starts_with("__cdecl")) n.remove_prefix(7);
-                auto rc = n.find('(');
-                if (rc != n.npos) n = n.substr(0,rc);
-                n = trim(n);
-                return n;
-            }
-        
+           
 
             static void debug_traced_resume(std::coroutine_handle<promise_type> h) {
                 auto &me = h.promise();
@@ -172,7 +142,6 @@ namespace quarkbot {
 
             std::suspend_always initial_suspend(std::source_location loc = std::source_location::current())  noexcept {
                 this->coro_location = Logger::from(loc);
-                this->coro_location.function =short_name(loc.function_name());
                 logOutputCB(LogLevel::trace,  [&]{
                     auto h = std::coroutine_handle<promise_type>::from_promise(*this);
                     auto frame_ptr = reinterpret_cast<void (**)(std::coroutine_handle<promise_type>) >(h.address());

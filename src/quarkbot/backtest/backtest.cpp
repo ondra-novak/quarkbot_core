@@ -1,6 +1,7 @@
 #include "backtest.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "basic_coro/sync_await.hpp"
+#include <exception>
 #include <filesystem>
 #include <quarkbot/context.hpp>
 #include <quarkbot/execution_worker.hpp>
@@ -21,6 +22,34 @@
 
 namespace quarkbot {
 
+
+    struct BacktestEnv::UEGuard {
+        void (*save)()  = nullptr;
+        BacktestEnv *prev = nullptr;
+        static thread_local BacktestEnv *owner;
+        UEGuard(BacktestEnv *o): save(coro::async_unhandled_exception),prev(owner) {
+            owner = o;
+            coro::async_unhandled_exception = []{
+                try {
+                    throw;
+                } catch (std::exception &e) {
+                    logFatal("Unhandled exception: {}", e.what());
+                    if (owner) {
+                        owner->stop_src.request_stop();
+                    } else {
+                        std::terminate();
+                    }
+
+                }
+            };
+        }
+        ~UEGuard() {
+            coro::async_unhandled_exception = save;
+            owner = prev;
+        }
+    };
+
+    thread_local BacktestEnv *BacktestEnv::UEGuard::owner = nullptr;
 
     struct DbgExit {};
 
@@ -126,6 +155,7 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
     }
 
     bool BacktestEnv::run(BacktestDataSource data_source) {
+        UEGuard _(this);
         return run_backtest(std::static_pointer_cast<BacktestExecutor>(_worker.get_handle()),
                     std::static_pointer_cast<SimExchange>(_exchange.get_handle()),
                     std::static_pointer_cast<SimAccount>(_account.get_handle()),

@@ -83,7 +83,11 @@ namespace quarkbot {
                 return found;
             };
 
-            auto pos = find_skip_template(name, '(');
+            auto pos = find_skip_template(name, '(');            
+            if (name.substr(pos).starts_with("(anonymous namespace)::")) {
+                name = name.substr(pos+23);
+                pos = find_skip_template(name, '(');            
+            }
             auto fnonly = name.substr(0,pos);
             if (fnonly.ends_with("operator ")) {
                 fnonly = name.substr(0,pos-11);

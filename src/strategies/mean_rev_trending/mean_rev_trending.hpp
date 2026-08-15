@@ -135,6 +135,7 @@ public:
             int dir = sgn(position);
             if (dir == 0) dir = static_cast<int>(side);
             Decimal diff = calc_order_diff(new_price, dir);
+            if (diff == 0) return;
             Decimal adj_diff = abs(diff * static_cast<int>(side));
             Order &cur_order = select_mean_rev_order(side);
             cur_order = instrument.place_order(OrderRequest{
@@ -162,19 +163,24 @@ public:
                 auto pnl = info.calc_pnl(last_trend_check_price, price, oracle_position).to_double();
                 if (total_loss > calc_loss && pnl > 0) pnl = 0; //failed benchmark we are on risk
                 benchmark_profit = benchmark_profit + pnl;
-                total_loss = total_loss - pnl;  //move oracle profit into loss of mean reversion;
+                total_loss = std::max(0.0,total_loss + pnl);  //move oracle profit into loss of mean reversion;
+                calc_loss = std::max(0.0,calc_loss + pnl);
+                last_trend_check_price = price;
                 
                 auto quant = calc_order_diff(price, dir);
                 upper.cancel();
                 lower.cancel();
                 upper = {};
                 lower = {};
+                if (quant == 0) {
+                    co_return;
+                }
                 Order rev_order = instrument.place_order(OrderRequest{
                     .side = static_cast<Side>(sgn(quant)),
                     .type = OrderType::market,
                     .quantity = abs(quant)
                 });
-                while (rev_order.receive(rpt)) {
+                while (co_await rev_order.receive(rpt)) {
                     for (auto &f: rpt.fills) {
                         process_fill(f);
                     }
@@ -202,7 +208,7 @@ public:
                  double dp = qt.mid().to_double();
                  auto r = bbema.update(dp);
                  bbema_mean = r.mean;
-                 bbema_mean = r.dev;
+                 bbema_dev = r.dev;
                  place_mean_rev_order(select_mean_rev_price(Side::buy), Side::buy, lower);
                  place_mean_rev_order(select_mean_rev_price(Side::sell), Side::sell, upper);
             }
@@ -211,7 +217,7 @@ public:
         StrategyFragment slow_interval(EventStream<Quote> stream) {
             auto nx = interval_upper_bound(timer.now(), std::chrono::minutes(trend_detect_interval_min));
             while (co_await(timer.sleep_until(nx))) {
-                 nx = interval_upper_bound(timer.now(), std::chrono::minutes(mean_rev_interval_min));
+                 nx = interval_upper_bound(timer.now(), std::chrono::minutes(trend_detect_interval_min));
                  Quote qt;
                  stream.current(qt);
                  trend_detection_period(qt.mid());
@@ -221,7 +227,7 @@ public:
 
     };
 
-    StrategyFragment run_instrument(TradableInstrument instrument, StrategyContext::Config cfg, const PersistentNamespace &ns) {
+    StrategyFragment run_instrument(TradableInstrument instrument, StrategyContext::Config cfg, PersistentNamespace ns) {
         SingleInstrumentStrategy inst {
             *this,
             instrument,
@@ -256,12 +262,13 @@ public:
         if (inst.last_trend_check_price.get() == 0_dec) inst.last_trend_check_price  = qt.mid();
         if (inst.last_trade_price.get() == 0_dec) inst.last_trend_check_price  = qt.mid();        
 
-        auto p1 = inst.fast_interval(stream);
-        auto p2 = inst.slow_interval(stream);
+        auto p1 = inst.fast_interval(stream).launch();
+        auto p2 = inst.slow_interval(stream).launch();
         co_await context.stop_signal;
         co_await inst.quit();
         co_await p2;
         co_await p1;        
+        co_await inst.quit();
     }
 
 
@@ -269,10 +276,10 @@ public:
 
         for (auto &instrument: context.instruments) {
             auto &info = instrument.get_info();
-            auto &name = info.name;            
+            auto name = info.name;            
             context.run(run_instrument(std::move(instrument), 
                                  context.config/name, 
-                                 {context.storage, std::string(name)}));
+                                 {context.storage, name}));
         }
         co_return;
     }

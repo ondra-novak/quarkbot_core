@@ -28,7 +28,7 @@ class SimpleStdioDebugger {
 public:
     SimpleStdioDebugger(std::shared_ptr<IBacktestDebugger> control,Storage store)
         :_control(std::move(control)), _store(std::move(store)) {            
-            connect_variable_reporter(_store, std::cout);
+            _repl = connect_variable_reporter(_store, std::cout);
         }
         
 
@@ -92,7 +92,7 @@ std::function<void(std::shared_ptr<IBacktestDebugger>, Storage)> get_simple_stdi
 }
 
 
-static std::atomic<bool> interrupted = {true};  //debugger starts interrupted
+static std::atomic<bool> interrupted = {false};
 
 
 void SimpleStdioDebugger::worker(std::stop_token tkn) {
@@ -116,7 +116,7 @@ void SimpleStdioDebugger::worker(std::stop_token tkn) {
             try {shared_transaction({});} catch (...) {} //throws exception, but flushes pending transaction
 
             _now = st.time;
-            std::print(std::cout, "{:%Y%m%d %H%M%S} > ", st.time);
+            std::print(std::cout, "paused  {:%Y-%m-%d %H:%M:%S} > ", st.time);
 
             if (std::getline(std::cin, cmdline)) {
                 if (cmdline.empty()) cmdline = std::move(prev_line);
@@ -147,7 +147,8 @@ void SimpleStdioDebugger::worker(std::stop_token tkn) {
             st = _control->get_status();        
         }
                 
-        std::print(std::cout, "{:%Y%m%d %H%M%S} - Ctrl+C interrupt\r", st.time);
+        std::print(std::cout, "running {:%Y-%m-%d %H:%M:%S}\r", st.time);
+        std::cout.flush();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
@@ -170,7 +171,7 @@ void SimpleStdioDebugger::help(){
         "\n"
         "next (n)                   step to next event\n"
         "\n"
-        "cont (c)                   continue\n"
+        "cont (c)                   continue (Ctrl+C break)\n"
         "\n"
         "quit (q)                   quit\n"
         "\n"
