@@ -37,6 +37,11 @@ namespace quarkbot {
         BacktestEvent event;
         if (!source(event)) return false;
         try {
+            executor->set_time(event.time);
+            executor->flush_queue();
+            if (debugger && !debugger->on_debugger_event(executor->now(), IBacktestDebugger::EventType::data)) {
+                    throw DbgExit{};                    
+            }
             do {
                 while (!executor->advance_time(event.time)) {
                     if (debugger) {

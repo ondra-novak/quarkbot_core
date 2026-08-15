@@ -41,6 +41,10 @@ public:
     void resume(std::coroutine_handle<> h) noexcept {
         _ptr->resume(h);
     }
+    ///Schedule coroutine for resumption in this worker during idle stage
+    void resume_idle(std::coroutine_handle<> h) noexcept {
+        _ptr->resume_idle(h);
+    }
     ///Schedule coroutine for resumption in this worker
     /**
         @param h prepared_coro object 
@@ -67,6 +71,15 @@ public:
     */
     void run(coroutine coro) {
         resume(coro.release());       
+    }
+
+    ///Run a coroutine in this executable worker during idle stage
+    /**
+        The coroutine runs in new worker detached from current worker
+        @param coro new coroutine
+    */
+    void run_on_idle(coroutine coro) {
+        resume_idle(coro.release());
     }
 
     ///Run a coroutine in this worker, return pending object to synchronize later

@@ -51,7 +51,7 @@ namespace quarkbot {
     
         std::filesystem::path strategy_config_path;
         std::filesystem::path backtest_config_path;
-        int pos;
+        int pos = 0;
         bool dbg = false;
 
         for (std::string_view a: args ){
@@ -67,7 +67,7 @@ namespace quarkbot {
                 switch (pos){
                     case 0: strategy_config_path = a;++pos;break;
                     case 1: backtest_config_path = a;++pos;break;
-                    default: std::println(stdcerr, "Unexpected parameter: {}", a);return 1;
+                    default: std::println(std::cerr, "Unexpected parameter: {}", a);return 1;
                 }
             }
         }

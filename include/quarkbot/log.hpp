@@ -43,13 +43,72 @@ namespace quarkbot {
     struct Logger {
 
         struct Location {
+            ///context (part in [])
+            std::string_view context;
+            ///file path
             std::string_view file;
+            ///function name
             std::string_view function;
+            ///line number
             uint_least32_t line;
         };
 
+
+
+        static constexpr std::pair<std::string_view, std::string_view> crack_function_name(std::string_view name) {
+            
+            auto find_skip_template = [](std::string_view name, char c) {
+                std::size_t pos = 0;
+                int level = 0;
+                for (auto x: name) {
+                    if (x == '<') level++;
+                    else if (x == '>') level--;
+                    else if (x == c && level == 0) return pos;
+                    ++pos;
+                }
+                pos = name.size();
+                return pos;
+            };
+
+            auto rfind_skip_template = [](std::string_view name, char c) {
+                std::size_t pos = 0;
+                int level = 0;
+                std::size_t found = name.npos;
+                for (auto x: name) {
+                    if (x == '<') level++;
+                    else if (x == '>') level--;
+                    else if (x == c && level == 0) found = pos;;
+                    ++pos;
+                }
+                return found;
+            };
+
+            auto pos = find_skip_template(name, '(');
+            auto fnonly = name.substr(0,pos);
+            if (fnonly.ends_with("operator ")) {
+                fnonly = name.substr(0,pos-11);
+            }
+            auto beg_fn = rfind_skip_template(fnonly, ' ');    
+            auto nameonly = fnonly.substr(beg_fn+1);
+            if (nameonly.ends_with(">")) {
+                auto b = nameonly.find('<');
+                if (b && b != nameonly.npos) {
+                    nameonly = nameonly.substr(0,b);
+                }
+            }
+            if (nameonly.ends_with("::")) nameonly.remove_suffix(2);
+            auto nssep = nameonly.rfind("::");
+            auto ns = nssep == nameonly.npos?std::string_view():nameonly.substr(0,nssep);
+            auto fnn = nssep == nameonly.npos?nameonly:nameonly.substr(nssep+2);
+            return {ns, fnn};
+        }
+
+
         static Location from(const std::source_location &loc) {
-            return {loc.file_name(), loc.function_name(), loc.line()};
+            auto [ctx, fn] = crack_function_name(loc.function_name());
+            return {
+                ctx,loc.file_name(),fn,loc.line()
+            };
         }
 
         ///current log level

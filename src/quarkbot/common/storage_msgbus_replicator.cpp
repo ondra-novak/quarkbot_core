@@ -9,6 +9,8 @@
 
 namespace quarkbot {
 
+constexpr std::string_view repl_content_type = "application/prs.db-repl.command";
+
 static std::uint8_t *write_size_2(std::uint8_t *iter, std::size_t sz) {
     if (sz) {
         iter = write_size_2(iter, sz >> 7);
@@ -37,8 +39,8 @@ static void replicate_with_buffer(const Storage::ReplicatorEvent &event, std::ui
     std::size_t final_size = static_cast<std::size_t>(iter - buffer);
     bus.send(Message{
         MessageType::normal_message,{}, target, {reinterpret_cast<const char *>(buffer), final_size},
-        0,0,std::chrono::system_clock::now(),{}        
-    });
+        repl_content_type,0,std::chrono::system_clock::now(),{}        
+});
 }
 
 Storage::Replicator::Connection attach_replicator(Storage storage, MessageBus bus, std::string target) {
@@ -105,9 +107,10 @@ bool replicate_from_message(const std::string_view &msg, StorageTransaction &trn
 StrategyFragment replicate_events(EventStream<Message> msg_stream, Storage storage, std::string filter) {
     Message msg;
     while (co_await msg_stream.receive(msg)) {
-        if (filter.empty() || msg.target == filter) {
-            auto &trn = shared_transaction(storage);
-            replicate_from_message(msg.payload, trn );
+        if ((msg.content_type == repl_content_type)
+            && (filter.empty() || msg.target == filter)) {
+                auto &trn = shared_transaction(storage);
+                replicate_from_message(msg.payload, trn );
         }
     }
 }

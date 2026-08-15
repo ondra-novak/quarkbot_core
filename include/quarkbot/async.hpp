@@ -213,27 +213,6 @@ namespace quarkbot {
         Async() = default;
         Async(coro::coroutine<T> x):coro::coroutine<T>(std::move(x)) {}
 
-        class set_location {
-            Logger::Location loc;
-        public:
-            struct no_transform_awaiter{};
-            set_location(const set_location &) = delete;
-            set_location &operator=(const set_location &) = delete;
-            set_location(std::string_view function, std::string_view file,  uint_least32_t line)
-                :loc(file,function,line) {}
-            static constexpr bool await_ready() {return false;}
-            bool await_suspend(std::coroutine_handle<> h) {
-                void *addr = h.address();
-                auto hp = std::coroutine_handle<promise_type>::from_address(addr);
-                auto &promise = hp.promise();
-                logOutputCB(LogLevel::trace, [&]{
-                    return std::pair(loc,std::format("Fragment {} transfered to {} ", promise.coro_location.function, loc.function));
-                });
-                promise.coro_location = loc;
-                return false;
-            }
-            static constexpr void await_resume() {}            
-        };
     };
 
 

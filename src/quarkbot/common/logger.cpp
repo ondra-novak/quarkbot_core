@@ -87,33 +87,12 @@ namespace {
         "trace"
     });
 
-    std::string_view class_name(const Logger::Location &loc) {
-        std::string_view fn = loc.function;
-        unsigned int br = 0;
-        std::size_t last_spc = std::string_view::npos;
-        std::size_t idx =0;
-        for (auto &x: fn) {
-            if (x == '<') br++;
-            if (x == '>') br--;
-            if (!br) {
-                if (x == ' ') last_spc =  idx;
-                if (x == '(') break;
-            }
-            ++idx;
-        }
-        if (br) return "?";
-        std::string_view part = fn.substr(0,idx).substr(last_spc+1);
-        auto sep = part.rfind("::");
-        if (sep == part.npos) return "-";
-        return part.substr(0,sep);       
-    }
-
     void file_sink_lk(std::chrono::system_clock::time_point tp, std::ostream &file, LogLevel level, const Logger::Location &location, std::string_view content) {
          auto now_mseconds = std::chrono::time_point_cast<std::chrono::milliseconds>(tp);
          auto ins = std::back_inserter(_format_buffer);
          std::format_to(ins, "{:%Y-%m-%d %H:%M:%S} {}", now_mseconds, level_names[static_cast<std::size_t>(level)]);
          if (thread_counter.cur_id) std::format_to(ins, " T{}", thread_counter.cur_id);         
-         std::format_to(ins, " [{}]", class_name(location));
+         std::format_to(ins, " [{}]", location.context);
          *ins++ = ' ';
          ins = std::transform(content.begin(), content.end(), ins, [](char c){
             return c == '\n'?'\x7F':c;

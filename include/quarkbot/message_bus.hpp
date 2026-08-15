@@ -23,42 +23,11 @@ namespace quarkbot {
             else return {};
         }
 
-        ///Send raw message
-        /**
-            @param target target or topic
-            @param payload
-            @param conversation_id id which specifies conversation
-            @param schema schema hash of message (optional)
-        */
-        void send_raw(std::string_view target, std::string_view payload, 
-                ConversationID conversation_id = {}, 
-                srl::SchemaHash schema = {}) {
-            _ptr->send({
-                MessageType::normal_message,
-                {},
-                std::string(target),
-                std::move(payload),
-                conversation_id,
-                schema,
-                std::chrono::system_clock::now(),
-            });
-             
-        }
 
         void send(const Message &msg) {
             _ptr->send(msg);
         }
 
-
-        ///Send message
-        /**
-            @param target target or topic
-            @param payload binary payload
-            @param conversation_id id which specifies conversation
-         */
-        template<typename T>
-        void send(std::string_view target, const T &payload, ConversationID conversation_id = {});
-        
     };
 
 

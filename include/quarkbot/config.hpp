@@ -1,11 +1,19 @@
 #pragma once
 
-#include "quarkbot/utils/refcnt.hpp"
 #include "types.hpp"
 #include <cstddef>
+#include <filesystem>
 #include <optional>
-#include <unordered_map>
+#include <type_traits>
 namespace quarkbot {
+
+template<typename _Source>
+concept IsConfigSource = std::is_invocable_r_v<std::optional<std::string_view>, _Source, const std::string &>;
+template<typename _Source>
+concept IsConfigSourceWithPath = std::is_invocable_r_v<std::optional<std::pair<std::string_view, const std::filesystem::path *> >, _Source, const std::string &>;
+template<typename _Source>
+concept ConfigSource = IsConfigSource<_Source> || IsConfigSourceWithPath<_Source>;
+
 
 ///Generic configuration class for strategy parameters
 /**
@@ -19,8 +27,7 @@ such as files, environment variables, command line arguments, or even dynamic co
 @tparam Source type of the configuration source, must be callable with signature std::optional<std::string_view>(std::string_view)
 Expected underlying source is key-value store, where keys are strings and values are strings. The source should return std::nullopt for missing keys.
 */
-template<typename Source>
-requires (std::is_invocable_r_v<std::optional<std::string_view>, Source, const std::string &>)
+template<ConfigSource Source>
 class ConfigT {
 public:
 
@@ -29,34 +36,54 @@ public:
     ///constructor from source and separator character for sections
     constexpr ConfigT(Source source, char separator = '/'):_source(std::move(source)), _sepatator(separator) {}
 
+    using ConfigValueType = typename std::invoke_result_t<Source, std::string>::value_type;
+    static constexpr bool has_path = std::is_same_v<ConfigValueType, std::pair<std::string_view, const std::filesystem::path *> >;
+
+    static constexpr std::string_view get_value(const ConfigValueType &v) {
+        if constexpr(has_path) {
+            return v.first;
+        } else {
+            return v;
+        }
+    }
+
+    static constexpr const std::filesystem::path *get_path(const ConfigValueType &v) {
+        if constexpr(has_path) {
+            return v.second;
+        } else {
+            return nullptr;
+        }
+    }
+
 
     struct OptionalValue;
 
     ///Value wrapper for configuration values, provides automatic parsing to various types
     struct Value {
         std::string key;
-        std::optional<std::string_view> value;
+        const Source &source;
 
+    private:
+        friend struct OptionalValue;
 
-        ///automatic conversion operator to various types, enabled for bool, arithmetic types, enums with string lookup and types with from_string method
-        template<typename T> 
-        requires(std::is_same_v<T, bool> 
-                || std::is_arithmetic_v<T> 
-                || HasFromStringMethod<T> 
-                || HasStringLookup<T> 
-                || std::is_constructible_v<T, std::string_view>)
-        constexpr operator T() const {
-            if (!value.has_value()) {
-                 throw std::runtime_error(std::format("Key not found in configuration: {}", key));
-            }
-
-            std::string_view actual_str = *value;
+        template<typename T>
+        constexpr T parse_value(ConfigValueType &value, std::type_identity<T>) const {
             
+            auto actual_str = get_value(value);
 
             if constexpr (std::is_same_v<T, bool>) {
                 if (actual_str == "true" || actual_str == "1" || actual_str == "on" || actual_str=="yes" || actual_str == "enabled")  return true;
                 if (actual_str == "false" || actual_str == "0" || actual_str == "off" || actual_str=="no" || actual_str == "disabled")  return false;
                 throw std::runtime_error(std::format("Config parse error on {}: Boolean expects 'true' or 'false', 1 or 0, 'on' or 'off', 'enabled' or 'disabled'", key));
+            } else if constexpr(std::is_same_v<T, std::filesystem::path>) {
+                const auto *path = get_path(value);
+                if (path) {
+                    if (actual_str.empty()) return std::filesystem::path{};
+                    const std::filesystem::path &root = *path;
+                    return root/actual_str;
+                } else {
+                    return {actual_str};
+                }
             } else if constexpr(std::is_arithmetic_v<T>) {
                 T val;
                 auto r = std::from_chars(actual_str.data(), actual_str.data()+actual_str.size(), val);
@@ -87,15 +114,32 @@ public:
                     key, actual_str, lst
                 ));
             } else {
-                static_assert(assert_false<T>, "Cannot read such type");
+                static_assert(sizeof(T) == 0, "Cannot read such type");
             }
+
+        }
+        public:
+
+        ///automatic conversion operator to various types, enabled for bool, arithmetic types, enums with string lookup and types with from_string method
+        template<typename T> 
+        constexpr operator T() const {
+            std::optional<ConfigValueType> value = source(key);
+
+            if (!value.has_value()) {
+                 throw std::runtime_error(std::format("Key not found in configuration: {}", key));
+            }
+
+            ConfigValueType actual_str = *value;
+
+            return parse_value(actual_str, std::type_identity<T>{});
         }    
 
         ///overload of operator() to provide default value if key is not found,
         template<typename T> 
         constexpr auto operator()(const T &val) const -> decltype(std::declval<Value>().operator T()) {
-            if (value.has_value()) return *this;
-            else return val;
+            std::optional<ConfigValueType> value = source(key);
+            if (!value) return val;
+            return parse_value(*value, std::type_identity<T>{});            
         }    
 
         ///specifies that default value is nullopt which expects result as std::optional<T> 
@@ -112,7 +156,8 @@ public:
 
         template<typename X>
         constexpr operator std::optional<X>() const {
-            if (val.value.has_value()) return val.operator X();
+            auto value = val.source(val.key);            
+            if (value.has_value()) return val.parse_value(*value, std::type_identity<X>{});
             else return std::nullopt;
         }
     };
@@ -120,9 +165,8 @@ public:
 
     ///access configuration value by key, returns Value wrapper which can be automatically converted to desired type
     constexpr Value operator[](std::string_view key) const {
-        Value out {{}, {}};
+        Value out {{}, _source};
         build_whole_key(out.key, key);
-        out.value = _source(out.key);
         return out;
     }
 
@@ -170,46 +214,19 @@ protected:
 
 };
 
-template<typename Source>
-requires (std::is_invocable_r_v<std::optional<std::string_view>, Source, const std::string &>)
+template<ConfigSource Source>
 inline constexpr typename ConfigT<Source>::OptionalValue ConfigT<Source>::Value::operator()(std::nullopt_t) const {
             return {*this};
 }
 
-
+/*
 struct ConfigStringReader {
     std::string_view data;
     std::string_view operator()() {return std::exchange(data,"");}
 };
+*/
 
 
-class IConfigBackend {
-public:
-    virtual std::optional<std::string_view> operator()(const std::string &) const = 0;
-    virtual ~IConfigBackend() = default;
-};
 
-
-class ConfigBackend {
-public:
-    constexpr ConfigBackend() = default;
-    ConfigBackend(std::shared_ptr<const IConfigBackend> backend):_backend(backend) {}
-    std::optional<std::string_view> operator()(const std::string &key) const {
-        return _backend?_backend->operator()(key):std::nullopt;
-    }
-protected:
-    std::shared_ptr<const IConfigBackend> _backend = {};
-};
-
-class ConfigBackendMap final : public IConfigBackend , public std::unordered_map<std::string, std::string>{
-public:
-    using std::unordered_map<std::string, std::string>::unordered_map;
-
-    virtual std::optional<std::string_view> operator()(const std::string &key) const {
-        auto iter = this->find(key);
-        if (iter == this->end()) return std::nullopt;
-        else return iter->second;
-    }
-};
 
 }
