@@ -3,11 +3,14 @@
 #include "persistent_reporter.hpp"
 #include "../common/deserialize_resolver.hpp"
 #include "quarkbot/backtest/var_inspector.hpp"
+#include "quarkbot/event_stream.hpp"
 #include "quarkbot/json/json.hpp"
 #include "quarkbot/persistent.hpp"
 #include "quarkbot/serializer/deserialize_from_schema.hpp"
 #include "quarkbot/serializer/schema_fwd.hpp"
 #include "quarkbot/storage.hpp"
+#include "quarkbot/stream/snapshot.hpp"
+#include "quarkbot/stream/ticker.hpp"
 #include "quarkbot/timestamp.hpp"
 #include "quarkbot/types.hpp"
 #include "quarkbot/storage_srl.hpp"
@@ -62,6 +65,7 @@ protected:
     Timestamp _now;
     ///watch variable and if it is watchpoint - if variable changes, debugger will stop
     std::map<std::string,bool, std::less<> > _watches;
+    std::map<std::string,EventStream<Ticker>, std::less<> > _tickers;
     std::mutex _mx;
     
 
@@ -78,6 +82,8 @@ protected:
     void watch(std::string_view arg);
     void unwatch(std::string_view arg);
     void watchpoint(std::string_view arg);
+    void ticker(std::string_view arg);
+    void clear_ticker(std::string_view arg);
 
     void list_variables();
 
@@ -109,7 +115,11 @@ protected:
         {"unwatch",&SimpleStdioDebugger::unwatch},
         {"uw",&SimpleStdioDebugger::unwatch},
         {"watchpoint",&SimpleStdioDebugger::watchpoint},
-        {"wp",&SimpleStdioDebugger::watchpoint}
+        {"wp",&SimpleStdioDebugger::watchpoint},
+        {"ticker", &SimpleStdioDebugger::ticker},
+        {"tk", &SimpleStdioDebugger::ticker},
+        {"remove_ticker", &SimpleStdioDebugger::clear_ticker},
+        {"rtk", &SimpleStdioDebugger::clear_ticker},
         
     });
 
@@ -130,6 +140,15 @@ void SimpleStdioDebugger::list_variables() {
     std::scoped_lock _(_mx);
 
     _inspector.flush(); //flush pending updates to the variable reporter
+    if (!_tickers.empty()) {        
+        std::println(std::cout, "---Tickers ---");
+        for (auto &[var, ticker]: _tickers) {
+            Ticker tk;
+            if (ticker.current(tk)) {
+                std::println(std::cout, "{}={}", var, (tk.quote.both_sides()?tk.quote.mid():tk.stats.last_price).to_string());
+            }
+        }
+    }
     if (!_watches.empty()) {
         std::println(std::cout, "---Watches ---");
         for (const auto &[var, watchpoint]: _watches) {
@@ -237,6 +256,8 @@ void SimpleStdioDebugger::help(){
         "watch <var>                add variable to watch list (removes watchpoint if set)\n"
         "unwatch <var>              remove variable from watch list\n"
         "watchpoint <var>           set watchpoint on variable (debugger will stop when value changes)\n"
+        "ticker <instrument>        add ticker to watch list\n"
+        "remove_ticker <instrument> rmeove ticker from watch list\n"
         "<enter>                     repeat previous command\n"
     );
 
@@ -348,6 +369,35 @@ void SimpleStdioDebugger::unwatch(std::string_view arg) {
 void SimpleStdioDebugger::watchpoint(std::string_view arg) {
     std::scoped_lock _(_mx);
     _watches[std::string(arg)] = true;
+}
+
+void SimpleStdioDebugger::ticker(std::string_view arg) {
+    std::string err;
+    for (auto t: std::array<InstrumentType,4>({InstrumentType::spot, InstrumentType::margin, InstrumentType::contract, InstrumentType::inverse_contract})) {
+        try {
+            auto ex = _control->get_exchange();
+            auto instr = ex.create_instrument(arg, t);
+            auto stream = instr.subscribe<Ticker>();
+            if (stream.is_open()) {
+                _tickers[std::string(arg)] = std::move(stream);
+            } else {
+                std::println(std::cout, "The ticker stream is not available for {}", arg);
+            }
+            return;
+        } catch (const std::exception &e) {
+                err = std::format("Failed to create instrument {}:  {}", arg, e.what());
+        }
+    } 
+    std::println(std::cout, "{}", err);
+
+}
+void SimpleStdioDebugger::clear_ticker(std::string_view arg) {
+    auto iter = _tickers.find(arg);
+    if (iter == _tickers.end()) {
+        std::println(std::cout, "Ticker `{}` is not subscribed", arg);
+    } else {
+        _tickers.erase(iter);
+    }
 }
 
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "quarkbot/types.hpp"
 #include "tradestat.hpp"
 #include "quote.hpp"
 
@@ -9,7 +10,7 @@ namespace quarkbot {
 
 struct Ticker  {
 
-
+    struct MarketInstrumentStream {};
     TradeStatCounter stats;
     Quote quote;
 

@@ -177,7 +177,7 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
 
 
     std::shared_ptr<IBacktestDebugger> BacktestEnv::enable_debugger(){
-        if (!_debugger) _debugger = std::make_shared<BasicDebuggerImpl>();
+        if (!_debugger) _debugger = std::make_shared<BasicDebuggerImpl>(_exchange);
         return _debugger;
     }
 

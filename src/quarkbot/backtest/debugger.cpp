@@ -75,4 +75,8 @@ void BasicDebuggerImpl::quit() {
     status.run_status = RunStatus::running;
 }
 
+Exchange BasicDebuggerImpl::get_exchange() const {
+    return _exchange;
+}
+
 }

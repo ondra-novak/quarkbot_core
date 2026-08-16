@@ -1,5 +1,7 @@
 #pragma once
 
+#include "quarkbot/abstract/iexchange.hpp"
+#include "quarkbot/exchange.hpp"
 #include "quarkbot/timestamp.hpp"
 #include <optional>
 namespace quarkbot {
@@ -109,6 +111,13 @@ public:
         Strategy is signaled about stop operation
     */
     virtual void quit() = 0;
+
+
+    ///Retrieve backtest exchange
+    /**
+    @note Exchange object is not MT-safe. Ensure, that debugger is stopped while accesing this object
+     */
+    virtual Exchange get_exchange() const = 0;
 };
 
 }

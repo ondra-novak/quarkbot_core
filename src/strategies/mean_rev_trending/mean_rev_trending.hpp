@@ -156,7 +156,6 @@ public:
                 double sema = slow_ema.update(fema);
                 double diff = fema - sema;
                 int dir = diff >= 0?1:-1;
-                if (dir == sgn(position.get())) co_return;  //in direction, no need to do anything
 
                 double initial_pos_cur = (initial_budget + benchmark_profit) * initial_pos_percent * 0.01;
                 Decimal oracle_position = dir * initial_pos_cur / last_trend_check_price.get();
@@ -175,6 +174,10 @@ public:
                 if (quant == 0) {
                     co_return;
                 }
+                if (dir == sgn(position.get())) {                
+                    co_return;  //in direction, no need to do anything
+                }
+
                 Order rev_order = instrument.place_order(OrderRequest{
                     .side = static_cast<Side>(sgn(quant)),
                     .type = OrderType::market,
