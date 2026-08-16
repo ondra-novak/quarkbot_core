@@ -165,7 +165,12 @@ public:
                 total_loss = std::max(0.0,total_loss + pnl);  //move oracle profit into loss of mean reversion;
                 calc_loss = std::max(0.0,calc_loss + pnl);
                 last_trend_check_price = price;
-                
+
+                if (dir == sgn(position.get())) {                
+                    co_return;  //in direction, no need to do anything
+                }
+
+
                 auto quant = calc_order_diff(price, dir);
                 upper.cancel();
                 lower.cancel();
@@ -173,9 +178,6 @@ public:
                 lower = {};
                 if (quant == 0) {
                     co_return;
-                }
-                if (dir == sgn(position.get())) {                
-                    co_return;  //in direction, no need to do anything
                 }
 
                 Order rev_order = instrument.place_order(OrderRequest{

@@ -474,11 +474,17 @@ void  SimExecutor::accept_order(const POrder &ord) {
 StrategyFragment SimExecutor::place_order(POrder ord) {
     if (co_await _timer.sleep_for(latency)){
         place_order_internal(std::move(ord));
+    } else {
+        auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());    
+        simt.on_order_update(ord, OrderRejectionReason::not_tradable);
     }
 }
 StrategyFragment SimExecutor::replace_order(POrder ord, POrder prev_order) {
     if (co_await _timer.sleep_for(latency)){
         place_order_internal(std::move(ord), std::move(prev_order));
+    } else {
+        auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());    
+        simt.on_order_update(ord, OrderRejectionReason::not_tradable);
     }
     
 }

@@ -1,6 +1,7 @@
 #include "backtest.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "basic_coro/sync_await.hpp"
+#include <chrono>
 #include <exception>
 #include <filesystem>
 #include <quarkbot/context.hpp>
@@ -9,6 +10,7 @@
 #include "backtest_executor.hpp"
 #include "quarkbot/backtest/debugger.hpp"
 #include "quarkbot/backtest/ibacktest_debugger.hpp"
+#include "quarkbot/log.hpp"
 #include "quarkbot/selector.hpp"
 #include "quarkbot/types.hpp"
 #include "quarkbot/utils/init_with.hpp"
@@ -100,8 +102,19 @@ namespace quarkbot {
             logError("Backtest exit because of exception: {}", e.what());            
         }
 
+        auto finish = [&]{
+            auto timeout = executor->now()+std::chrono::days(1);
+            while (executor->advance_time(std::chrono::system_clock::time_point::max())) {
+                if (executor->now() > timeout) {
+                    logError("Failed to finish all timers");                    
+                    break;
+                }
+            }
+            executor->flush_queue();
+        };
+        
         stop_source.request_stop();    
-        executor->flush_queue();    
+        finish();
         if (debugger) debugger->on_exit();
         return true;
     }
@@ -165,14 +178,12 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
 
 
     void BacktestEnv::join() {
-        auto pending = _strategy_group.join().launch();
-        while (!pending.await_ready()) {
-            if (!_worker.quiesce()) {
-                logFatal("Not all task are properly stopped! Backtest aborted");
-                abort();
-            }
+        auto pending = _strategy_group.join().launch();        
+        if (!pending.await_ready()) {
+            logFatal("Not all task are properly stopped! Backtest aborted");
+            abort();
         }
-        coro::sync_await(pending);
+        pending.await_resume();
     }
 
 
