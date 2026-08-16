@@ -35,5 +35,6 @@ target_sources(quarkbot_backtest PRIVATE
     entry_point.hpp
     simple_stdio_debugger.hpp
     simple_stdio_debugger.cpp
+    var_inspector.cpp
  
 )

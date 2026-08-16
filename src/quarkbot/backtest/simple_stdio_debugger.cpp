@@ -2,10 +2,12 @@
 #include "ibacktest_debugger.hpp"
 #include "persistent_reporter.hpp"
 #include "../common/deserialize_resolver.hpp"
+#include "quarkbot/backtest/var_inspector.hpp"
 #include "quarkbot/json/json.hpp"
 #include "quarkbot/persistent.hpp"
 #include "quarkbot/serializer/deserialize_from_schema.hpp"
 #include "quarkbot/serializer/schema_fwd.hpp"
+#include "quarkbot/storage.hpp"
 #include "quarkbot/timestamp.hpp"
 #include "quarkbot/types.hpp"
 #include "quarkbot/storage_srl.hpp"
@@ -16,8 +18,11 @@
 #include <csignal>
 #include <ctime>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <ostream>
+#include <set>
 #include <string>
 #include <thread>
 
@@ -28,7 +33,16 @@ class SimpleStdioDebugger {
 public:
     SimpleStdioDebugger(std::shared_ptr<IBacktestDebugger> control,Storage store)
         :_control(std::move(control)), _store(std::move(store)) {            
-            _repl = connect_variable_reporter(_store, std::cout);
+            _inspector.attach_storage(_store);
+            _watcher = _store.add_replicator([this](const Storage::ReplicatorEvent &ev) noexcept {
+                std::scoped_lock lock(_mx);
+                if (!ev.schema_hash) {
+                    auto it = _watches.find(ev.key);
+                    if (it != _watches.end() && it->second) {
+                        _control->set_running(false);
+                    }
+                }
+            });
         }
         
 
@@ -43,8 +57,13 @@ protected:
     std::jthread _thr;
     std::shared_ptr<IBacktestDebugger> _control;
     Storage _store;
-    Storage::Replicator::Connection _repl;
+    VariableInspector _inspector;
+    Storage::Replicator::Connection _watcher;
     Timestamp _now;
+    ///watch variable and if it is watchpoint - if variable changes, debugger will stop
+    std::map<std::string,bool, std::less<> > _watches;
+    std::mutex _mx;
+    
 
     void worker(std::stop_token tkn);
 
@@ -56,8 +75,12 @@ protected:
     void skip(std::string_view arg);
     void print(std::string_view arg);
     void prints(std::string_view arg);
+    void watch(std::string_view arg);
+    void unwatch(std::string_view arg);
+    void watchpoint(std::string_view arg);
 
-    Json value_to_json(const auto &v);
+    void list_variables();
+
 
     static constexpr auto command_list = make_lookup_table<std::string_view, void (SimpleStdioDebugger::*)()>({
         {"help", &SimpleStdioDebugger::help},
@@ -70,6 +93,8 @@ protected:
         {"q", &SimpleStdioDebugger::quit},
         {"cont", &SimpleStdioDebugger::cont},
         {"c", &SimpleStdioDebugger::cont},
+        {"vars", &SimpleStdioDebugger::list_variables},
+        {"v", &SimpleStdioDebugger::list_variables}
     });
 
     static constexpr auto command_list_arg = make_lookup_table<std::string_view, void (SimpleStdioDebugger::*)(std::string_view)>({
@@ -78,7 +103,14 @@ protected:
         {"print",&SimpleStdioDebugger::print},
         {"p",&SimpleStdioDebugger::print},
         {"prints",&SimpleStdioDebugger::prints},
-        {"ps",&SimpleStdioDebugger::prints}
+        {"ps",&SimpleStdioDebugger::prints},
+        {"watch",&SimpleStdioDebugger::watch},
+        {"w",&SimpleStdioDebugger::watch},
+        {"unwatch",&SimpleStdioDebugger::unwatch},
+        {"uw",&SimpleStdioDebugger::unwatch},
+        {"watchpoint",&SimpleStdioDebugger::watchpoint},
+        {"wp",&SimpleStdioDebugger::watchpoint}
+        
     });
 
 };
@@ -94,6 +126,27 @@ std::function<void(std::shared_ptr<IBacktestDebugger>, Storage)> get_simple_stdi
 
 static std::atomic<bool> interrupted = {false};
 
+void SimpleStdioDebugger::list_variables() {
+    std::scoped_lock _(_mx);
+
+    _inspector.flush(); //flush pending updates to the variable reporter
+    if (!_watches.empty()) {
+        std::println(std::cout, "---Watches ---");
+        for (const auto &[var, watchpoint]: _watches) {
+            std::string_view wp = watchpoint ? "*" : " ";
+            std::println(std::cout, " {}{}={}", wp, var, _inspector.inspect(var).to_string()    );
+        }
+    }
+    auto vars = _inspector.inspect_all_updated();
+    if (!vars.empty()) {
+        std::println(std::cout, "---Updated ---");
+        for (const auto &[var, val]: vars) {
+            if (_watches.find(var) == _watches.end()) {
+                std::println(std::cout, "  {} = {}", var, val.to_string());
+            }
+        }
+    }
+}
 
 void SimpleStdioDebugger::worker(std::stop_token tkn) {
     signal(SIGINT,[](int){
@@ -110,55 +163,52 @@ void SimpleStdioDebugger::worker(std::stop_token tkn) {
         if (st.run_status == IBacktestDebugger::RunStatus::done) break;
             
             
-    
-        while (st.run_status == IBacktestDebugger::RunStatus::paused) {
-            
-            try {shared_transaction({});} catch (...) {} //throws exception, but flushes pending transaction
+        if (st.run_status == IBacktestDebugger::RunStatus::paused) {
+            list_variables();
+            while (st.run_status == IBacktestDebugger::RunStatus::paused) {
+                
 
-            _now = st.time;
-            std::print(std::cout, "paused  {:%Y-%m-%d %H:%M:%S} > ", st.time);
+                _now = st.time;
+                std::print(std::cout, "paused  {:%Y-%m-%d %H:%M:%S} > ", st.time);
 
-            if (std::getline(std::cin, cmdline)) {
-                if (cmdline.empty()) cmdline = std::move(prev_line);
-                if (!cmdline.empty()) {
-                    std::string_view cmdlinestr = trim(cmdline);
-                    auto c1 = command_list(cmdlinestr);
-                    if (c1.has_value()) {
-                        (this->*(*c1))();
-                    } else {
-                        auto cmd = trim(split(cmdlinestr, " "));
-                        auto c2 = command_list_arg(cmd);
-                        if (c2) {
-                            auto params = trim(cmdlinestr);
-                            if (params.empty()) {
-                                std::println(std::cout,"ERROR: Expected argument for command {}", cmd);
-                            } else {
-                                (this->*(*c2))(params);
-                            }
+                if (std::getline(std::cin, cmdline)) {
+                    if (cmdline.empty()) cmdline = std::move(prev_line);
+                    if (!cmdline.empty()) {
+                        std::string_view cmdlinestr = trim(cmdline);
+                        auto c1 = command_list(cmdlinestr);
+                        if (c1.has_value()) {
+                            (this->*(*c1))();
                         } else {
-                            std::println(std::cout, "Unknown command: ");
-                        }
-                    } 
-                    prev_line = std::move(cmdline);
-                }               
-            } else {
-                _control->quit();
+                            auto cmd = trim(split(cmdlinestr, " "));
+                            auto c2 = command_list_arg(cmd);
+                            if (c2) {
+                                auto params = trim(cmdlinestr);
+                                if (params.empty()) {
+                                    std::println(std::cout,"ERROR: Expected argument for command {}", cmd);
+                                } else {
+                                    (this->*(*c2))(params);
+                                }
+                            } else {
+                                std::println(std::cout, "Unknown command: ");
+                            }
+                        } 
+                        prev_line = std::move(cmdline);
+                    }               
+                } else {
+                    _control->quit();
+                }
+                st = _control->get_status();        
             }
-            st = _control->get_status();        
+            _inspector.clear_updated();
+
         }
                 
         std::print(std::cout, "running {:%Y-%m-%d %H:%M:%S}\r", st.time);
         std::cout.flush();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-
-    
     
     signal(SIGINT,SIG_DFL);
-
-    
-
-
 }
 
 void SimpleStdioDebugger::help(){
@@ -166,13 +216,10 @@ void SimpleStdioDebugger::help(){
         "Debugger help\n"
         "-----------------------\n"
         "help (h)                   this help\n"
-        "\n"
         "step (t)                   step to next tick\n"
-        "\n"
         "next (n)                   step to next event\n"
-        "\n"
         "cont (c)                   continue (Ctrl+C break)\n"
-        "\n"
+        "vars (v)                   list watched and updated variables\n"
         "quit (q)                   quit\n"
         "\n"
         "skip (s) <time/span>       run until time or span is reached\n"
@@ -186,7 +233,10 @@ void SimpleStdioDebugger::help(){
         "\n"
         "prints <var>               print persisted serie\n"
         "\n"
-        "<enter>             repeat previous command\n"
+        "watch <var>                add variable to watch list (removes watchpoint if set)\n"
+        "unwatch <var>              remove variable from watch list\n"
+        "watchpoint <var>           set watchpoint on variable (debugger will stop when value changes)\n"
+        "<enter>                     repeat previous command\n"
     );
 
 }
@@ -260,44 +310,35 @@ void SimpleStdioDebugger::skip(std::string_view arg) {
 
 }
 
-Json SimpleStdioDebugger::value_to_json(const auto &v) {
-    srl::SchemaHash h;    
-    Json rdval;
-    if (v.exists) {
-        v.extract(h,h);
-        auto sch = _store.get_schema(h);
-        if (sch.exists) {
-            try {
-                auto jsch = Json::from_string(sch.data);
-                auto arch = srl::string_deserializer(v.data);
-                rdval = srl::deserialize_from_schema(jsch, arch, get_desrl_resolver());
-            } catch (...) {
-                rdval = binary_content(v.data);
-            }
-        } else {
-            rdval = binary_content(v.data);
-        }
-    }
-    return rdval;
-}
 
 void SimpleStdioDebugger::print(std::string_view arg) {
-    auto v = _store.get(arg);
-    Json rdval = value_to_json(v);
-    std::println(std::cout, "{}={}", arg, rdval.to_string());
+    auto v = _inspector.inspect(arg);
+    std::println(std::cout, "{}={}", arg, v.to_string());
 }
 void SimpleStdioDebugger::prints(std::string_view arg) {
-    std::print(std::cout, "{}",arg);
+    auto v = _inspector.inspect_series  (arg);
     char sep = '=';    
-    for (const auto &v: _store.select_range(arg, RecordKey::min(), RecordKey::max())) {
-            auto j = value_to_json(v);
-            std::print(std::cout, "{}{}", sep, j.to_string());
+    for (const auto &v: v) {            
+            std::print(std::cout, "{}{}", sep, v.to_string());
             sep = ',';
     }
     if (sep == '=') {
         std::print(std::cout, "nullptr");
     }
     std::println(std::cout);
+}
+void SimpleStdioDebugger::watch(std::string_view arg) {
+    std::scoped_lock _(_mx);
+    _watches[std::string(arg)] = false;
+}
+void SimpleStdioDebugger::unwatch(std::string_view arg) {
+    std::scoped_lock _(_mx);
+    _watches.erase(std::string(arg));
+
+}
+void SimpleStdioDebugger::watchpoint(std::string_view arg) {
+    std::scoped_lock _(_mx);
+    _watches[std::string(arg)] = true;
 }
 
 

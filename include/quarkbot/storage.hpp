@@ -5,6 +5,7 @@
 #include "defs.hpp"
 #include "utils/wrapper.hpp"
 #include <memory>
+#include <type_traits>
 
 namespace quarkbot {
 
@@ -94,7 +95,8 @@ public:
         else return *this;
     }
 
-    template<std::invocable<ReplicatorEvent > Fn>
+    template<typename Fn>
+    requires(std::is_nothrow_invocable_v<Fn, const ReplicatorEvent &>)
     Replicator::Connection add_replicator(Fn &&consumer) {
         auto conn = Replicator::create_connection(std::move(consumer));
         _ptr->add_replicator(conn);
