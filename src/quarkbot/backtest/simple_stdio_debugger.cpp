@@ -164,6 +164,7 @@ void SimpleStdioDebugger::worker(std::stop_token tkn) {
             
             
         if (st.run_status == IBacktestDebugger::RunStatus::paused) {
+            std::println(std::cout);
             list_variables();
             while (st.run_status == IBacktestDebugger::RunStatus::paused) {
                 
@@ -260,6 +261,14 @@ void SimpleStdioDebugger::cont(){
     _control->set_running(true);
 }
 
+static time_t custom_timegm(std::tm* tm_ptr) {
+#ifdef _WIN32
+    return _mkgmtime(tm_ptr); // Windows specifická funkce pro UTC
+#else
+    return timegm(tm_ptr);    // POSIX standard pro UTC (Linux/macOS)
+#endif
+}
+
 void SimpleStdioDebugger::skip(std::string_view arg) {
     double c;
     auto r = std::from_chars(arg.data(), arg.data()+arg.size(), c);
@@ -287,7 +296,7 @@ void SimpleStdioDebugger::skip(std::string_view arg) {
             struct std::tm ts = {
                 s,m,h,D,M-1,R-1990,0,0,0,0,"UTC"
             };
-            brk = std::chrono::system_clock::from_time_t(std::mktime(&ts));
+            brk = std::chrono::system_clock::from_time_t(custom_timegm(&ts));
         }break;
         case ':':   {
             int h =0, m =0, s= 0;

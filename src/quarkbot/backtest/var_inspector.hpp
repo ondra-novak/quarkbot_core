@@ -20,7 +20,7 @@ public:
     ///flushes all pending updates to the variable reporter
     static void flush();
 
-    void clear_updated() {_updated_vars.clear();}
+    void clear_updated();
     
     ///attaches a storage instance to the variable inspector
     void attach_storage(Storage storage);

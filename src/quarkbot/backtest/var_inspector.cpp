@@ -90,5 +90,9 @@ namespace quarkbot {
             //ignore exception, we just want to flush pending transaction
         }
     }
+    void VariableInspector::clear_updated() {
+        std::scoped_lock _(_mx);
+        _updated_vars.clear();
+    }
 
 }
