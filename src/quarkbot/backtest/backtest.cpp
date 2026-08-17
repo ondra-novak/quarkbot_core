@@ -1,4 +1,5 @@
 #include "backtest.hpp"
+#include "basic_coro/coroutine.hpp"
 #include "basic_coro/prepared_coro.hpp"
 #include "basic_coro/sync_await.hpp"
 #include <chrono>
@@ -12,6 +13,7 @@
 #include "quarkbot/backtest/ibacktest_debugger.hpp"
 #include "quarkbot/log.hpp"
 #include "quarkbot/selector.hpp"
+#include "quarkbot/strategy_fragment.hpp"
 #include "quarkbot/types.hpp"
 #include "quarkbot/utils/init_with.hpp"
 #include "simaccount.hpp"
@@ -178,12 +180,16 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
 
 
     void BacktestEnv::join() {
-        auto pending = _strategy_group.join().launch();        
-        if (!pending.await_ready()) {
-            logFatal("Not all task are properly stopped! Backtest aborted");
-            abort();
+        auto done = std::make_shared<std::atomic<bool> >(false);
+        auto joiner = [](StrategyFragmentGroup grp, std::shared_ptr<std::atomic<bool> > done_flag) -> coro::coroutine<void> {
+            co_await grp.join();
+            done_flag->store(true);
+
+        };
+        joiner(std::move(_strategy_group), done);
+        if (done->load() == false) {        
+            logError("The strategy failed to clean up all background processes during the shutdown sequence.");
         }
-        pending.await_resume();
     }
 
 

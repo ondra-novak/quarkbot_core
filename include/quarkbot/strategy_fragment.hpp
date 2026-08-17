@@ -3,6 +3,7 @@
 #include "basic_coro/awaitable.hpp"
 #include "quarkbot/log.hpp"
 #include <list>
+#include <mutex>
 
 namespace quarkbot {
 
@@ -78,6 +79,12 @@ namespace quarkbot {
                 }
             };
             return waiter(std::move(_pending_list));
+        }
+
+        StrategyFragmentGroup() = default;
+        StrategyFragmentGroup(StrategyFragmentGroup &&other) {
+            std::scoped_lock _(other._mx);
+            _pending_list = std::move(other._pending_list);
         }
 
     protected:

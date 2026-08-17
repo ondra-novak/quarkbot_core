@@ -476,7 +476,7 @@ StrategyFragment SimExecutor::place_order(POrder ord) {
         place_order_internal(std::move(ord));
     } else {
         auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());    
-        simt.on_order_update(ord, OrderRejectionReason::not_tradable);
+        simt.on_order_update(ord, OrderRejectionReason::adapter_stopped);
     }
 }
 StrategyFragment SimExecutor::replace_order(POrder ord, POrder prev_order) {
@@ -484,7 +484,7 @@ StrategyFragment SimExecutor::replace_order(POrder ord, POrder prev_order) {
         place_order_internal(std::move(ord), std::move(prev_order));
     } else {
         auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());    
-        simt.on_order_update(ord, OrderRejectionReason::not_tradable);
+        simt.on_order_update(ord, OrderRejectionReason::adapter_stopped);
     }
     
 }

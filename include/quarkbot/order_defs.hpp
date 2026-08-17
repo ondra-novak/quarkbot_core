@@ -227,6 +227,8 @@ enum class OrderRejectionReason : uint8_t{
     timeout,
     //order expired before delivered
     expired,
+    //order rejected because adapter was stopped (strategy already received stop signal)
+    adapter_stopped,
     //reduce order doesn't reduce position
     reduce_doesnt_reduce,
     //order rejected because too large slippage

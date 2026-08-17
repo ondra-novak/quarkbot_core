@@ -124,9 +124,12 @@ public:
             auto side = order.get_parameters().side;
             if (rpt.status == OrderStatus::filled) {
                 recalculate_bands(side);
-            }
-            if (select_mean_rev_order(side) == order) {
                 place_mean_rev_order(select_mean_rev_price(side), side, {});
+            } else if (order == select_mean_rev_order(side) && !(rpt.status == OrderStatus::rejected && rpt.rejection_reason == OrderRejectionReason::adapter_stopped)) {
+                //just test, if not stopped
+                if (co_await timer.sleep_for(std::chrono::seconds(10))) {
+                    place_mean_rev_order(select_mean_rev_price(side), side, {});
+                }
             }
         }
 
@@ -201,6 +204,8 @@ public:
             upper.cancel();
             lower.cancel();
             timer.cancel();
+            upper ={};
+            lower = {};
             co_await sync.join();
         }
 
@@ -273,7 +278,6 @@ public:
         co_await inst.quit();
         co_await p2;
         co_await p1;        
-        co_await inst.quit();
     }
 
 
