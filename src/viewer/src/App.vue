@@ -34,7 +34,8 @@ let worker: Worker | null = null
 
 onMounted(() => {
   worker = new ParserWorker()
-  worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
+  const w = worker
+  w.onmessage = (e: MessageEvent<WorkerMessage>) => {
     const msg = e.data
     if (msg.type === 'meta') {
       instruments.value = msg.instruments
