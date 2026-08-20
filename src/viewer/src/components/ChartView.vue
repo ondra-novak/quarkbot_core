@@ -60,9 +60,6 @@ watch(aggregated, (candles) => {
   applyMarkers()
 })
 
-// Re-apply markers when fills change
-watch(grouped, () => applyMarkers())
-
 function applyMarkers() {
   if (!series) return
   const markers: SeriesMarker<Time>[] = []
