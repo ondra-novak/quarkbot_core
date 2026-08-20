@@ -98,7 +98,8 @@ export function computeStats(
   let bestMfe = 0
   for (const trade of closedTrades) {
     for (const bar of candles) {
-      if (bar.time < trade.entryTime || bar.time > trade.exitTime) continue
+      if (bar.time > trade.exitTime) break
+      if (bar.time < trade.entryTime) continue
       const adverse = trade.entrySide === 'LONG' ? trade.entryPrice - bar.low : bar.high - trade.entryPrice
       const favorable = trade.entrySide === 'LONG' ? bar.high - trade.entryPrice : trade.entryPrice - bar.low
       if (adverse > worstMae) worstMae = adverse

@@ -73,7 +73,8 @@ async function run(url: string, contentLength: number) {
     }
   }
 
-  // Final line
+  // Final line — flush TextDecoder internal buffer first
+  remainder += decoder.decode()
   if (remainder.trim()) parseLine(remainder)
 
   // Fallback: if file has no C event, send meta now
@@ -119,13 +120,15 @@ async function run(url: string, contentLength: number) {
     } else if (ev === 'c') {
       const [name, open, high, low, close, volume] = payload as [string, number, number, number, number, number]
       const candle: Candle = { time: sec, open, high, low, close, volume }
-      candleBuf.get(name)?.push(candle)
-      allCandles.get(name)?.push(candle)
+      if (!candleBuf.has(name)) { console.warn(`[parser] candle for unknown instrument: ${name}`); return }
+      candleBuf.get(name)!.push(candle)
+      allCandles.get(name)!.push(candle)
     } else if (ev === 'f') {
       const p = payload as { instrument: string; order_id: string; price: number; quantity: number; side: string; reason: string; label: string }
       const fill: Fill = { time: sec, orderId: p.order_id, side: p.side.toUpperCase() as 'BUY' | 'SELL', price: p.price, qty: p.quantity, reason: p.reason, label: p.label }
-      fillBuf.get(p.instrument)?.push(fill)
-      allFills.get(p.instrument)?.push(fill)
+      if (!fillBuf.has(p.instrument)) { console.warn(`[parser] fill for unknown instrument: ${p.instrument}`); return }
+      fillBuf.get(p.instrument)!.push(fill)
+      allFills.get(p.instrument)!.push(fill)
     } else if (ev === 's') {
       const p = payload as { instrument: string; order_id: string; filled: number; turnover: number; fees: number; fees_native: number }
       if (!fillStatsMap.has(p.instrument)) fillStatsMap.set(p.instrument, new Map())
