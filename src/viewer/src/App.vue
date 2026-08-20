@@ -47,6 +47,8 @@ onMounted(() => {
         if (!candlesMap.value.has(instr.name)) candlesMap.value.set(instr.name, [])
         if (!fillsMap.value.has(instr.name)) fillsMap.value.set(instr.name, [])
       }
+      candlesMap.value = new Map(candlesMap.value)
+      fillsMap.value = new Map(fillsMap.value)
     } else if (msg.type === 'candles') {
       const existing = candlesMap.value.get(msg.instrument) ?? []
       candlesMap.value.set(msg.instrument, [...existing, ...msg.data])
@@ -69,7 +71,7 @@ onMounted(() => {
 
   // Fetch Content-Length first so the worker can report accurate progress
   fetch('/api/report', { method: 'HEAD' }).then(r => {
-    const contentLength = parseInt(r.headers.get('content-length') ?? '0')
+    const contentLength = Number(r.headers.get('content-length') || '0')
     worker!.postMessage({ url: '/api/report', contentLength })
   }).catch(() => {
     worker!.postMessage({ url: '/api/report', contentLength: 0 })
