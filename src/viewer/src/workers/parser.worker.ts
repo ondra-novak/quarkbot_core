@@ -29,8 +29,9 @@ async function run(url: string, contentLength: number) {
   const allCandles = new Map<string, Candle[]>()   // kept for analytics
   const fillBuf = new Map<string, Fill[]>()
   const allFills = new Map<string, Fill[]>()
-  const fillStatsMap = new Map<string, FillStatsEntry>()
+  const fillStatsMap = new Map<string, Map<string, FillStatsEntry>>()
 
+  let baseIntervalSeen = false
   let bytesRead = 0
   let remainder = ''
   const decoder = new TextDecoder()
@@ -54,7 +55,7 @@ async function run(url: string, contentLength: number) {
     }
 
     // Send meta as soon as we have seen at least one instrument and the interval
-    if (!metaSent && instruments.size > 0) {
+    if (!metaSent && instruments.size > 0 && baseIntervalSeen) {
       post({ type: 'meta', instruments: [...instruments.values()], baseInterval })
       metaSent = true
     }
@@ -75,6 +76,12 @@ async function run(url: string, contentLength: number) {
   // Final line
   if (remainder.trim()) parseLine(remainder)
 
+  // Fallback: if file has no C event, send meta now
+  if (!metaSent && instruments.size > 0) {
+    post({ type: 'meta', instruments: [...instruments.values()], baseInterval })
+    metaSent = true
+  }
+
   // Flush remaining partial chunks
   for (const [instr, buf] of candleBuf) {
     if (buf.length > 0) post({ type: 'candles', instrument: instr, data: buf })
@@ -89,13 +96,7 @@ async function run(url: string, contentLength: number) {
   for (const [instr, meta] of instruments) {
     const candles = allCandles.get(instr) ?? []
     const fills = allFills.get(instr) ?? []
-    const instrStats = new Map(
-      [...fillStatsMap.entries()].filter(([, v]) => {
-        // fill_stats don't carry instrument name directly; use all of them for the single instrument case.
-        // For multi-instrument files this would need to be partitioned by matching order IDs.
-        return true
-      })
-    )
+    const instrStats = fillStatsMap.get(instr) ?? new Map()
     const stats = computeStats(fills, candles, instrStats, meta)
     post({ type: 'stats', instrument: instr, data: stats })
   }
@@ -114,6 +115,7 @@ async function run(url: string, contentLength: number) {
       allFills.set(p.name, [])
     } else if (ev === 'C') {
       baseInterval = (payload as { interval: number }).interval
+      baseIntervalSeen = true
     } else if (ev === 'c') {
       const [name, open, high, low, close, volume] = payload as [string, number, number, number, number, number]
       const candle: Candle = { time: sec, open, high, low, close, volume }
@@ -125,8 +127,9 @@ async function run(url: string, contentLength: number) {
       fillBuf.get(p.instrument)?.push(fill)
       allFills.get(p.instrument)?.push(fill)
     } else if (ev === 's') {
-      const p = payload as { order_id: string; filled: number; turnover: number; fees: number; fees_native: number }
-      fillStatsMap.set(p.order_id, { orderId: p.order_id, filled: p.filled, turnover: p.turnover, fees: p.fees, feesNative: p.fees_native })
+      const p = payload as { instrument: string; order_id: string; filled: number; turnover: number; fees: number; fees_native: number }
+      if (!fillStatsMap.has(p.instrument)) fillStatsMap.set(p.instrument, new Map())
+      fillStatsMap.get(p.instrument)!.set(p.order_id, { orderId: p.order_id, filled: p.filled, turnover: p.turnover, fees: p.fees, feesNative: p.fees_native })
     }
     // 'v' (var_update) and 'o' (order_status) are ignored in phase 1
   }
