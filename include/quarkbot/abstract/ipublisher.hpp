@@ -44,10 +44,10 @@ public:
 
     template<typename T>
     requires (StreamWithParam<T>)
-    EventStream<T> subscribe(const typename T::Params &param) {
+    EventStream<T> subscribe(const typename T::Param &param) {
         auto x = this->subscribe_stream(class_hash<T>, &param);
         if (x) return EventStream<T>::from_base(std::move(x));
-        else return EventStream<T>::create_null();
+        else return EventStream<T>();
     }
 
 };

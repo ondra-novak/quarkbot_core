@@ -5,6 +5,8 @@
 #include "config_datasource.hpp"
 #include "config_instrument.hpp"
 #include "ibacktest_debugger.hpp"
+#include "quarkbot/backtest/json_report.hpp"
+#include "quarkbot/json/json.hpp"
 #include "quarkbot/log.hpp"
 #include "simple_stdio_debugger.hpp"
 #include "../common/strategy_config.hpp"
@@ -31,11 +33,13 @@ namespace quarkbot {
         std::filesystem::path backtest_config_path;
         int pos = 0;
         bool dbg = false;
+        bool jsn = false;
 
         for (std::string_view a: args ){
             if (a[0] == '-') {
                 a.remove_prefix(1);
                 if (a == "d") dbg = true;
+                else if (a == "j") jsn=true;
                 else {
                     std::println(std::cerr,"Unexpected switch -{}", a);
                     return 1;
@@ -61,7 +65,8 @@ namespace quarkbot {
             std::move(backtest_config_path),
             std::move(start_fn),
             dbg?get_simple_stdio_debugger():nullptr,
-            {}
+            {},
+            jsn
         });
     }
 
@@ -78,13 +83,23 @@ namespace quarkbot {
         }
 
         try {
-
-            BacktestEnv bt("backtest-account", cfg.configure_wallet(), configure_instruments(params.backtest_config), cfg.configure_simulation());
+            auto simcfg = params.json_report?cfg.configure_simulation_no_report():cfg.configure_simulation();
+            BacktestEnv bt("backtest-account", cfg.configure_wallet(), configure_instruments(params.backtest_config), simcfg);
             auto data_source = configure_datasources(params.backtest_config);            
+
+            std::optional<JsonReport> jsnrpt;
+
 
             StrategyContext ctx;
             ctx.storage = MemStorage::create(MemStorage::no_history);        
             ctx.config = load_strategy_config(params.strategy_config);
+
+            if (params.json_report) {
+                jsnrpt.emplace(std::cout);
+                jsnrpt->attach_exchange(bt.get_exchange(), bt.get_stop_token(), 5);
+                jsnrpt->attach_storage(ctx.storage);
+            }
+
             if (params.init_env) params.init_env(cfg.as_config());
             if (params.debugger) params.debugger(bt.enable_debugger(), ctx.storage);
             bt.add_strategy([start_fn = std::move(params.start_fn)](StrategyContext &&context){

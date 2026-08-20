@@ -47,6 +47,14 @@ namespace quarkbot {
         return {std::move(rpt), slippage, std::chrono::milliseconds(latency)};
     }
 
+    SimulationParams BacktestConfig::configure_simulation_no_report(std::string_view section) {        
+        auto sim_config = as_config() / section;
+        double slippage = sim_config["slippage"](0.0);
+        std::size_t latency = sim_config["latency_ms"](static_cast<std::size_t>(0));
+
+        return {{}, slippage, std::chrono::milliseconds(latency)};
+    }
+
     std::vector<WalletInitItem> BacktestConfig::configure_wallet(std::string_view section) {
         std::vector<WalletInitItem> out;
         std::string pfx (section);

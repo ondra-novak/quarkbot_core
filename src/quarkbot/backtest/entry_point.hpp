@@ -28,6 +28,10 @@ struct BacktestStartParams {
     Function receives configuration object
      */
     std::function<void(const BacktestConfig::Config &)> init_env = {};
+
+    bool json_report = false;
+
+    
 };
 
 ///start backtest - entry point

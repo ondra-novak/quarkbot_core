@@ -49,6 +49,7 @@ struct BacktestConfig {
     @endcode
     */
     SimulationParams configure_simulation(std::string_view section = "simulation");
+    SimulationParams configure_simulation_no_report(std::string_view section = "simulation");
     ///configure wallet
     /**
         @param section which section contains wallet

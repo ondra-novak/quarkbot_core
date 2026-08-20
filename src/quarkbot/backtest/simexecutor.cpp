@@ -439,7 +439,10 @@ namespace quarkbot {
         order.calcs.turnover += info.calc_turnover_pnl_currency(price, quantity);
         order.calcs.fees_native += fees;
         auto &simt = *static_cast<SimTradableInstrument *>(order.ord->get_instrument().get());
-        if (_report_sink) _report_sink(order.ord, f);
+        if (_report_sink) {
+            _report_sink(order.ord, f);
+            _report_sink(order.ord, order.calcs);
+        }
         simt.on_order_update(order.ord, order.calcs);
         simt.on_order_update(order.ord, f);
     }

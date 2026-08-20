@@ -36,5 +36,7 @@ target_sources(quarkbot_backtest PRIVATE
     simple_stdio_debugger.hpp
     simple_stdio_debugger.cpp
     var_inspector.cpp
+    json_report.hpp
+    json_report.cpp
  
 )

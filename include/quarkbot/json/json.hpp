@@ -126,6 +126,7 @@ class JsonBuilder {
 public:
     JsonBuilder();
     JsonBuilder(std::initializer_list<JsonBuilder> list);
+    JsonBuilder(const JsonNumber &n);
 
     template<typename T>    
     JsonBuilder(const T &other);
@@ -136,6 +137,7 @@ protected:
 
     enum class Type {
         string,
+        string_number,
         value,
         array
     };
@@ -618,6 +620,11 @@ inline JsonBuilder::JsonBuilder():JsonBuilder(std::initializer_list<JsonBuilder>
 inline JsonBuilder::JsonBuilder(std::initializer_list<JsonBuilder> list)
     :type(Type::array),list(List{list.begin(), list.end()}) {}
 
+inline JsonBuilder::JsonBuilder(const JsonNumber &n) {
+    type = Type::string_number;
+    string.str = n.data();
+    string.len = n.size();
+}
 template<typename T>    
 inline JsonBuilder::JsonBuilder(const T &other):type(Type::value) {
     if constexpr(std::is_constructible_v<std::string_view, T>) {
@@ -659,6 +666,7 @@ inline Json JsonBuilder::build() const {
 
     switch (type) {
         case Type::string: return Json(std::string(string.str, string.len));
+        case Type::string_number: return Json(JsonNumber({string.str, string.len}));
         case Type::value: return Json(item.construct(item.ptr));
         case Type::array:  
                 if ( std::all_of(list.begin, list.end, [](const JsonBuilder &x){
