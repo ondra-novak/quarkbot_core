@@ -96,4 +96,23 @@ describe('computeStats', () => {
     expect(s.totalTurnover).toBeCloseTo(800)
     expect(s.totalFees).toBeCloseTo(0.8)
   })
+
+  it('leverage=0 falls back to leverage=1 for margin calculation', () => {
+    // leverage=0 should be treated as 1 (no leverage / spot)
+    // BUY 1 @ 100, leverage 0 → margin = 1 * 100 / 1 = 100
+    const metaZeroLev: InstrumentMeta = { ...meta, leverage: 0 }
+    const s = computeStats([f(1, 'BUY', 100)], [], noStats, metaZeroLev)
+    expect(s.maxMargin).toBeCloseTo(100)
+  })
+
+  it('computes MAE and MFE for a SHORT trade', () => {
+    // SELL @ 100 (short entry), BUY @ 90 (close)
+    // Bar high 108 → adverse for short = 108 - 100 = 8
+    // Bar low 85 → favorable for short = 100 - 85 = 15
+    const fills = [f(60, 'SELL', 100), f(180, 'BUY', 90)]
+    const candles = [c(60, 108, 95), c(120, 105, 85), c(180, 92, 88)]
+    const s = computeStats(fills, candles, noStats, meta)
+    expect(s.mae).toBeCloseTo(8)   // 108 - 100
+    expect(s.mfe).toBeCloseTo(15)  // 100 - 85
+  })
 })
