@@ -44,8 +44,10 @@ const FACTORS = [1, 3, 5, 15, 60]
       </button>
     </div>
 
-    <div class="progress-bar" v-if="progress < 100">
-      <div class="progress-fill" :style="{ width: progress + '%' }" />
+    <div class="progress-wrap" v-if="progress < 100">
+      <div class="progress-bar">
+        <div class="progress-fill" :style="{ width: progress + '%' }" />
+      </div>
       <span class="progress-label">{{ progress }}%</span>
     </div>
   </div>
@@ -66,13 +68,11 @@ const FACTORS = [1, 3, 5, 15, 60]
   border-radius: 3px; cursor: pointer; font-size: 12px;
 }
 .tf-btn.active, .tf-btn:hover { background: #363a4a; color: #d1d4dc; }
+.progress-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .progress-bar {
-  margin-left: auto; position: relative; width: 140px; height: 6px;
+  width: 120px; height: 6px;
   background: #2a2e3e; border-radius: 3px; overflow: hidden;
 }
 .progress-fill { height: 100%; background: #4fc3f7; transition: width 0.15s; }
-.progress-label {
-  position: absolute; right: -32px; top: -5px;
-  font-size: 11px; color: #787b86;
-}
+.progress-label { font-size: 11px; color: #787b86; white-space: nowrap; }
 </style>
