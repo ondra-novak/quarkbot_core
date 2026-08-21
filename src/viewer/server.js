@@ -8,12 +8,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.join(__dirname, 'dist')
 
 const args = process.argv.slice(2)
-const reportPath = args.find(a => !a.startsWith('--'))
-const portArg = args.find(a => a.startsWith('--port='))
-const port = portArg ? parseInt(portArg.split('=')[1]) : 3000
+const reportPath = args.find(a => !a.startsWith('-'))
+
+// -p PORT or --port=PORT; default 0 = OS picks a free port
+let port = 0
+const shortPortIdx = args.indexOf('-p')
+if (shortPortIdx !== -1 && args[shortPortIdx + 1]) {
+  port = parseInt(args[shortPortIdx + 1])
+} else {
+  const longPort = args.find(a => a.startsWith('--port='))
+  if (longPort) port = parseInt(longPort.split('=')[1])
+}
 
 if (!reportPath) {
-  console.error('Usage: node server.js <path-to-report.jsonl> [--port=3000]')
+  console.error('Usage: node server.js <path-to-report.jsonl> [-p PORT]')
   process.exit(1)
 }
 
@@ -63,7 +71,17 @@ const server = http.createServer((req, res) => {
   }
 })
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use. Try without -p to use a random port.`)
+  } else {
+    console.error(err.message)
+  }
+  process.exit(1)
+})
+
 server.listen(port, () => {
-  console.log(`QuarkBot Report Viewer → http://localhost:${port}`)
+  const { port: actualPort } = server.address()
+  console.log(`QuarkBot Report Viewer → http://localhost:${actualPort}`)
   console.log(`Report: ${path.resolve(reportPath)}`)
 })
