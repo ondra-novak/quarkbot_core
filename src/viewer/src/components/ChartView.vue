@@ -117,7 +117,7 @@ onMounted(() => {
   })
 })
 
-// When candles change: update main series, markers, volume
+// When candles change: update main series, markers, volume, equity (equity uses candle grid)
 watch(aggregated, (candles) => {
   if (!series) return
   series.setData(candles.map(c => ({
@@ -126,9 +126,10 @@ watch(aggregated, (candles) => {
   })))
   applyMarkers()
   updateVolume()
+  updateEquity()
 })
 
-// When fills change: update equity
+// When fills change: update equity (candle grid from current aggregated)
 watch(() => props.fills, () => {
   updateEquity()
 })
@@ -155,7 +156,7 @@ watch(() => props.enabledPanels, async () => {
 }, { deep: true })
 
 function updateEquity() {
-  equitySeries?.setData(computeEquityCurve(props.fills))
+  equitySeries?.setData(computeEquityCurve(props.fills, aggregated.value))
 }
 
 function updateVolume() {
