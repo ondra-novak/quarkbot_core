@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { InstrumentMeta } from '../types/report'
+import PanelBar from './PanelBar.vue'
 
 const props = defineProps<{
   instruments: InstrumentMeta[]
@@ -7,11 +8,13 @@ const props = defineProps<{
   baseInterval: number
   timeframeFactor: number
   progress: number
+  enabledPanels: string[]
 }>()
 
 const emit = defineEmits<{
   'update:selectedInstrument': [value: string]
   'update:timeframeFactor': [value: number]
+  'toggle-panel': [id: string]
 }>()
 
 const FACTORS = [1, 3, 5, 15, 60]
@@ -43,6 +46,8 @@ const FACTORS = [1, 3, 5, 15, 60]
         {{ f === 1 ? `${baseInterval}m` : `${baseInterval * f}m` }}
       </button>
     </div>
+
+    <PanelBar :enabled-panels="enabledPanels" @toggle="emit('toggle-panel', $event)" />
 
     <div class="progress-wrap" v-if="progress < 100">
       <div class="progress-bar">

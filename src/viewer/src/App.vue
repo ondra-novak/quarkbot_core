@@ -24,6 +24,15 @@ const statsMap = ref(new Map<string, Stats>())
 // Fill detail popup
 const detailFills = ref<GroupedFill | null>(null)
 
+// Panel visibility: ordered list determines pane order below main chart
+const enabledPanels = ref<string[]>(['equity'])
+
+function togglePanel(id: string) {
+  const idx = enabledPanels.value.indexOf(id)
+  if (idx === -1) enabledPanels.value = [...enabledPanels.value, id]
+  else enabledPanels.value = enabledPanels.value.filter(p => p !== id)
+}
+
 // --- Computed for selected instrument ---
 const currentCandles = computed(() => candlesMap.value.get(selectedInstrument.value) ?? [])
 const currentFills = computed(() => fillsMap.value.get(selectedInstrument.value) ?? [])
@@ -53,7 +62,6 @@ onMounted(() => {
     } else if (msg.type === 'candles') {
       const existing = candlesMap.value.get(msg.instrument) ?? []
       candlesMap.value.set(msg.instrument, [...existing, ...msg.data])
-      // Trigger reactivity
       candlesMap.value = new Map(candlesMap.value)
     } else if (msg.type === 'fills') {
       const existing = fillsMap.value.get(msg.instrument) ?? []
@@ -90,8 +98,10 @@ onUnmounted(() => worker?.terminate())
       :base-interval="baseInterval"
       :timeframe-factor="timeframeFactor"
       :progress="progress"
+      :enabled-panels="enabledPanels"
       @update:selected-instrument="selectedInstrument = $event"
       @update:timeframe-factor="timeframeFactor = $event"
+      @toggle-panel="togglePanel"
     />
 
     <div v-if="error" class="error">{{ error }}</div>
@@ -101,6 +111,7 @@ onUnmounted(() => worker?.terminate())
         :candles="currentCandles"
         :fills="currentFills"
         :timeframe-factor="timeframeFactor"
+        :enabled-panels="enabledPanels"
         @fill-clicked="detailFills = $event"
       />
       <StatsPanel
