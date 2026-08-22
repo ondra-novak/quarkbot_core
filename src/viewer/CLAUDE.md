@@ -72,15 +72,16 @@ App.vue (state hub)
 
 ### Panel system (ChartView.vue)
 
-Panels are lightweight-charts series in sub-panes (pane ≥ 1). Main candlestick is always pane 0.
+lightweight-charts v4.2.3 does NOT support native multi-pane (the `pane` series option is silently ignored). Instead, each panel is a separate `createChart()` instance inside a flex column. Time scales are synchronized via `subscribeVisibleLogicalRangeChange`.
 
-`enabledPanels: string[]` in App.vue — ordered list; order = pane order.
+`enabledPanels: string[]` in App.vue — ordered list (equity → volume → ...). Panel divs are always pre-created (`onMounted`) and shown/hidden via `v-show`.
 
 **Adding a new panel:**
 1. Add `{ id: 'foo', label: 'Foo' }` to `PANELS` array in `PanelBar.vue`
-2. Add `else if (id === 'foo') { ... }` case in `rebuildPanels()` in `ChartView.vue`
-
-`withPane(paneIndex, opts)` helper in ChartView casts options to `any` because the `pane` option is valid at runtime in v4.2.3 but absent from the TypeScript type definitions.
+2. Add a new `ref<HTMLDivElement>` + `ref<IChartApi>` + `ref<ISeriesApi>` in `ChartView.vue`
+3. Create the chart in `onMounted`, add it to `syncTimeScale` iteration, observe it in ResizeObserver
+4. Add `v-show="enabledPanels.includes('foo')"` div in template
+5. Handle data update in relevant `watch()`
 
 Currently registered panels:
 
