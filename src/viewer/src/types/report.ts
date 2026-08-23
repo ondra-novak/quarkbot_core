@@ -1,8 +1,11 @@
+export type ContractType = "spot"|"margin"|"contract"|"inverse_contract";
+
+
 export interface InstrumentMeta {
   name: string
   leverage: number
   multiplier: number
-  type: string
+  type: ContractType
   tickScale: number
 }
 
@@ -63,3 +66,5 @@ export type WorkerMessage =
   | { type: 'progress'; percent: number }
   | { type: 'stats'; instrument: string; data: Stats }
   | { type: 'error'; message: string }
+  | { type: 'equity'; instrument: string; series: [number, number][]}
+  | { type: 'position'; instrument: string; series: [number, number][]}

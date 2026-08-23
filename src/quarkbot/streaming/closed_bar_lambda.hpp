@@ -41,7 +41,7 @@ namespace quarkbot {
             bool published;
             publisher.write([&](ClosedBar &x) noexcept {
                 published = x.start_time != std::chrono::system_clock::time_point{}
-                            && x.start_time != x.interval_lower_bound(qt.time, interval);
+                        && x.start_time != x.interval_lower_bound(qt.time, interval);
                 return published;
             });
             if (published) {

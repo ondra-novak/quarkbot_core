@@ -20,6 +20,8 @@ const error = ref('')
 const candlesMap = ref(new Map<string, Candle[]>())
 const fillsMap = ref(new Map<string, Fill[]>())
 const statsMap = ref(new Map<string, Stats>())
+const equityMap = ref(new Map<string, [number,number][]>())
+const positionMap = ref(new Map<string, [number,number][]>())
 
 // Fill detail popup
 const detailFills = ref<GroupedFill | null>(null)
@@ -36,7 +38,9 @@ function togglePanel(id: string) {
 // --- Computed for selected instrument ---
 const currentCandles = computed(() => candlesMap.value.get(selectedInstrument.value) ?? [])
 const currentFills = computed(() => fillsMap.value.get(selectedInstrument.value) ?? [])
-const currentStats = computed(() => statsMap.value.get(selectedInstrument.value))
+const currentStats = computed(() => statsMap.value.get(selectedInstrument.value) )
+const currentEquity = computed(() => equityMap.value.get(selectedInstrument.value)?? [])
+const currentPositions = computed(() => positionMap.value.get(selectedInstrument.value) ?? [])
 
 // --- Worker setup ---
 let worker: Worker | null = null
@@ -75,6 +79,11 @@ onMounted(() => {
       loadingStats.value = false
     } else if (msg.type === 'error') {
       error.value = msg.message
+    } else if (msg.type === 'equity') {
+      equityMap.value.set(msg.instrument, msg.series);
+    } else if (msg.type === 'position') {
+      positionMap.value.set(msg.instrument, msg.series);
+      
     }
   }
 
@@ -110,6 +119,8 @@ onUnmounted(() => worker?.terminate())
       <ChartView
         :candles="currentCandles"
         :fills="currentFills"
+        :equity="currentEquity"
+        :positions="currentPositions"
         :timeframe-factor="timeframeFactor"
         :enabled-panels="enabledPanels"
         @fill-clicked="detailFills = $event"

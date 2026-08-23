@@ -9,6 +9,8 @@ import { computeEquityCurve } from '../utils/equity'
 const props = defineProps<{
   candles: Candle[]
   fills: Fill[]
+  equity: [number,number][],
+  positions: [number,number][],
   timeframeFactor: number
   enabledPanels: string[]
 }>()
@@ -31,7 +33,7 @@ let volumeSeries: ISeriesApi<'Histogram'> | null = null
 let isSyncing = false
 
 const aggregated = computed(() => aggregateCandles(props.candles, props.timeframeFactor))
-const grouped = computed(() => groupFillsByCandle(props.fills, aggregated.value))
+//const grouped = computed(() => groupFillsByCandle(props.fills, aggregated.value))
 
 const SHARED_OPTS = {
   layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
@@ -168,6 +170,7 @@ function updateVolume() {
 }
 
 function applyMarkers() {
+  /*
   if (!series) return
   const markers: SeriesMarker<Time>[] = []
   for (const group of grouped.value) {
@@ -181,10 +184,11 @@ function applyMarkers() {
   }
   markers.sort((a, b) => (a.time as number) - (b.time as number))
   series.setMarkers(markers)
+  */
 }
 
 function onChartClick(e: MouseEvent) {
-  if (!chart || !mainContainer.value) return
+/*  if (!chart || !mainContainer.value) return
   const rect = mainContainer.value.getBoundingClientRect()
   const x = e.clientX - rect.left
   const logical = chart.timeScale().coordinateToLogical(x)
@@ -194,7 +198,7 @@ function onChartClick(e: MouseEvent) {
   const clickedCandle = candles[Math.round(logical)]
   if (!clickedCandle) return
   const group = grouped.value.find(g => g.candleTime === clickedCandle.time)
-  if (group) emit('fill-clicked', group)
+  if (group) emit('fill-clicked', group)*/
 }
 </script>
 

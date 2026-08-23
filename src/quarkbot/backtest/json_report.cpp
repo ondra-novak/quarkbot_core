@@ -130,7 +130,7 @@ namespace quarkbot {
                 {"multiplier",  JsonNumber(info.multiplier.to_string())},
                 {"tick_scale",  JsonNumber(info.tick_scale.to_string())}
             });
-            auto stream = instr.subscribe<ClosedBar>(static_cast<unsigned int>(interval));
+            auto stream = instr.subscribe<ClosedBar>(static_cast<unsigned int>(interval*60));
             run_stream(stream.stop_on(token), info.name);
         }
         out(Event::chart_setup,{
@@ -155,8 +155,7 @@ namespace quarkbot {
 
                     }
                 }
-            } else {
-                if (ev.key.size() > sizeof(RecordKey)) {
+            } else if (!ev.erase && ev.key.size() > sizeof(RecordKey)) {
                     std::string_view s = ev.key;
                     s.remove_suffix(16);
                     if (s.back() == 0) {
@@ -178,7 +177,6 @@ namespace quarkbot {
                             {"val",std::move(jval)}
                         });
                     }
-                }
             }
         });
     }
