@@ -1,83 +1,81 @@
 <script setup lang="ts">
-import type { InstrumentMeta } from '../types/report'
-import PanelBar from './PanelBar.vue'
+import { DisplayOptions } from '../types/options';
+import { ParsedReport } from '../types/parsed_report';
 
+
+const model = defineModel<DisplayOptions>();
 const props = defineProps<{
-  instruments: InstrumentMeta[]
-  selectedInstrument: string
-  baseInterval: number
-  timeframeFactor: number
-  progress: number
-  enabledPanels: string[]
-}>()
+    report:ParsedReport
+}>();
 
-const emit = defineEmits<{
-  'update:selectedInstrument': [value: string]
-  'update:timeframeFactor': [value: number]
-  'toggle-panel': [id: string]
-}>()
+const interval_list = {
+    "1m": 1,
+    "3m": 3,
+    "5m": 5,
+    "10m": 10,
+    "15m": 15,
+    "30m": 30,
+    "1h": 60,
+    "4h": 240,
+    "6h": 360,
+    "8h": 480,
+    "1D": 1440,
+    "3D": 4320,
+    "1W":10080,
+    "1M":43200
+};
 
-const FACTORS = [1, 3, 5, 15, 60]
+function add_serie() {
+    const m = model.value;
+    if (!m) return;
+    const sr = m.series.filter(v=>v);
+    sr.unshift("");
+    m.series = sr;
+}
+
 </script>
 
 <template>
-  <div class="topbar">
-    <span class="brand">⬡ QuarkBot Viewer</span>
-
-    <select
-      v-if="instruments.length > 1"
-      :value="selectedInstrument"
-      @change="emit('update:selectedInstrument', ($event.target as HTMLSelectElement).value)"
-      class="select"
-    >
-      <option v-for="instr in instruments" :key="instr.name" :value="instr.name">
-        {{ instr.name }}
-      </option>
+<div class="topbar" v-if="model">
+    <select v-model="model.instrument">
+        <option v-for="v of report.instruments" :key="v[0]" :value="v[0]"> {{ v[0] }}</option>
     </select>
-    <span v-else class="instrument-name">{{ selectedInstrument }}</span>
-
-    <div class="tf-buttons">
-      <button
-        v-for="f in FACTORS"
-        :key="f"
-        :class="['tf-btn', { active: timeframeFactor === f }]"
-        @click="emit('update:timeframeFactor', f)"
-      >
-        {{ f === 1 ? `${baseInterval}m` : `${baseInterval * f}m` }}
-      </button>
+    <div class="buttons">
+        <template v-for="(v,k) of interval_list" :key="v">
+        <button v-if="v >= (report.baseInterval ?? 0)" :key="v" :class="{active: v==model.interval}" @click="model.interval = v">{{ k }}</button>
+        </template>
     </div>
-
-    <PanelBar :enabled-panels="enabledPanels" @toggle="emit('toggle-panel', $event)" />
-
-    <div class="progress-wrap" v-if="progress < 100">
-      <div class="progress-bar">
-        <div class="progress-fill" :style="{ width: progress + '%' }" />
-      </div>
-      <span class="progress-label">{{ progress }}%</span>
+    <div class="buttons">
+        <button :class="{active: model.fills}" @click="model.fills = !model.fills">Fills</button>
+        <button :class="{active: model.orders}" @click="model.orders = !model.orders">Ords</button>
+        <button v-if="model.series.length>0 && model.series[0] != ''" @click="add_serie">+</button>
     </div>
-  </div>
+    <select v-for="(v,k) of model.series" :key="k" v-model="model.series[k]">
+        <option value="">(disabled)</option>    
+        <option>Equity</option>
+        <option>Position</option>
+        <option>Volume</option>
+        <option v-for="v of report.vars" :key="v[0]" :value="v[0]"> {{ v[0]}}</option>
+    </select>
+
+</div>
 </template>
 
-<style scoped>
+<style lang="css" scoped>
 .topbar {
-  display: flex; align-items: center; gap: 12px;
-  padding: 6px 12px; background: #1e2230; border-bottom: 1px solid #2a2e3e;
-  flex-shrink: 0;
+    display: flex;
+    gap: 0.2rem
 }
-.brand { color: #4fc3f7; font-weight: 600; }
-.instrument-name { color: #d1d4dc; font-weight: 500; }
-.select { background: #2a2e3e; color: #d1d4dc; border: 1px solid #363a4a; padding: 3px 6px; border-radius: 4px; }
-.tf-buttons { display: flex; gap: 4px; margin-left: 8px; }
-.tf-btn {
-  background: #2a2e3e; color: #787b86; border: none; padding: 3px 10px;
-  border-radius: 3px; cursor: pointer; font-size: 12px;
+button {
+    width:3rem;
+    cursor: pointer;
+    border: 1px solid;
+    height: 2rem
 }
-.tf-btn.active, .tf-btn:hover { background: #363a4a; color: #d1d4dc; }
-.progress-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.progress-bar {
-  width: 120px; height: 6px;
-  background: #2a2e3e; border-radius: 3px; overflow: hidden;
+button.active {
+    background-color: #ccc;
 }
-.progress-fill { height: 100%; background: #4fc3f7; transition: width 0.15s; }
-.progress-label { font-size: 11px; color: #787b86; white-space: nowrap; }
+select {
+    max-width: 15rem;
+}
 </style>

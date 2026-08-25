@@ -149,4 +149,10 @@ export class ParsedReport {
         }
     }
 
+    get_default_instrumnet(cur_instrument: string) {
+        if (this.instruments.get(cur_instrument)) return cur_instrument;
+        for (const [k,v] of this.instruments) return k;
+        return "";
+    }
+
 }

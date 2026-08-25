@@ -3,6 +3,8 @@ import { onMounted, reactive, ref } from 'vue';
 import { ParsedReport } from './types/parsed_report';
 import LoadProgress from './components/LoadProgress.vue';
 import Chart from './components/Chart.vue';
+import TopBar from './components/TopBar.vue';
+import { DisplayOptions } from './types/options';
 
 const report_url = '/api/report';
 
@@ -36,7 +38,8 @@ async function load_data() {
                     try {
                         parsed_data.value = await ParsedReport.load(response.body, x=>loading_info.bytes = x);                    
                         loading_info.loading = false;
-                        console.log(parsed_data.value);
+                        options.value.instrument = parsed_data.value.get_default_instrumnet(options.value.instrument);  
+                        options.value.interval = Math.max(options.value.interval, parsed_data.value.baseInterval ??0);
                     } catch (e) {
                         loading_info.error = `Error reading report: ${(e as Error).message}`;
                     }
@@ -57,14 +60,29 @@ async function load_data() {
 
 onMounted(load_data);
 
+const options = ref<DisplayOptions>({
+    instrument: "",
+    interval: 5,
+    fills:true,
+    orders: false,  
+    series:["Volume","Equity"]
+})
 
 </script>
 
 <template>
     <LoadProgress v-if="loading_info.loading" :bytes="loading_info.bytes" :total="loading_info.total" :error="loading_info.error"></LoadProgress>
-    <Chart v-else-if="parsed_data" :report="parsed_data"></Chart>
+    <div v-else-if="parsed_data" class="split">
+        <TopBar :report="parsed_data" v-model="options"></TopBar>
+        <Chart :report="parsed_data"></Chart>
+    </div>
+    
 </template>
 
 <style lang="css" scoped>
-
+div.split {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
 </style>
