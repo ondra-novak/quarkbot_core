@@ -1,149 +1,70 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import type { InstrumentMeta, Candle, Fill, Stats, WorkerMessage } from './types/report'
-import ParserWorker from './workers/parser.worker?worker'
-import TopBar from './components/TopBar.vue'
-import ChartView from './components/ChartView.vue'
-import StatsPanel from './components/StatsPanel.vue'
-import FillDetail from './components/FillDetail.vue'
-import type { GroupedFill } from './types/report'
+import { onMounted, reactive, ref } from 'vue';
+import { ParsedReport } from './types/parsed_report';
+import LoadProgress from './components/LoadProgress.vue';
+import Chart from './components/Chart.vue';
 
-// --- State ---
-const instruments = ref<InstrumentMeta[]>([])
-const selectedInstrument = ref('')
-const baseInterval = ref(1)
-const timeframeFactor = ref(1)
-const progress = ref(0)
-const loadingStats = ref(true)
-const error = ref('')
+const report_url = '/api/report';
 
-const candlesMap = ref(new Map<string, Candle[]>())
-const fillsMap = ref(new Map<string, Fill[]>())
-const statsMap = ref(new Map<string, Stats>())
-const equityMap = ref(new Map<string, [number,number][]>())
-const positionMap = ref(new Map<string, [number,number][]>())
+const parsed_data = ref<ParsedReport>();
 
-// Fill detail popup
-const detailFills = ref<GroupedFill | null>(null)
-
-// Panel visibility: ordered list determines pane order below main chart
-const enabledPanels = ref<string[]>(['equity'])
-
-function togglePanel(id: string) {
-  const idx = enabledPanels.value.indexOf(id)
-  if (idx === -1) enabledPanels.value = [...enabledPanels.value, id]
-  else enabledPanels.value = enabledPanels.value.filter(p => p !== id)
-}
-
-// --- Computed for selected instrument ---
-const currentCandles = computed(() => candlesMap.value.get(selectedInstrument.value) ?? [])
-const currentFills = computed(() => fillsMap.value.get(selectedInstrument.value) ?? [])
-const currentStats = computed(() => statsMap.value.get(selectedInstrument.value) )
-const currentEquity = computed(() => equityMap.value.get(selectedInstrument.value)?? [])
-const currentPositions = computed(() => positionMap.value.get(selectedInstrument.value) ?? [])
-
-// --- Worker setup ---
-let worker: Worker | null = null
-
-onMounted(() => {
-  worker = new ParserWorker()
-  const w = worker
-  w.onmessage = (e: MessageEvent<WorkerMessage>) => {
-    const msg = e.data
-    if (msg.type === 'meta') {
-      instruments.value = msg.instruments
-      baseInterval.value = msg.baseInterval
-      if (!selectedInstrument.value && msg.instruments.length > 0) {
-        selectedInstrument.value = msg.instruments[0].name
-      }
-      // Initialize maps for each instrument
-      for (const instr of msg.instruments) {
-        if (!candlesMap.value.has(instr.name)) candlesMap.value.set(instr.name, [])
-        if (!fillsMap.value.has(instr.name)) fillsMap.value.set(instr.name, [])
-      }
-      candlesMap.value = new Map(candlesMap.value)
-      fillsMap.value = new Map(fillsMap.value)
-    } else if (msg.type === 'candles') {
-      const existing = candlesMap.value.get(msg.instrument) ?? []
-      candlesMap.value.set(msg.instrument, [...existing, ...msg.data])
-      candlesMap.value = new Map(candlesMap.value)
-    } else if (msg.type === 'fills') {
-      const existing = fillsMap.value.get(msg.instrument) ?? []
-      fillsMap.value.set(msg.instrument, [...existing, ...msg.data])
-      fillsMap.value = new Map(fillsMap.value)
-    } else if (msg.type === 'progress') {
-      progress.value = msg.percent
-    } else if (msg.type === 'stats') {
-      statsMap.value.set(msg.instrument, msg.data)
-      statsMap.value = new Map(statsMap.value)
-      loadingStats.value = false
-    } else if (msg.type === 'error') {
-      error.value = msg.message
-    } else if (msg.type === 'equity') {
-      equityMap.value.set(msg.instrument, msg.series);
-    } else if (msg.type === 'position') {
-      positionMap.value.set(msg.instrument, msg.series);
-      
-    }
-  }
-
-  // Fetch Content-Length first so the worker can report accurate progress
-  fetch('/api/report', { method: 'HEAD' }).then(r => {
-    const contentLength = Number(r.headers.get('content-length') || '0')
-    worker!.postMessage({ url: '/api/report', contentLength })
-  }).catch(() => {
-    worker!.postMessage({ url: '/api/report', contentLength: 0 })
-  })
+const loading_info = reactive<{loading:boolean, bytes:number, total:number|null, error:string|null}>({
+    loading: false,
+    bytes: 0,
+    total: null,
+    error:null
 })
 
-onUnmounted(() => worker?.terminate())
+function emit_error(s:string) {
+    alert(`Error: ${s}`);
+}
+
+async function load_data() {
+    try {
+        loading_info.loading = true;
+        const response = await fetch(report_url);
+        if (response) {
+            if (response.status==200) {
+                const len = response.headers.get('content-length');
+                if (len) {
+                    loading_info.total = parseInt(len);
+                } else {
+                    loading_info.total = null;
+                }
+                loading_info.bytes = 0;
+                if (response.body) {
+                    try {
+                        parsed_data.value = await ParsedReport.load(response.body, x=>loading_info.bytes = x);                    
+                        loading_info.loading = false;
+                        console.log(parsed_data.value);
+                    } catch (e) {
+                        loading_info.error = `Error reading report: ${(e as Error).message}`;
+                    }
+                } else {
+                    loading_info.error = "No data arrived";
+                }
+            } else {
+                loading_info.error = `Server unexpected status error: ${response.status}`;            
+            }
+        } else {
+            loading_info.error = `Failed to receive data`;
+        }
+    } catch (e) {
+        loading_info.error = `Failed to receive report file: ${(e as Error).message}`;
+    }
+}
+
+
+onMounted(load_data);
+
+
 </script>
 
 <template>
-  <div class="app">
-    <TopBar
-      :instruments="instruments"
-      :selected-instrument="selectedInstrument"
-      :base-interval="baseInterval"
-      :timeframe-factor="timeframeFactor"
-      :progress="progress"
-      :enabled-panels="enabledPanels"
-      @update:selected-instrument="selectedInstrument = $event"
-      @update:timeframe-factor="timeframeFactor = $event"
-      @toggle-panel="togglePanel"
-    />
-
-    <div v-if="error" class="error">{{ error }}</div>
-
-    <div class="main" v-else>
-      <ChartView
-        :candles="currentCandles"
-        :fills="currentFills"
-        :equity="currentEquity"
-        :positions="currentPositions"
-        :timeframe-factor="timeframeFactor"
-        :enabled-panels="enabledPanels"
-        @fill-clicked="detailFills = $event"
-      />
-      <StatsPanel
-        :stats="currentStats"
-        :loading="loadingStats"
-        :instrument="selectedInstrument"
-        :base-interval="baseInterval"
-        :timeframe-factor="timeframeFactor"
-      />
-    </div>
-
-    <FillDetail
-      v-if="detailFills"
-      :group="detailFills"
-      @close="detailFills = null"
-    />
-  </div>
+    <LoadProgress v-if="loading_info.loading" :bytes="loading_info.bytes" :total="loading_info.total" :error="loading_info.error"></LoadProgress>
+    <Chart v-else-if="parsed_data" :report="parsed_data"></Chart>
 </template>
 
-<style>
-.app { display: flex; flex-direction: column; height: 100vh; }
-.main { display: flex; flex: 1; overflow: hidden; }
-.error { padding: 20px; color: #ef5350; }
+<style lang="css" scoped>
+
 </style>

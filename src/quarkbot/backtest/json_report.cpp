@@ -61,7 +61,7 @@ namespace quarkbot {
                 {"instrument",info.name},
                 {"order_id",ord.get_id()},
                 {"type",to_string(params.type)},
-                {"side",to_string(params.side)},
+                {"side",string_lookup<Side>(params.side).value_or("")},
                 {"quantity", JsonNumber(params.quantity.to_string())}                
             };
             if (is_limit_order(params.type)) {
@@ -128,8 +128,8 @@ namespace quarkbot {
                 {"leverage", JsonNumber(info.leverage.to_string())},
                 {"type",string_lookup<InstrumentType>(info.type).value_or("")},
                 {"multiplier",  JsonNumber(info.multiplier.to_string())},
-                {"tick_scale",  JsonNumber(info.tick_scale.to_string())}
-            });
+                {"tick_scale",  JsonNumber(info.tick_scale.to_string())},
+                {"lot",  JsonNumber(info.quantity_increment.to_string())}            });
             auto stream = instr.subscribe<ClosedBar>(static_cast<unsigned int>(interval*60));
             run_stream(stream.stop_on(token), info.name);
         }

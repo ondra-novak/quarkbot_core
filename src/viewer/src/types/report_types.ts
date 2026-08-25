@@ -1,12 +1,18 @@
 export type ContractType = "spot"|"margin"|"contract"|"inverse_contract";
 
+export type OrderStatus = "unknown"|"sent"|"pending_trigger"|"open"|"filled"|"canceled"|"rejected"|"replaced"|"restored"|"lost";
+
+export type Side = 'buy'|'sell';
+
+export type OrderType =  "ALERT" |    "MARKET" |    "LIMIT" |    "LIMIT(post)" |    "STOP" |    "STOPLIMIT" |    "Unknown" ;
 
 export interface InstrumentMeta {
   name: string
   leverage: number
   multiplier: number
   type: ContractType
-  tickScale: number
+  tick_scale: number
+  lot: number
 }
 
 export interface Candle {
@@ -21,20 +27,41 @@ export interface Candle {
 export interface Fill {
   time: number    // unix seconds
   orderId: string
-  side: 'BUY' | 'SELL'
+  side: Side
   price: number
-  qty: number
+  quantity: number
   reason: string
   label: string
 }
 
+export interface OrderUpdate {
+    time: number;
+    limit_price?:number,
+    stop_price?:number,
+    order_id:string,
+    quantity:number,
+    replaced_order_id?:string,
+    side:Side,
+    status:OrderStatus,
+    type: OrderType    
+}
+
 export interface FillStatsEntry {
+  time: number;
   orderId: string
   filled: number
   turnover: number
   fees: number
   feesNative: number
 }
+
+export interface VarUpdate {
+    name?: string;
+    time: number;
+    revision: [number, number],
+    val: any
+}
+
 
 export interface Stats {
   fillCount: number
@@ -68,3 +95,6 @@ export type WorkerMessage =
   | { type: 'error'; message: string }
   | { type: 'equity'; instrument: string; series: [number, number][]}
   | { type: 'position'; instrument: string; series: [number, number][]}
+
+
+
