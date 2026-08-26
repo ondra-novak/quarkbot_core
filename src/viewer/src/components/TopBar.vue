@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { DisplayOptions } from '../types/options';
+import { DisplayOptions, paneTypes } from '../types/options';
 import { ParsedReport } from '../types/parsed_report';
+import SeriesSelector from './SeriesSelector.vue';
 
 
 const model = defineModel<DisplayOptions>();
@@ -48,16 +49,10 @@ function add_serie() {
     <div class="buttons">
         <button :class="{active: model.fills}" @click="model.fills = !model.fills">Fills</button>
         <button :class="{active: model.orders}" @click="model.orders = !model.orders">Ords</button>
-        <button v-if="model.series.length>0 && model.series[0] != ''" @click="add_serie">+</button>
     </div>
-    <select v-for="(v,k) of model.series" :key="k" v-model="model.series[k]">
-        <option value="">(disabled)</option>    
-        <option>Equity</option>
-        <option>Position</option>
-        <option>Volume</option>
-        <option v-for="v of report.vars" :key="v[0]" :value="v[0]"> {{ v[0]}}</option>
-    </select>
-
+    <template v-for="v of paneTypes">
+        <SeriesSelector v-model:main="model.series_to_panes[v]" v-model:setup="model.setup" :report="report" :name="v" class="pane"></SeriesSelector>
+    </template>
 </div>
 </template>
 
@@ -77,5 +72,8 @@ button.active {
 }
 select {
     max-width: 15rem;
+}
+.pane {
+    flex-grow: 1;
 }
 </style>

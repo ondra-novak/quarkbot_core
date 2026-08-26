@@ -65,7 +65,9 @@ const options = ref<DisplayOptions>({
     interval: 5,
     fills:true,
     orders: false,  
-    series:["Volume","Equity"]
+    series:["Volume","Equity"],
+    series_to_panes:{main:[],pane_1:["Equity"],pane_2:[],secondary:[]},
+    setup:{}
 })
 
 </script>

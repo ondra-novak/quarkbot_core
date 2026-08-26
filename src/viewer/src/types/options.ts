@@ -1,9 +1,29 @@
+export type LineStyle = "solid" | "double" | "dashed";
+
+export interface SeriesSetupItem {
+    color: string;
+    line_style: LineStyle;
+};
+
+export type SeriesSetup = Record<string, SeriesSetupItem>
+
+
+
+
+export const paneTypes = ["main", "secondary", "pane_1", "pane_2"] as const;
+
+export type PaneType = (typeof paneTypes)[number];
+
+
+export type SeriesToPanes = Record<PaneType, string[]>;
 
 
 export interface DisplayOptions  {
     instrument:string;
     interval: number;
     series: string[];
+    series_to_panes: SeriesToPanes;
     fills: boolean;
     orders: boolean;
+    setup: SeriesSetup;
 };
