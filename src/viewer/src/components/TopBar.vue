@@ -26,14 +26,6 @@ const interval_list = {
     "1M":43200
 };
 
-function add_serie() {
-    const m = model.value;
-    if (!m) return;
-    const sr = m.series.filter(v=>v);
-    sr.unshift("");
-    m.series = sr;
-}
-
 </script>
 
 <template>

@@ -1,8 +1,8 @@
-export type LineStyle = "solid" | "double" | "dashed";
+export type QLineStyle = "solid" | "double" | "dashed";
 
 export interface SeriesSetupItem {
     color: string;
-    line_style: LineStyle;
+    line_style: QLineStyle;
 };
 
 export type SeriesSetup = Record<string, SeriesSetupItem>
@@ -21,7 +21,6 @@ export type SeriesToPanes = Record<PaneType, string[]>;
 export interface DisplayOptions  {
     instrument:string;
     interval: number;
-    series: string[];
     series_to_panes: SeriesToPanes;
     fills: boolean;
     orders: boolean;

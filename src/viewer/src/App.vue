@@ -64,8 +64,7 @@ const options = ref<DisplayOptions>({
     instrument: "",
     interval: 5,
     fills:true,
-    orders: false,  
-    series:["Volume","Equity"],
+    orders: false,      
     series_to_panes:{main:[],pane_1:["Equity"],pane_2:[],secondary:[]},
     setup:{}
 })
@@ -76,7 +75,7 @@ const options = ref<DisplayOptions>({
     <LoadProgress v-if="loading_info.loading" :bytes="loading_info.bytes" :total="loading_info.total" :error="loading_info.error"></LoadProgress>
     <div v-else-if="parsed_data" class="split">
         <TopBar :report="parsed_data" v-model="options"></TopBar>
-        <Chart :report="parsed_data"></Chart>
+        <Chart :report="parsed_data" :options="options"></Chart>
     </div>
     
 </template>

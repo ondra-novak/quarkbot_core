@@ -93,7 +93,7 @@ export class ParsedReport {
                 }
                 case 'c': {
                     const [name, open, high, low, close, volume] = payload as [string, number, number, number, number, number];
-                    const candle: Candle = { time: tp, open, high, low, close, volume }                    
+                    const candle: Candle = { time: tp-(out.baseInterval ?? 0)*60000, open, high, low, close, volume }                    
                     const instr = out.instruments.get(name);
                     if (instr) instr.chart.push(candle);
                     break;
