@@ -201,6 +201,7 @@ int g_open = 0;
 struct Expect {
     std::optional<Decimal> total_qty;
     std::optional<Decimal> fill_price;      //price of the first fill
+    std::optional<Decimal> last_fill_price; //price of the last fill
     std::optional<std::size_t> fill_count;
     std::optional<OrderStatus> status;
     std::optional<Decimal> turnover;
@@ -240,6 +241,15 @@ void audit(std::string_view title, std::string_view rationale,
     cmp_dec("turnover", exp.turnover, o.stats.turnover);
     cmp_dec("fees", exp.fees, o.stats.fees);
     cmp_dec("fees_native", exp.fees_native, o.stats.fees_native);
+    if (exp.last_fill_price) {
+        if (o.fills.empty()) {
+            diffs.push_back(std::format("last fill price: expected {}, got no fill",
+                        exp.last_fill_price->to_string()));
+        } else if (o.fills.back().price != *exp.last_fill_price) {
+            diffs.push_back(std::format("last fill price: expected {}, got {}",
+                        exp.last_fill_price->to_string(), o.fills.back().price.to_string()));
+        }
+    }
     if (exp.status && *exp.status != o.status) {
         diffs.push_back(std::format("status: expected {}, got {}",
                     string_lookup<OrderStatus>(*exp.status).value_or("?"),
@@ -311,15 +321,13 @@ int main() {
           "a crossing buy takes the ask, so it fills at 101 - not at its own limit",
           {.request = {.side=Side::buy, .type=OrderType::limit,
                        .quantity=4_dec, .limit_price=110_dec}},
-          {.total_qty = 4_dec, .fill_price = ASK,
-           .known_open = "crossing limit fills at its own limit price, not at the touch"});
+          {.total_qty = 4_dec, .fill_price = ASK});
 
     audit("limit sell 4 @90 (crosses bid 100)",
           "a crossing sell hits the bid, so it fills at 100 - not at its own limit",
           {.request = {.side=Side::sell, .type=OrderType::limit,
                        .quantity=4_dec, .limit_price=90_dec}},
-          {.total_qty = 4_dec, .fill_price = BID,
-           .known_open = "crossing limit fills at its own limit price, not at the touch"});
+          {.total_qty = 4_dec, .fill_price = BID});
 
     audit("limit buy 4 @101 (equals ask)",
           "fills at the ask",
@@ -328,11 +336,14 @@ int main() {
           {.total_qty = 4_dec, .fill_price = ASK});
 
     audit("limit buy 10 @110, ask_size 2, three quotes",
-          "each event offers 2 again, so the remainder keeps resting and fills 2 per event",
+          "each event offers 2 again, so the remainder keeps resting and fills 2 per "
+          "event. The first fill happens on placement and takes the ask (101); the "
+          "later ones are maker fills at the order's own limit (110)",
           {.request = {.side=Side::buy, .type=OrderType::limit,
                        .quantity=10_dec, .limit_price=110_dec},
            .ask_size = 2_dec, .quotes = 3},
-          {.total_qty = 6_dec, .fill_count = 3u, .status = OrderStatus::unknown});
+          {.total_qty = 6_dec, .fill_price = ASK, .last_fill_price = 110_dec,
+           .fill_count = 3u, .status = OrderStatus::unknown});
 
     audit("limit buy 10 @110, ask_size 0 (feed carries no sizes)",
           "size 0 means unknown, not empty - the order must fill in full",

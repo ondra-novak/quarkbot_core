@@ -291,7 +291,13 @@ namespace quarkbot {
                         //enough away that it is not reached here. The rest of
                         //the order stays in the book as a partial fill.
                         Decimal fill_quant = std::min(leave_quant, s);
-                        create_fill(order, params.limit_price, fill_quant, quote.time, taker);
+                        //An order that crosses the moment it is placed takes the
+                        //touch, so it gets the market price - which is better
+                        //than its own limit. A resting order that the market
+                        //later crosses is the maker, so its own limit price is
+                        //the trade price. That is exactly what taker tells us.
+                        Decimal fill_price = taker?p:params.limit_price;
+                        create_fill(order, fill_price, fill_quant, quote.time, taker);
                         s -= fill_quant;
                         break;
                     }
