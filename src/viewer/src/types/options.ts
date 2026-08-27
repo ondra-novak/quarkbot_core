@@ -1,4 +1,4 @@
-export type QLineStyle = "solid" | "double" | "dashed";
+export type QLineStyle = "solid" | "double" | "dashed" | "area";
 
 export interface SeriesSetupItem {
     color: string;
@@ -24,5 +24,6 @@ export interface DisplayOptions  {
     series_to_panes: SeriesToPanes;
     fills: boolean;
     orders: boolean;
+    volume: boolean;
     setup: SeriesSetup;
 };

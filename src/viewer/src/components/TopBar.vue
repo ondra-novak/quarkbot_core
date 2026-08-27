@@ -39,6 +39,7 @@ const interval_list = {
         </template>
     </div>
     <div class="buttons">
+        <button :class="{active: model.volume}" @click="model.volume = !model.volume">Vol</button>
         <button :class="{active: model.fills}" @click="model.fills = !model.fills">Fills</button>
         <button :class="{active: model.orders}" @click="model.orders = !model.orders">Ords</button>
     </div>

@@ -47,7 +47,9 @@ namespace quarkbot {
                           JsonNumber(cb.high.to_string()), 
                           JsonNumber(cb.low.to_string()),
                           JsonNumber(cb.close.to_string()),
-                          JsonNumber(cb.volume.to_string())
+                          JsonNumber(cb.volume.to_string()),
+                          std::chrono::system_clock::to_time_t(cb.start_time)
+                          
             });
         }
     }

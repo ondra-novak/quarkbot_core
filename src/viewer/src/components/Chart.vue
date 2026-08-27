@@ -1,20 +1,25 @@
 <script lang="ts" setup>
-import { CandlestickSeries, createChart, CrosshairMode, HistogramSeries, LineSeries, LineWidth } from 'lightweight-charts'
+import { AreaSeries, BaselineSeries, CandlestickSeries, createChart, createSeriesMarkers, CrosshairMode, HistogramData, HistogramSeries, ISeriesMarkersPluginApi, LineSeries, LineWidth, SeriesType } from 'lightweight-charts'
 import { CandlestickData, IChartApi, ISeriesApi, LineData, LineStyle, SeriesMarker, Time, UTCTimestamp } from 'lightweight-charts'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ParsedReport } from '../types/parsed_report';
 import { DisplayOptions,  PaneType, paneTypes, QLineStyle, SeriesSetupItem } from '../types/options';
 import { stringToColor } from '../types/stringToColor';
+import { Side } from '../types/report_types';
+import { calculate_turnover } from '../types/contract';
 
 let chart:IChartApi|null = null;
 let resizer :ResizeObserver | null = null;
 const chartContainer = ref<HTMLElement>();
 let cs_series:ISeriesApi<"Candlestick">;
+let vol_series:ISeriesApi<"Histogram">;
+let markers : ISeriesMarkersPluginApi<Time>|null = null;
 
-type SeriesApi = ISeriesApi<"Candlestick">|ISeriesApi<"Histogram">|ISeriesApi<"Line">;
+type SeriesApi = ISeriesApi<"Candlestick">|ISeriesApi<"Histogram">|ISeriesApi<"Line">|ISeriesApi<"Baseline">;
 interface SeriesDef {
     api: SeriesApi,
     update:(api:SeriesApi)=>void
+    type: SeriesType
 };
 
 const props = defineProps<{
@@ -59,10 +64,11 @@ const pane_index : Record<PaneType, [number, string]> = {
     pane_2: [2, "right"]
 } as const;
 
-const line_style : Record<QLineStyle, [LineStyle,LineWidth]> = {
-    "dashed": [LineStyle.Dashed,1],
-    "double": [LineStyle.Solid,2],
-    "solid": [LineStyle.Solid,1],
+const line_style : Record<QLineStyle, [LineStyle,LineWidth,SeriesType]> = {
+    "dashed": [LineStyle.Dashed,1,"Line"],
+    "double": [LineStyle.Solid,2,"Line"],
+    "solid": [LineStyle.Solid,1,"Line"],
+    "area": [LineStyle.Solid,1,"Area"],
 } as const;
 
 function sanity_setup(n: string, stp: SeriesSetupItem|undefined) : SeriesSetupItem{
@@ -72,22 +78,41 @@ function sanity_setup(n: string, stp: SeriesSetupItem|undefined) : SeriesSetupIt
 function create_serie_for(n:string, stp: SeriesSetupItem, pane:PaneType) : SeriesDef|null{
 
 
-    const api = chart?.addSeries(LineSeries, {
-        priceScaleId: pane_index[pane][1],        
-        title: n,
-        color: stp.color,
-        lineStyle: line_style[stp.line_style][0],
-        lineWidth: line_style[stp.line_style][1],
-        visible: true
-    }, pane_index[pane][0])
+    const type = line_style[stp.line_style][2];
+    let api:SeriesApi|undefined;
+    if (type == "Line") {
+        api = chart?.addSeries(LineSeries, {
+            priceScaleId: pane_index[pane][1],        
+            title: n,
+            color: stp.color,
+            lineStyle: line_style[stp.line_style][0],
+            lineWidth: line_style[stp.line_style][1],
+            visible: true,
+            
+        }, pane_index[pane][0])
+    } else if (type == "Area") {
+        api = chart?.addSeries(BaselineSeries, {            
+            priceScaleId: pane_index[pane][1],        
+            title: n,            
+            topLineColor: stp.color,       
+            bottomLineColor: stp.color,       
+            lineStyle: line_style[stp.line_style][0],
+            lineWidth: line_style[stp.line_style][1],
+            visible: true,
+            
+        }, pane_index[pane][0])
+        
+    }
     if (!api) return null;        
     if (n == "Equity") {        
         return {
+            type,
             api: api,
             update: simple_update(()=>current_report.value?.eq_chart)
         }
     } else if (n == "Position") {
         return {
+            type,
             api: api,
             update: simple_update(()=>current_report.value?.pos_chart)
         }
@@ -95,6 +120,7 @@ function create_serie_for(n:string, stp: SeriesSetupItem, pane:PaneType) : Serie
         const data = props.report.vars.get(n);
         if (!data) return null;
         return {
+            type,
             api: api,
             update: simple_update(()=>data.filter(x=>typeof x.val == "number").map(x=>[x.time, x.val]))                
             };        
@@ -131,11 +157,29 @@ function update_setup() {
         for (const k in s) {
             const item = s[k];
             const stp = sanity_setup(k,props.options.setup[k]);
-            item.api.applyOptions({
-                color: stp.color,
-                lineStyle: line_style[stp.line_style][0],
-                lineWidth: line_style[stp.line_style][1]
-            })
+            if (item.type == line_style[stp.line_style][2]) {
+                if (item.type == "Baseline") {
+                    item.api.applyOptions({
+                        topLineColor: stp.color,
+                        bottomLineColor: stp.color,
+                        lineStyle: line_style[stp.line_style][0],
+                        lineWidth: line_style[stp.line_style][1]
+                    })
+                } else if (item.type == "Line") {
+                    item.api.applyOptions({
+                        color: stp.color,
+                        lineStyle: line_style[stp.line_style][0],
+                        lineWidth: line_style[stp.line_style][1]
+                    })
+                }
+            } else {
+                const new_def = create_serie_for(k, stp, x as PaneType);
+                if (new_def) {
+                    chart?.removeSeries(item.api);
+                    s[k] = new_def;
+                    new_def.update(new_def.api);
+                }
+            }
         }
     }
 }
@@ -156,7 +200,21 @@ function on_mounted() {
         )
     })
     resizer.observe(chartContainer.value!)
+    vol_series = chart.addSeries(HistogramSeries, {
+        priceFormat:{
+            type:"volume",
+        },
+        priceScaleId:""
+    }, 0);
+    vol_series.priceScale().applyOptions({
+        scaleMargins: {
+            top: 0.75,
+            bottom: 0
+        },
+        visible: props.options.volume
+    })
     cs_series = chart.addSeries(CandlestickSeries,{},0);
+    markers = createSeriesMarkers(cs_series);
     update_series_list();
     update_data();
     chart.timeScale().fitContent();
@@ -164,6 +222,51 @@ function on_mounted() {
 function on_unmounted() {
     resizer?.disconnect();
     chart?.remove();
+}
+
+
+function update_fills() {
+    const r = current_report.value;
+    const interval = props.options.interval*60;
+    if (!props.options.fills || !r) {
+        markers?.setMarkers([]);
+    } else {
+        const sell_data : [Time, number,number][] =[];
+        const buy_data : [Time, number,number][] =[];
+
+        r.fills.forEach(x=>{
+            const bt = Math.floor(x.time/(1000*interval))*interval as Time;
+            const issell = x.side == 'sell';
+            const t = issell?sell_data:buy_data;
+            const p = t.pop();
+            const tu = calculate_turnover(r.info, x.price, x.quantity);
+            if (!p || p[0]!=bt) {
+                if (p) t.push(p);
+                t.push([bt, x.quantity,tu]);
+            } else {
+                p[1] += x.quantity;
+                p[2] += tu;
+                t.push(p);
+            }
+        });
+        const m : SeriesMarker<Time>[] = buy_data.map(x=>({
+            color: '#004000',
+            shape: "arrowUp",
+            position:'atPriceBottom',
+            price: x[2]/x[1],
+            text: `${x[1]}`,
+            time: x[0]
+        }) as SeriesMarker<Time>).concat(sell_data.map(x=>({
+            color: '#800000',
+            shape: "arrowDown",
+            position:'atPriceTop',
+            price: x[2]/x[1],
+            text: `${x[1]}`,
+            time: x[0]
+        }) as SeriesMarker<Time>)).sort((a,b)=> (a.time as number) - (b.time as number))
+        markers?.setMarkers(m);
+
+    }
 }
 
 watch(()=>props.options.series_to_panes, ()=>{
@@ -178,6 +281,14 @@ watch(current_report, ()=>{
 watch(()=>props.options.setup, ()=>{
     update_setup();
 },{deep:true})
+watch(()=>props.options.volume, (v)=>{
+    vol_series.applyOptions({
+        visible: v
+    });
+})
+watch(()=>props.options.fills, (v)=>{
+    update_fills();
+})
 
 function saveChartPosition() {
     if (!chart) return null;
@@ -216,18 +327,31 @@ function update_data() {
     const savedPos = saveChartPosition();
 
     const eq_data:CandlestickData[] = [];
+    const vol_data:HistogramData[] = [];
     report.chart.forEach(x=>{
-        const bt = Math.floor(x.time/(interval*1000))*interval as Time;
-        const prev = eq_data.pop();
-        if (!prev) eq_data.push({...x, time: bt});
-        else if (prev.time != bt) {
-            eq_data.push(prev);
-            eq_data.push({...x, time: bt});
+        const bt = Math.floor(x.time/(interval))*interval as Time;
+        let prev = eq_data.pop();
+        const prev_v = vol_data.pop();
+
+        if (!prev || prev.time != bt) {
+            if (prev) eq_data.push(prev);
+            prev = {...x, time: bt};
         } else {
-            eq_data.push({open: prev.open, close: x.close, high: Math.max(prev.high, x.high), low: Math.min(prev.low,x.low), time: bt});
+            prev = {open: prev.open, close: x.close, high: Math.max(prev.high, x.high), low: Math.min(prev.low,x.low), time: bt};
+        }
+        eq_data.push(prev);
+        const col = prev.open <= prev.close?"#00A00020":"#FF000020";
+        if (!prev_v || prev_v.time != bt) {
+            if (prev_v) vol_data.push(prev_v);
+            vol_data.push({value: x.volume, time: bt, color:col});
+        } else {
+            prev_v.value += x.volume;
+            prev_v.color = col;
+            vol_data.push(prev_v);
         }
     });
     cs_series.setData(eq_data);
+    vol_series.setData(vol_data);
     for (const x in all_series) {
         const s = all_series[x as PaneType];
         for (const k in s) {
@@ -235,6 +359,7 @@ function update_data() {
             item.update(item.api);
         }
     }
+    update_fills();
 
     restoreChartPosition(savedPos);
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue'
-import { createChart, CrosshairMode } from 'lightweight-charts'
+import { CandlestickSeries, createChart, CrosshairMode } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, SeriesMarker, Time } from 'lightweight-charts'
 import type { Candle, Fill, GroupedFill } from '../types/report'
 import { aggregateCandles, groupFillsByCandle } from '../utils/aggregator'
@@ -64,7 +64,7 @@ onMounted(() => {
     width: mainContainer.value.clientWidth,
     height: mainContainer.value.clientHeight,
   })
-  series = chart.addCandlestickSeries({
+  series = chart.addSeries(CandlestickSeries,{
     upColor: '#26a69a', downColor: '#ef5350',
     borderVisible: false,
     wickUpColor: '#26a69a', wickDownColor: '#ef5350',

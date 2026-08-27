@@ -66,7 +66,11 @@ const options = ref<DisplayOptions>({
     fills:true,
     orders: false,      
     series_to_panes:{main:[],pane_1:["Equity"],pane_2:[],secondary:[]},
-    setup:{}
+    volume:true,
+    setup:{
+        "Equity":{color:"#000000", line_style:"area"},
+        "Position":{color:"#000000", line_style:"area"}
+    }
 })
 
 </script>

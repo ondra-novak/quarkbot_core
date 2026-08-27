@@ -18,12 +18,11 @@ const options = computed(()=>{
         const mp : Record<string, boolean> = {};
         mp["Equity"] = false;
         mp["Position"] = false;
-        mp["Volume"] = false;
         for (const [k, v] of props.report.vars) {
             mp[k] = false;
         }
         for (const v of model.value ?? []) {
-            if (v in mp) mp[v] = true;
+            mp[v] = true;
         }
         return mp;
     }
@@ -103,13 +102,14 @@ div.m {
     padding: 0 0.1rem;
 }
 div.ovr {
-    color: #BBB;
+    color: #0003;
     font-weight: bold;
     position: absolute;
     inset: 0;
     text-align: right;
     font-size: 1.8rem;
     pointer-events: none;
+    overflow: hidden;
 
 }
 div.mm {

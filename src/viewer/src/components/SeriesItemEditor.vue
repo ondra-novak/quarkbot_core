@@ -30,9 +30,16 @@ const lineStyle = field('line_style')
 
 <template>    
   <input type="color" v-model="color" />
-  <select v-model="lineStyle">
+  <select v-model="lineStyle" class="monospace">
             <option value="solid">──────</option>
             <option value="double">━━━━━━</option>
             <option value="dashed">------</option>
+            <option value="area">▄▄▄▄▄▄</option>
   </select>
 </template>
+
+<style lang="css">
+.monospace {
+  font-family: monospace;
+}
+</style>
