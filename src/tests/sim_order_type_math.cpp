@@ -9,6 +9,7 @@
  * reports are fixed, the expectations can be turned into hard assertions.
  */
 #include "quarkbot/backtest/backtest.hpp"
+#include "quarkbot/common/order_internal_defs.hpp"
 #include "quarkbot/common/orderdata.hpp"
 #include "quarkbot/context.hpp"
 #include "quarkbot/instrument_description.hpp"
@@ -129,13 +130,15 @@ Outcome run_in_thread(const Scenario &sc) {
                         string_lookup<OrderStatus>(out.status).value_or("?")));
         } else if (std::holds_alternative<OrderRejectionReason>(upd)) {
             out.reason = std::get<OrderRejectionReason>(upd);
-            out.status = OrderStatus::rejected;
-            out.trace.push_back(std::format("rejected({})",
+            //derive through the shared mapping, never hardcode - see
+            //order_status_consistency test
+            out.status = rejection_reason_2_status(*out.reason);
+            out.trace.push_back(std::format("terminated({})",
                         string_lookup<OrderRejectionReason>(*out.reason).value_or("?")));
         } else if (std::holds_alternative<OrderRejectionWithText>(upd)) {
             out.reason = std::get<OrderRejectionWithText>(upd).reason;
-            out.status = OrderStatus::rejected;
-            out.trace.push_back(std::format("rejected({}: {})",
+            out.status = rejection_reason_2_status(*out.reason);
+            out.trace.push_back(std::format("terminated({}: {})",
                         string_lookup<OrderRejectionReason>(*out.reason).value_or("?"),
                         std::get<OrderRejectionWithText>(upd).text));
         } else if (std::holds_alternative<OrderOpenStatus>(upd)) {
@@ -378,17 +381,18 @@ int main() {
 
     std::cout << "\n== POST ONLY ==\n";
     audit("post_only buy 4 @110 (would take)",
-          "must be rejected with post_only_taker",
+          "must be refused with post_only_taker - which is not a failure, so it "
+          "ends as canceled (see rejection_reason_2_status)",
           {.request = {.side=Side::buy, .type=OrderType::limit_post_only,
                        .quantity=4_dec, .limit_price=110_dec}},
-          {.total_qty = 0_dec, .status = OrderStatus::rejected});
+          {.total_qty = 0_dec, .status = OrderStatus::canceled});
 
     audit("post_only buy 4 @101 (equals ask, would take)",
           "joining the touch as a taker must be rejected too, never filled",
           {.request = {.side=Side::buy, .type=OrderType::limit_post_only,
                        .quantity=4_dec, .limit_price=ASK}},
-          {.total_qty = 0_dec, .status = OrderStatus::rejected,
-           .known_open = "post_only joining the touch fills as taker instead of being rejected"});
+          {.total_qty = 0_dec, .status = OrderStatus::canceled,
+           .known_open = "post_only joining the touch fills as taker instead of being refused"});
 
     std::cout << "\n== STOP ==\n";
     audit("stop buy 4, stop@200 (ask 101, far below)",

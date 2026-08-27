@@ -28,6 +28,7 @@ set(BASIC_TESTS
     json_number.cpp
     sim_instrument_identity.cpp
     sim_last_quote_per_instrument.cpp
+    order_status_consistency.cpp
 )
 
 

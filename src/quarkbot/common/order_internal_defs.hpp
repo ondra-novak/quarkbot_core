@@ -23,14 +23,23 @@ public:
 };
 
 
+///Status an order ends in when it is terminated with given reason
+/**
+ * Not every reason is a failure. Some of them mean the order did exactly what
+ * it was told and stopped existing - those end as canceled, everything else as
+ * rejected.
+ *
+ * This is the single place where that decision is made. OrderInternalData, the
+ * account notification and every reporter must derive the status from here,
+ * otherwise the status a strategy acts on disagrees with the status a report
+ * shows for the very same event.
+ */
+constexpr OrderStatus rejection_reason_2_status(OrderRejectionReason rej) {
+    return (rej == OrderRejectionReason::expired || rej == OrderRejectionReason::post_only_taker)
+        ?OrderStatus::canceled:OrderStatus::rejected;
+}
+
 inline OrderStatus update2status(const OrderStatusUpdate &up) {
-
-    auto rejection_reason_2_status = [](OrderRejectionReason rej) {    
-        return (rej == OrderRejectionReason::expired || rej == OrderRejectionReason::post_only_taker)
-            ?OrderStatus::canceled:OrderStatus::rejected;
-    };
-
-
     return std::visit([=]<typename T>(const T &x){
         if constexpr(std::is_same_v<T, OrderStatus>) {
             return x;
