@@ -199,14 +199,14 @@ int g_open = 0;
 
 ///Expected result of a scenario; std::nullopt means "not asserted"
 struct Expect {
-    std::optional<Decimal> total_qty;
-    std::optional<Decimal> fill_price;      //price of the first fill
-    std::optional<Decimal> last_fill_price; //price of the last fill
-    std::optional<std::size_t> fill_count;
-    std::optional<OrderStatus> status;
-    std::optional<Decimal> turnover;
-    std::optional<Decimal> fees;
-    std::optional<Decimal> fees_native;
+    std::optional<Decimal> total_qty = {};
+    std::optional<Decimal> fill_price = {};      //price of the first fill
+    std::optional<Decimal> last_fill_price = {}; //price of the last fill
+    std::optional<std::size_t> fill_count = {};
+    std::optional<OrderStatus> status = {};
+    std::optional<Decimal> turnover = {};
+    std::optional<Decimal> fees= {};
+    std::optional<Decimal> fees_native = {};
     ///known unfixed behaviour: still printed, but does not fail the run
     std::string_view known_open = {};
 };
