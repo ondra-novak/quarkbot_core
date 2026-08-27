@@ -61,12 +61,12 @@ namespace quarkbot {
     }
     void TradableInstrumentBase::update_order(const POrderData &order, const OrderRejectionReason &status) {
         if (_storage) close_order(order);
-        _account->on_order_event({order}, OrderStatus::rejected);
+        _account->on_order_event({order}, rejection_reason_2_status(status));
         order->update(status);        
     }
     void TradableInstrumentBase::update_order(const POrderData &order, OrderRejectionWithText &&status) {
         if (_storage) close_order(order);
-        _account->on_order_event({order}, OrderStatus::rejected);
+        _account->on_order_event({order}, rejection_reason_2_status(status.reason));
         order->update(std::move(status));        
     }
     void TradableInstrumentBase::update_order(const POrderData &order, OrderOpenStatus &&status) {

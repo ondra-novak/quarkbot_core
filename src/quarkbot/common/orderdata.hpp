@@ -19,12 +19,6 @@ namespace quarkbot {
     using POrderData = std::shared_ptr<OrderInternalData>;
     using OrderData = OrderInternalData;
 
-    constexpr OrderStatus rejection_reason_2_status(OrderRejectionReason rej) {    
-        return (rej == OrderRejectionReason::expired || rej == OrderRejectionReason::post_only_taker)
-            ?OrderStatus::canceled:OrderStatus::rejected;
-    }
-
-
     class OrderInternalData: public IOrder {
     public:
         //update definition
@@ -62,7 +56,7 @@ namespace quarkbot {
 
         coro::prepared_coro update(OrderRejectionReason st) {
             std::scoped_lock _(mx);
-            next_report.status = OrderStatus::rejected;
+            next_report.status = rejection_reason_2_status(st);
             next_report.rejection_reason = st;
             next_report.rejection_message = {};
             next_report.status_changed = true;
@@ -71,7 +65,7 @@ namespace quarkbot {
         }
         coro::prepared_coro update(OrderRejectionWithText &&st) {
             std::scoped_lock _(mx);
-            next_report.status = OrderStatus::rejected;
+            next_report.status = rejection_reason_2_status(st.reason);
             next_report.rejection_reason = st.reason;
             next_report.rejection_message = std::move(st.text);
             next_report.status_changed = true;

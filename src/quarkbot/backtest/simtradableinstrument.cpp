@@ -157,7 +157,11 @@ void SimTradableInstrument::submit_order(POrderData order) {
     if (params.side != Side::buy && params.side != Side::sell) {
         return update_order(order,OrderRejectionWithText{ OrderRejectionReason::invalid_params,"Invalid side"});
     }
-    if (params.quantity < info.min_quantity) {
+    //an alert never trades, so quantity and turnover limits do not apply to it -
+    //it must be possible to place one with quantity 0
+    const bool trades = params.type != OrderType::alert;
+
+    if (trades && params.quantity < info.min_quantity) {
         return update_order(order,OrderRejectionReason::too_small);
     }
     if (is_limit_order(params.type) || is_stop_order(params.type)) {
@@ -165,15 +169,15 @@ void SimTradableInstrument::submit_order(POrderData order) {
             if (params.limit_price <= 0) {
                 return update_order(order,OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Missing limit price"});
             }
-            if (info.min_turnover > info.calc_turnover_pnl_currency(params.limit_price, params.quantity)) {
+            if (trades && info.min_turnover > info.calc_turnover_pnl_currency(params.limit_price, params.quantity)) {
                 return update_order(order, OrderRejectionReason::too_small);
             }
         }
         if (is_stop_order(params.type)) {
             if (params.stop_price <= 0) {
-                return update_order(order,{ OrderRejectionReason::invalid_params, "Missing limit price"});                
+                return update_order(order,{ OrderRejectionReason::invalid_params, "Missing stop price"});
             }
-            if (info.min_turnover > info.calc_turnover_pnl_currency(params.stop_price, params.quantity)) {
+            if (trades && info.min_turnover > info.calc_turnover_pnl_currency(params.stop_price, params.quantity)) {
                 return update_order(order,OrderRejectionReason::too_small);
             }
         }

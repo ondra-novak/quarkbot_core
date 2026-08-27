@@ -77,18 +77,38 @@ protected:
 
     std::unordered_map<std::string, AuctionState> _auction_state;
 
-    std::vector<ActiveOrder> _active_orders;    
-    std::optional<Quote> _last_quote;
+    std::vector<ActiveOrder> _active_orders;
+    ///last seen quote per instrument, keyed by instrument name
+    /** Must be per instrument - an order may only ever be matched against market
+     *  data of its own instrument. Keyed by name (not by SimInstrument pointer)
+     *  because instances are cached through a weak_ptr and can be recreated,
+     *  while the name is the stable identity - same as _auction_state.
+     */
+    std::unordered_map<std::string, Quote> _last_quote;
     std::uint64_t _random_key = 0;
 
+    ///Terminate an order whose time in force does not allow it to rest
+    /** @retval true the order was finished and must not be kept active */
+    bool finish_if_cannot_rest(ActiveOrder &order);
     bool validate_order(ActiveOrder &order);
     bool validate_order_replace(ActiveOrder &order, const ActiveOrder &replacing_order);
     bool match_order(ActiveOrder &order, bool taker);
-    bool match_order(ActiveOrder &order, Quote &quote, bool taker);
+    ///Match one order against a quote
+    /** The quote is taken by value on purpose: an order consumes quoted size as
+     *  it walks its own fills (which caps it at the quoted size per event), but
+     *  that consumption must not change what other orders see. Only L1 is
+     *  available, so queue competition between our own same-side orders cannot
+     *  be modelled - and sharing one snapshot would make the outcome depend on
+     *  the order of _active_orders, which carries no economic meaning.
+     *  Consequence: aggregate fills across several same-side orders can exceed
+     *  the displayed size. Market impact is not modelled.
+     */
+    bool match_order(ActiveOrder &order, Quote quote, bool taker);
     bool match_order(ActiveOrder &order, Trade &trade);
     void create_fill(ActiveOrder &order, Decimal price, Decimal quantity, Timestamp tp, bool taker);
 
     OrderType real_order_type(const ActiveOrder &order);
+    Decimal slipped_price(Decimal price, Side side) const;
 
     static PSimInstrument extract_instrument(const POrder &ord);
 

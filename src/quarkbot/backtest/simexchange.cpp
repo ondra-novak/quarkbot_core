@@ -35,56 +35,68 @@ std::shared_ptr<IEventStreamBase> SimExchange::subscribe_stream(
 std::shared_ptr<SimInstrument> SimExchange::resolve_instrument(const std::string &name) {
     auto iter = _instrument_names.find(name);
     if (iter == _instrument_names.end()) return {};
-    auto lk = iter->second._ref.lock();
-    if (!lk) {
-        lk = std::make_shared<SimInstrument>(*iter->second.info, shared_from_this());
-        iter->second._ref = lk;        
-    }
-    return lk;
+    return iter->second.get(shared_from_this());
+}
 
+SimExchange::InstrumentRef *SimExchange::find_instrument_ref(const std::string &name) {
+    auto iter = _instrument_names.find(name);
+    return iter == _instrument_names.end()?nullptr:&iter->second;
 }
 
 
+
+///Get live instance for event dispatch - never creates one
+/**
+ * A missing instance means nobody holds this instrument, so there can be no
+ * SimTradableInstrument for it (it keeps a strong reference) and therefore no
+ * orders to match. Creating a throw-away instance per event would only churn
+ * allocations - and, because SimExecutor compares instruments by pointer, it
+ * could never match anything anyway.
+ *
+ * Market data streams are keyed by name and live independently of the
+ * instance, so they must be fed even when this returns nullptr.
+ */
+std::shared_ptr<SimInstrument> SimExchange::instrument_for_event(const std::string &name) {
+    auto ref = find_instrument_ref(name);
+    return ref?ref->_ref.lock():std::shared_ptr<SimInstrument>{};
+}
 
 void SimExchange::on_event(const std::string &instrument, Quote qt) {
-    auto mi = resolve_instrument(instrument);
-    if (!mi) return;
-    if (qt.both_sides()) {
-        _executor.on_event(mi, qt); 
+    if (!find_instrument_ref(instrument)) return;   //unknown symbol
+    auto mi = instrument_for_event(instrument);
+    if (mi && qt.both_sides()) {
+        _executor.on_event(mi, qt);
     }
     _streams.on_event(instrument, qt);
-    for (auto &x: _tradable_instruments) {
-        auto trad = x.lock();
-        if (trad && trad->get_instrument().get() == mi.get()) {
-            auto mid_price = (qt.bid + qt.ask)/2_dec;
-            trad->report_price(mid_price);
+    if (mi) {
+        for (auto &x: _tradable_instruments) {
+            auto trad = x.lock();
+            if (trad && trad->get_instrument().get() == mi.get()) {
+                auto mid_price = (qt.bid + qt.ask)/2_dec;
+                trad->report_price(mid_price);
+            }
         }
     }
-    
-
 }
 void SimExchange::on_event(const std::string &instrument, Trade tr) {
-    auto mi = resolve_instrument(instrument);
-    if (!mi) return;
-    _executor.on_event(mi, tr); 
+    if (!find_instrument_ref(instrument)) return;   //unknown symbol
+    auto mi = instrument_for_event(instrument);
+    if (mi) _executor.on_event(mi, tr);
     _streams.on_event(instrument, tr);
-    
 }
 
 void SimExchange::on_event(const std::string &instrument, Auction au) {
-    auto mi = resolve_instrument(instrument);
-    if (!mi) return;
-    _executor.on_event(mi, au); 
+    if (!find_instrument_ref(instrument)) return;   //unknown symbol
+    auto mi = instrument_for_event(instrument);
+    if (mi) _executor.on_event(mi, au);
     _streams.on_event(instrument, au);
-    
 }
 
 void SimExchange::on_event(const std::string &instrument, const OrderBookSnapshot &sn) {
-    auto mi = resolve_instrument(instrument);
+    //orderbook is not matched against orders, it only feeds the streams
     _streams.on_event(instrument, sn.bids, sn.asks, sn.time, true);
 }
 void SimExchange::on_event(const std::string &instrument, const OrderBookIncrement &inc) {
-    auto mi = resolve_instrument(instrument);
     if (inc.side == Side::buy) {
         _streams.on_event(instrument, {static_cast<const OrderBookLevel *>(&inc),1}, {}, inc.time, false);
     } else {
@@ -180,7 +192,12 @@ std::string_view SimExchange::get_name() const {
 
 std::shared_ptr<SimInstrument> SimExchange::InstrumentRef::get(const std::shared_ptr<SimExchange> &owner) {
     auto lk = _ref.lock();
-    if (!lk) lk = std::make_shared<SimInstrument>(*info, owner);
+    if (!lk) {
+        lk = std::make_shared<SimInstrument>(*info, owner);
+        //cache the instance - SimExecutor identifies instruments by pointer, so
+        //every lookup of the same name must return the very same object
+        _ref = lk;
+    }
     return lk;
 }
 

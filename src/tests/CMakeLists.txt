@@ -26,6 +26,9 @@ set(BASIC_TESTS
     replay_csv.cpp
     persistent.cpp
     json_number.cpp
+    sim_instrument_identity.cpp
+    sim_last_quote_per_instrument.cpp
+    order_status_consistency.cpp
 )
 
 
@@ -41,6 +44,13 @@ foreach (testFile ${BASIC_TESTS})
     )
     add_test(NAME "tests/${filename}" COMMAND ${executable_name})
 endforeach()
+
+# --- order matching math ---
+# Prints EXPECTED vs ACTUAL for every order type. Scenarios tagged KNOWN OPEN are
+# reported but do not fail; anything else that differs fails the test.
+add_executable(test_sim_order_type_math sim_order_type_math.cpp)
+target_link_libraries(test_sim_order_type_math PRIVATE quarkbot::sdk quarkbot::backtest)
+add_test(NAME "tests/sim_order_type_math" COMMAND test_sim_order_type_math)
 
 # --- fixture plugin + test for the shared object module loader (somodule.hpp) ---
 
