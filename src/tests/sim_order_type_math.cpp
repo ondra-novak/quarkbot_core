@@ -436,12 +436,29 @@ int main() {
                        .quantity=4_dec, .limit_price=110_dec}},
           {.total_qty = 0_dec, .status = OrderStatus::canceled});
 
-    audit("post_only buy 4 @101 (equals ask, would take)",
-          "joining the touch as a taker must be rejected too, never filled",
+    audit("post_only buy 4 @101 (sits exactly on the ask)",
+          "only a strictly more aggressive price takes liquidity, so sitting on "
+          "the touch is allowed and fills",
           {.request = {.side=Side::buy, .type=OrderType::limit_post_only,
                        .quantity=4_dec, .limit_price=ASK}},
-          {.total_qty = 0_dec, .status = OrderStatus::canceled,
-           .known_open = "post_only joining the touch fills as taker instead of being refused"});
+          {.total_qty = 4_dec, .fill_price = ASK, .status = OrderStatus::filled});
+
+    // the point of post_only is the fee tier, so pin it with maker != taker
+    audit("post_only buy 4 @101 on the touch, maker 0.001 / taker 0.002",
+          "a post_only fill is a maker fill by definition: 0.001 * 4 * 101 = 0.404, "
+          "never the taker rate",
+          {.request = {.side=Side::buy, .type=OrderType::limit_post_only,
+                       .quantity=4_dec, .limit_price=ASK},
+           .fee_rate_maker = 0.001_dec, .fee_rate_taker = 0.002_dec},
+          {.total_qty = 4_dec, .fees = 0.404_dec});
+
+    audit("plain limit buy 4 @110 crossing, maker 0.001 / taker 0.002",
+          "control: an ordinary order that crosses on placement really is the "
+          "taker, so 0.002 * 4 * 101 = 0.808",
+          {.request = {.side=Side::buy, .type=OrderType::limit,
+                       .quantity=4_dec, .limit_price=110_dec},
+           .fee_rate_maker = 0.001_dec, .fee_rate_taker = 0.002_dec},
+          {.total_qty = 4_dec, .fees = 0.808_dec});
 
     std::cout << "\n== STOP ==\n";
     audit("stop buy 4, stop@200 (ask 101, far below)",

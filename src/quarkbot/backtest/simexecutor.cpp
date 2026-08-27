@@ -272,6 +272,9 @@ namespace quarkbot {
                     break;
 
                 case OrderType::limit_post_only:
+                    //only a price that is strictly more aggressive than the touch
+                    //takes liquidity. Sitting exactly on the touch is fine and
+                    //must not be refused.
                     if (taker && sgn(dp) * sid > 0) {
                         set_order_status(order.ord,  OrderRejectionReason::post_only_taker);
                         return true;
@@ -291,13 +294,18 @@ namespace quarkbot {
                         //enough away that it is not reached here. The rest of
                         //the order stays in the book as a partial fill.
                         Decimal fill_quant = std::min(leave_quant, s);
+                        //post_only is refused outright above when it would really
+                        //take liquidity, so any fill it still gets is a maker fill
+                        //by definition. It must never be charged the taker fee -
+                        //guaranteeing the maker side is the whole point of the flag.
+                        bool as_taker = taker && type != OrderType::limit_post_only;
                         //An order that crosses the moment it is placed takes the
                         //touch, so it gets the market price - which is better
                         //than its own limit. A resting order that the market
                         //later crosses is the maker, so its own limit price is
                         //the trade price. That is exactly what taker tells us.
-                        Decimal fill_price = taker?p:params.limit_price;
-                        create_fill(order, fill_price, fill_quant, quote.time, taker);
+                        Decimal fill_price = as_taker?p:params.limit_price;
+                        create_fill(order, fill_price, fill_quant, quote.time, as_taker);
                         s -= fill_quant;
                         break;
                     }
