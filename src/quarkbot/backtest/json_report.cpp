@@ -93,12 +93,12 @@ namespace quarkbot {
                     out(Event::order_status, order);
                 },
                 [&](OrderRejectionReason st) {
-                    order.set("status", string_lookup<OrderStatus>(OrderStatus::rejected).value_or(""));
+                    order.set("status", string_lookup<OrderStatus>(rejection_reason_2_status(st)).value_or(""));
                     order.set("rejected_reason", string_lookup<OrderRejectionReason>(st).value_or(""));
                     out(Event::order_status, order);
                 },
                 [&](OrderRejectionWithText st) {
-                    order.set("status", string_lookup<OrderStatus>(OrderStatus::rejected).value_or(""));
+                    order.set("status", string_lookup<OrderStatus>(rejection_reason_2_status(st.reason)).value_or(""));
                     order.set("rejected_reason", string_lookup<OrderRejectionReason>(st.reason).value_or(""));
                     order.set("reject_text", st.text);
                     out(Event::order_status, order);
