@@ -94,6 +94,13 @@ protected:
 
     std::shared_ptr<SimInstrument> resolve_instrument(const std::string &instr);
 
+    ///Find instrument definition by name without instantiating SimInstrument
+    /** @return pointer to the record, nullptr when the name is unknown to this exchange */
+    InstrumentRef *find_instrument_ref(const std::string &instr);
+
+    ///Get already existing SimInstrument for given name, never creates a new one
+    std::shared_ptr<SimInstrument> instrument_for_event(const std::string &instr);
+
 
 
 

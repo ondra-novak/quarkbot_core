@@ -26,6 +26,7 @@ set(BASIC_TESTS
     replay_csv.cpp
     persistent.cpp
     json_number.cpp
+    sim_instrument_identity.cpp
 )
 
 
