@@ -238,7 +238,11 @@ enum class OrderRejectionReason : uint8_t{
     //internal error  (probably adapter error, connection, etc)
     internal_error,
     //other reason (textural),
-    other
+    other,
+    //order could not be filled immediately and its time in force does not let
+    //it rest in the book (ioc, fok), so the unfilled part was canceled.
+    //This is not a failure - the order did exactly what it was told.
+    not_filled
 };
 
 template<>
@@ -266,7 +270,8 @@ inline constexpr auto string_lookup<OrderRejectionReason> = make_string_lookup_t
     {OrderRejectionReason::slippage,"slippage"},
     {OrderRejectionReason::exchange_issue,"exchange_issue"},
     {OrderRejectionReason::internal_error,"internal_error"},
-    {OrderRejectionReason::other,"other"}
+    {OrderRejectionReason::other,"other"},
+    {OrderRejectionReason::not_filled,"not_filled"}
 });
 
 

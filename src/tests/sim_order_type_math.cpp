@@ -372,12 +372,50 @@ int main() {
 
     std::cout << "\n== LIMIT IOC ==\n";
     audit("limit IOC buy 4 @90 (no cross)",
-          "nothing traded, so the order must not be reported as filled",
+          "nothing traded, so it is canceled - never reported as filled",
           {.request = {.side=Side::buy, .type=OrderType::limit,
                        .quantity=4_dec, .limit_price=90_dec,
                        .time_in_force=TimeInForce::ioc}},
-          {.total_qty = 0_dec, .status = OrderStatus::canceled,
-           .known_open = "unfilled IOC reports filled instead of canceled"});
+          {.total_qty = 0_dec, .status = OrderStatus::canceled});
+
+    audit("limit IOC buy 4 @110 (crosses), ask_size 10",
+          "enough at the touch, so it fills in full",
+          {.request = {.side=Side::buy, .type=OrderType::limit,
+                       .quantity=4_dec, .limit_price=110_dec,
+                       .time_in_force=TimeInForce::ioc}},
+          {.total_qty = 4_dec, .status = OrderStatus::filled});
+
+    audit("limit IOC buy 10 @110 (crosses), ask_size 2",
+          "takes the 2 available and cancels the remainder - never rests, so it "
+          "must not fill again on the second quote",
+          {.request = {.side=Side::buy, .type=OrderType::limit,
+                       .quantity=10_dec, .limit_price=110_dec,
+                       .time_in_force=TimeInForce::ioc},
+           .ask_size = 2_dec},
+          {.total_qty = 2_dec, .fill_count = 1u, .status = OrderStatus::canceled});
+
+    std::cout << "\n== LIMIT FOK ==\n";
+    audit("limit FOK buy 4 @110 (crosses), ask_size 10",
+          "the whole quantity is available, so it fills in full",
+          {.request = {.side=Side::buy, .type=OrderType::limit,
+                       .quantity=4_dec, .limit_price=110_dec,
+                       .time_in_force=TimeInForce::fok}},
+          {.total_qty = 4_dec, .fill_count = 1u, .status = OrderStatus::filled});
+
+    audit("limit FOK buy 10 @110 (crosses), ask_size 2",
+          "fill or kill must not fill partially - killed with no fill at all",
+          {.request = {.side=Side::buy, .type=OrderType::limit,
+                       .quantity=10_dec, .limit_price=110_dec,
+                       .time_in_force=TimeInForce::fok},
+           .ask_size = 2_dec},
+          {.total_qty = 0_dec, .fill_count = 0u, .status = OrderStatus::canceled});
+
+    audit("limit FOK buy 4 @90 (no cross)",
+          "nothing available, so it is killed",
+          {.request = {.side=Side::buy, .type=OrderType::limit,
+                       .quantity=4_dec, .limit_price=90_dec,
+                       .time_in_force=TimeInForce::fok}},
+          {.total_qty = 0_dec, .status = OrderStatus::canceled});
 
     std::cout << "\n== POST ONLY ==\n";
     audit("post_only buy 4 @110 (would take)",

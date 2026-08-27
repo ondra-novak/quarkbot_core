@@ -96,6 +96,7 @@ constexpr inline std::string_view to_string(OrderRejectionReason rsn) {
         case quarkbot::OrderRejectionReason::exchange_issue: return "exchange_issue";
         case quarkbot::OrderRejectionReason::internal_error: return "internal_error";
         case quarkbot::OrderRejectionReason::other: return "other";
+        case quarkbot::OrderRejectionReason::not_filled: return "not_filled";
     }
 }
 

@@ -87,6 +87,9 @@ protected:
     std::unordered_map<std::string, Quote> _last_quote;
     std::uint64_t _random_key = 0;
 
+    ///Terminate an order whose time in force does not allow it to rest
+    /** @retval true the order was finished and must not be kept active */
+    bool finish_if_cannot_rest(ActiveOrder &order);
     bool validate_order(ActiveOrder &order);
     bool validate_order_replace(ActiveOrder &order, const ActiveOrder &replacing_order);
     bool match_order(ActiveOrder &order, bool taker);

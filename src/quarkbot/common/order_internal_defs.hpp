@@ -35,7 +35,9 @@ public:
  * shows for the very same event.
  */
 constexpr OrderStatus rejection_reason_2_status(OrderRejectionReason rej) {
-    return (rej == OrderRejectionReason::expired || rej == OrderRejectionReason::post_only_taker)
+    return (rej == OrderRejectionReason::expired
+            || rej == OrderRejectionReason::post_only_taker
+            || rej == OrderRejectionReason::not_filled)
         ?OrderStatus::canceled:OrderStatus::rejected;
 }
 

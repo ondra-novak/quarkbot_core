@@ -79,6 +79,7 @@ namespace quarkbot {
         accept_order(aord.ord);
 
         if (match_order(aord,true)) return;
+        if (finish_if_cannot_rest(aord)) return;
 
         _active_orders.push_back(std::move(aord));
 
@@ -113,7 +114,7 @@ namespace quarkbot {
 
         set_order_status(found->ord, {OrderStatus::replaced});        
 
-        if (match_order(aord,true)) {
+        if (match_order(aord,true) || finish_if_cannot_rest(aord)) {
             _active_orders.erase(found);
         } else {
             *found = std::move(aord);
@@ -128,6 +129,21 @@ namespace quarkbot {
         auto aord = std::move(*found);
         _active_orders.erase(found);
         set_order_status(aord.ord, {OrderStatus::canceled});
+    }
+
+    bool SimExecutor::finish_if_cannot_rest(ActiveOrder &order) {
+        //ioc and fok never sit in the order book: whatever could not be filled
+        //immediately is canceled. This also covers "no market data at all", where
+        //matching had nothing to work with. Reported with a reason that maps to
+        //canceled - the order did exactly what it was told, nothing failed.
+        switch (order.time_in_force) {
+            case TimeInForce::ioc:
+            case TimeInForce::fok:
+                set_order_status(order.ord, OrderRejectionReason::not_filled);
+                return true;
+            default:
+                return false;
+        }
     }
 
     bool SimExecutor::validate_order(ActiveOrder &order) {
@@ -150,13 +166,6 @@ namespace quarkbot {
             set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Invalid time-in-force for order type"});
             return false;
         }
-        if (params.time_in_force == TimeInForce::fok) {
-            //rejected on purpose - simulating fill-or-kill would need book depth
-            //we don't have. Better an explicit reject than silently behaving as gtc.
-            set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::unsupported, "fill-or-kill is not simulated"});
-            return false;
-        }
-
         return true;
     }
     bool SimExecutor::validate_order_replace(ActiveOrder &order, const ActiveOrder &replacing_order) {
@@ -272,6 +281,11 @@ namespace quarkbot {
                     //dp == 0 sits exactly on the touch, sgn(dp)*sid > 0 crosses it.
                     //(when dp == 0 the limit price and the touch are the same value)
                     if (sgn(dp) * sid >= 0 && s > 0) {
+                        //fill-or-kill must not fill partially - without the whole
+                        //quantity available at the touch it is killed instead
+                        if (params.time_in_force == TimeInForce::fok && s < leave_quant) {
+                            return false;
+                        }
                         //only the quoted L1 size can trade in this event - the
                         //next book level is unknown, and assumed to be far
                         //enough away that it is not reached here. The rest of
@@ -281,10 +295,9 @@ namespace quarkbot {
                         s -= fill_quant;
                         break;
                     }
-                    if (params.time_in_force == TimeInForce::ioc) {
-                        set_order_status(order.ord, {OrderStatus::filled});
-                        return true;
-                    }
+                    //nothing (more) can trade here. Whether the remainder rests
+                    //in the book or is canceled is decided by the time in force,
+                    //see finish_if_cannot_rest() at the placement site.
                     return false;
                 case OrderType::alert:
                     break; // handled above, unreachable
