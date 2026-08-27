@@ -23,6 +23,32 @@
 
 namespace quarkbot {
 
+    ///Has the market reached a stop/alert trigger price?
+    /** Inclusive on both sides, same as the trade driven path: a buy triggers
+     *  once the market is at or above the stop price, a sell at or below it.
+     *  @param market_price ask for a buy, bid for a sell
+     */
+    static bool stop_reached(Decimal stop_price, Decimal market_price, Side side) {
+        return sgn(stop_price - market_price) * static_cast<int>(side) <= 0;
+    }
+
+    ///Replace a missing quoted size with unlimited liquidity
+    /** Some feeds carry no size information and report 0. That means "size
+     *  unknown", not "nothing offered", so matching must not treat it as an
+     *  empty book. Decimal::max() saturates on subtraction, so it never drains -
+     *  which keeps s==0 unambiguously meaning "the quoted liquidity is used up".
+     */
+    static Quote with_normalized_sizes(Quote q) {
+        if (q.bid_size <= 0) q.bid_size = Decimal::max();
+        if (q.ask_size <= 0) q.ask_size = Decimal::max();
+        return q;
+    }
+
+    ///Price a market order pays for the part that walks past the visible quote
+    Decimal SimExecutor::slipped_price(Decimal price, Side side) const {
+        return Decimal(price.to_double() + price.to_double() * _slippage * static_cast<double>(side));
+    }
+
     SimExecutor::PSimInstrument SimExecutor::extract_instrument(const POrder &ord) {
         TradableInstrument instr( ord->get_instrument());
         MarketInstrument minstr = instr;
@@ -124,6 +150,12 @@ namespace quarkbot {
             set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::invalid_params, "Invalid time-in-force for order type"});
             return false;
         }
+        if (params.time_in_force == TimeInForce::fok) {
+            //rejected on purpose - simulating fill-or-kill would need book depth
+            //we don't have. Better an explicit reject than silently behaving as gtc.
+            set_order_status(ord, OrderRejectionWithText{ OrderRejectionReason::unsupported, "fill-or-kill is not simulated"});
+            return false;
+        }
 
         return true;
     }
@@ -139,16 +171,15 @@ namespace quarkbot {
 
     
     bool SimExecutor::match_order(ActiveOrder &order, bool taker) {
-        if (_last_quote.has_value()) {
-            return match_order(order, _last_quote.value(), taker);
-        } else {
-            return false;
-        }
+        //match only against market data of the order's own instrument
+        auto iter = _last_quote.find(order.instrument->get_info().name);
+        if (iter == _last_quote.end()) return false;    //no market data yet
+        return match_order(order, iter->second, taker);
     }
 
     
 
-    bool SimExecutor::match_order(ActiveOrder &order, Quote &quote, bool taker) {
+    bool SimExecutor::match_order(ActiveOrder &order, Quote quote, bool taker) {
         auto &params  = order.ord->get_parameters();
         //attempt to find auction information about this instrument
         const auto &info  = order.ord->get_instrument()->get_instrument()->get_info();        
@@ -183,19 +214,16 @@ namespace quarkbot {
             set_order_status(order.ord,OrderRejectionReason::too_late);
             return true;
         }        
-        if (real_order_type(order) == OrderType::alert) {        
+        if (real_order_type(order) == OrderType::alert) {
+            //an alert works like a stop that generates no fill - it just goes to
+            //filled once triggered
             auto &p = params.side == Side::sell?quote.bid:quote.ask;
-            int sid = static_cast<int>(params.side);
-            Decimal dp = params.stop_price - p;
-            if (sgn(dp) * sid < 0) {
-                set_order_status(order.ord, {OrderStatus::filled});
-                return true;
-            }
-            return false;
+            if (!stop_reached(params.stop_price, p, params.side)) return false;
+            set_order_status(order.ord, {OrderStatus::filled});
+            return true;
         }
         while (order.calcs.filled < params.quantity) {
 
-            if (!_last_quote.has_value()) return false;
             auto leave_quant = params.quantity - order.calcs.filled;
             auto &p = params.side == Side::sell?quote.bid:quote.ask;
             auto &s = params.side== Side::sell?quote.bid_size:quote.ask_size;
@@ -208,17 +236,30 @@ namespace quarkbot {
             switch (type) {
                 case OrderType::stop:
                 case OrderType::stoplimit:
-/*                case OrderType::oco:
-                    dp = params.stop_price - p;
-                    if (sgn(dp) * sid < 0) order.trig = true;
-                    else return false;
-                    break;*/
+                    //not triggered yet - the stop fires once the quote reaches
+                    //the stop price, then the order continues as market/limit
+                    if (!stop_reached(params.stop_price, p, params.side)) return false;
+                    order.trig = true;
+                    continue;
+
                 case OrderType::market:
                     if (dq > 0) {
-                        create_fill(order, p, dq,quote.time,taker);
-                        s -= dq;
+                        //book shows less than we need: take all of the visible
+                        //liquidity at the touch...
+                        if (s > 0) {
+                            create_fill(order, p, s, quote.time, taker);
+                            s = 0;
+                        }
+                        //...and walk the rest deeper into the book, which the
+                        //quote cannot describe - that part pays slippage
+                        Decimal rest = params.quantity - order.calcs.filled;
+                        if (rest > 0) {
+                            create_fill(order, slipped_price(p, params.side), rest, quote.time, taker);
+                        }
+                    } else {
+                        create_fill(order, slipped_price(p, params.side), leave_quant, quote.time, taker);
+                        s -= leave_quant;   //consume the liquidity we just took
                     }
-                    else create_fill(order, Decimal(p.to_double() + p.to_double() *_slippage*static_cast<double>(params.side)), leave_quant,quote.time,taker);
                     break;
 
                 case OrderType::limit_post_only:
@@ -228,12 +269,16 @@ namespace quarkbot {
                     }
                     [[fallthrough]];
                 case OrderType::limit:
-                    if (dp == 0) {
-                        create_fill(order, p, leave_quant, quote.time, taker);
-                        break;
-                    }
-                    else if (sgn(dp) * sid > 0) {
-                        create_fill(order, params.limit_price, leave_quant, quote.time, taker);
+                    //dp == 0 sits exactly on the touch, sgn(dp)*sid > 0 crosses it.
+                    //(when dp == 0 the limit price and the touch are the same value)
+                    if (sgn(dp) * sid >= 0 && s > 0) {
+                        //only the quoted L1 size can trade in this event - the
+                        //next book level is unknown, and assumed to be far
+                        //enough away that it is not reached here. The rest of
+                        //the order stays in the book as a partial fill.
+                        Decimal fill_quant = std::min(leave_quant, s);
+                        create_fill(order, params.limit_price, fill_quant, quote.time, taker);
+                        s -= fill_quant;
                         break;
                     }
                     if (params.time_in_force == TimeInForce::ioc) {
@@ -322,11 +367,17 @@ namespace quarkbot {
 
     void SimExecutor::on_event(PSimInstrument instrument, Quote &quote){
         seed_random(quote.time);
-        _last_quote = quote;
+        //new_quote starts as the raw feed data and collects the limit prices of
+        //resting orders; book is what matching works on, so the liquidity our
+        //own orders consume never leaks into the published market data.
+        //match_order takes the quote by value, so every order sees the same
+        //untouched book - see its declaration for why.
         Quote new_quote = quote;
+        Quote book = with_normalized_sizes(quote);
+        _last_quote[instrument->get_info().name] = book;
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
             if (ord.instrument == instrument) {
-                bool b =  match_order(ord, quote, false);
+                bool b =  match_order(ord, book, false);
                 if (b) return true;
                 if (is_limit_order(real_order_type(ord) )) {
                     auto &p =ord.ord->get_parameters(); 
@@ -377,9 +428,19 @@ namespace quarkbot {
                                 || (params.side == Side::sell && params.limit_price <= auction_data.price))
                             )    
                         ) {
-                                create_fill(ord, auction_data.price, std::min(auction_data.quantity, params.quantity), auction_data.time, true);
-                                //send status
-                                set_order_status(ord.ord, OrderStatus::filled);
+                                //fill only what is still outstanding - never more
+                                Decimal leave_quant = params.quantity - ord.calcs.filled;
+                                Decimal fill_quant = std::min(auction_data.quantity, leave_quant);
+                                if (fill_quant > 0) {
+                                    create_fill(ord, auction_data.price, fill_quant, auction_data.time, true);
+                                }
+                                //the auction is over, so an unfilled remainder can
+                                //no longer trade - that is expired, not filled
+                                if (ord.calcs.filled >= params.quantity) {
+                                    set_order_status(ord.ord, OrderStatus::filled);
+                                } else {
+                                    set_order_status(ord.ord, OrderRejectionReason::expired);
+                                }
                                 //remove order
                                 return true;
                         } else {
@@ -420,8 +481,16 @@ namespace quarkbot {
     void SimExecutor::create_fill(ActiveOrder &order, Decimal price, Decimal quantity, Timestamp tp, bool taker) {
         
         const auto &info = order.instrument->get_info();
-        Decimal volume = price * quantity;
-        Decimal fees = (taker?info.fee_rate_taker:info.fee_rate_maker) * volume;
+        //fees must respect the contract geometry (multiplier, tick scale) and,
+        //for inverse contracts, the fact that the two currencies differ:
+        //  - fees        is denominated in the quote currency
+        //  - fees_native is what the exchange actually charges, which for an
+        //                inverse contract is the pnl (settlement) currency
+        //For a plain linear contract both turnovers are equal, so both fees are.
+        Decimal fee_rate = taker?info.fee_rate_taker:info.fee_rate_maker;
+        Decimal turnover_pnl = info.calc_turnover_pnl_currency(price, quantity);
+        Decimal fees = fee_rate * info.calc_turnover_quote_currency(price, quantity);
+        Decimal fees_native = fee_rate * turnover_pnl;
         const auto &params = order.ord->get_parameters();
         Fill f{
             {static_cast<std::uint64_t>(tp.time_since_epoch().count()),_random_key++},
@@ -436,8 +505,8 @@ namespace quarkbot {
         };
         order.calcs.fees += fees;
         order.calcs.filled += quantity;
-        order.calcs.turnover += info.calc_turnover_pnl_currency(price, quantity);
-        order.calcs.fees_native += fees;
+        order.calcs.turnover += turnover_pnl;
+        order.calcs.fees_native += fees_native;
         auto &simt = *static_cast<SimTradableInstrument *>(order.ord->get_instrument().get());
         if (_report_sink) _report_sink(order.ord, f);
         simt.on_order_update(order.ord, order.calcs);
