@@ -35,9 +35,12 @@ const progress= computed(()=>{
 
 <style lang="css" scoped>
 div.t {
-    height: 80vh;
     display:flex;
     align-items: center;
+    position: fixed;
+    inset: 0;
+    background-color: #0008;    
+    z-index: 1000;
 }
 div.t > div {
     flex-grow: 1;

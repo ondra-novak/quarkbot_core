@@ -63,7 +63,7 @@ export class ParsedInstrumentReport {
             const ts = items.map(x=>x.time);
             ord_insts.push({
                start: Math.min(...ts),
-               end: Math.min(...ts),
+               end: Math.max(...ts),
                id: k,
                price: items[0].stop_price ?? items[0].limit_price ?? 0,
                side: items[0].side,

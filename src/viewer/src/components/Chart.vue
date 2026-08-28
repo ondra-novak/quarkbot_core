@@ -7,6 +7,7 @@ import { DisplayOptions,  PaneType, paneTypes, QLineStyle, SeriesSetupItem } fro
 import { stringToColor } from '../types/stringToColor';
 import { Side } from '../types/report_types';
 import { calculate_turnover } from '../types/contract';
+import { OrderLinesPrimitive } from './order_lines';
 
 let chart:IChartApi|null = null;
 let resizer :ResizeObserver | null = null;
@@ -14,6 +15,7 @@ const chartContainer = ref<HTMLElement>();
 let cs_series:ISeriesApi<"Candlestick">;
 let vol_series:ISeriesApi<"Histogram">;
 let markers : ISeriesMarkersPluginApi<Time>|null = null;
+let order_lines : OrderLinesPrimitive|null = null;
 
 type SeriesApi = ISeriesApi<"Candlestick">|ISeriesApi<"Histogram">|ISeriesApi<"Line">|ISeriesApi<"Baseline">;
 interface SeriesDef {
@@ -223,6 +225,9 @@ function on_mounted() {
     })
     cs_series = chart.addSeries(CandlestickSeries,{},0);
     markers = createSeriesMarkers(cs_series);
+    order_lines = new OrderLinesPrimitive();
+    cs_series.attachPrimitive(order_lines);
+    order_lines.set_visible(props.options.orders);
     update_series_list();
     update_data();
     chart.timeScale().fitContent();
@@ -297,6 +302,9 @@ watch(()=>props.options.volume, (v)=>{
 watch(()=>props.options.fills, (v)=>{
     update_fills();
 })
+watch(()=>props.options.orders, (v)=>{
+    order_lines?.set_visible(v);
+})
 
 function saveChartPosition() {
     if (!chart) return null;
@@ -360,6 +368,7 @@ function update_data() {
     });
     cs_series.setData(eq_data);
     vol_series.setData(vol_data);
+    order_lines?.set_data(report.order_instances, eq_data.map(x=>x.time as number), interval);
     for (const x in all_series) {
         const s = all_series[x as PaneType];
         for (const k in s) {
@@ -378,7 +387,7 @@ onUnmounted(on_unmounted);
 
 </script>
 <template>
-    <div class="lw-chart" ref="chartContainer"></div>
+    <div class="lw-chart" ref="chartContainer" v-bind="$attrs"></div>
 </template>
 <style scoped>
     .lw-chart {

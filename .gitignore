@@ -16,3 +16,5 @@
 /data
 src/viewer/dist/
 src/viewer/node_modules/
+/report.csv
+/report.jsonl
