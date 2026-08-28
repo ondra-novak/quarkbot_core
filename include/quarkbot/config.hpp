@@ -120,6 +120,10 @@ public:
         }
         public:
 
+        constexpr std::optional<ConfigValueType> value() const {
+            return source(key);
+        }
+
         ///automatic conversion operator to various types, enabled for bool, arithmetic types, enums with string lookup and types with from_string method
         template<typename T> 
         constexpr operator T() const {
