@@ -120,8 +120,8 @@ public:
         }
         public:
 
-        constexpr std::optional<ConfigValueType> value() const {
-            return source(key);
+        constexpr std::optional<std::string_view> value() const {
+            return source(key).transform([](const ConfigValueType & x){return get_value(x);});
         }
 
         ///automatic conversion operator to various types, enabled for bool, arithmetic types, enums with string lookup and types with from_string method
