@@ -47,6 +47,8 @@ public:
         std::size_t mean_rev_interval_min;
         double bbema_band_multiplier;
         double reversal_multiplier;
+        double reversal_power;
+        Decimal oracle_pos_fract;
         double initial_budget;
         double initial_pos_percent;
         double max_loss_percent;
@@ -60,12 +62,13 @@ public:
         Persistent<Decimal> position;
         Persistent<Decimal> last_trade_price;
         Persistent<double> total_loss;
-        Persistent<double> calc_loss;
+        Persistent<double> limiter;
         Persistent<Decimal> last_trend_check_price;
         Persistent<double> benchmark_profit;
         Persistent<double> current_profit;
         Persistent<int> center_band_index;
         Persistent<Decimal> oracle_pos;
+        Persistent<double> bbupper,bblower;
 
         //orders
         Order upper = {};
@@ -84,24 +87,25 @@ public:
             double pnl = info.calc_pnl(last_trade_price, cur_price, position-oracle_pos).to_double();            
             double new_loss = std::max(total_loss - pnl,0.0);
             double limit = (initial_budget + benchmark_profit) * max_loss_percent / 100.0;
-            double new_calc_loss = std::min(std::max(calc_loss - (pnl > 0?1.0:2.0)*pnl , limit/2.0), std::min(new_loss,limit));            
-            return {new_loss, new_calc_loss};
+            double new_limiter = new_loss < limit? 1.0:limit/new_loss;            
+            return {new_loss, new_limiter};
         }    
 
 
         void process_fill(const Fill &fill) {
             current_profit = current_profit + fill.contract.calc_pnl(last_trade_price, fill.price, position).to_double();
-            auto loss = calculate_loss(fill.price);
+            auto [loss, new_limiter] = calculate_loss(fill.price);
             auto pos_change = fill.quantity * static_cast<int>(fill.side) ;
             position = position + pos_change;
             last_trade_price = fill.price;
-            total_loss = loss.first;
-            calc_loss = loss.second;
+            total_loss = loss;
+            limiter = new_limiter;
         }
 
         Decimal calc_new_pos(Decimal new_price, int side) const {
-            auto new_loss = calculate_loss(new_price);            
-            return (new_loss.second * reversal_multiplier / new_price) *side + oracle_pos;
+            auto [new_loss, new_limiter] = calculate_loss(new_price);            
+            new_loss *= std::min(limiter.get(), new_limiter);
+            return (std::sqrt(2*reversal_multiplier*new_loss + new_loss*new_loss * reversal_power*reversal_power) / new_price) *side + oracle_pos;
         }
 
         Decimal calc_order_diff(Decimal new_price, int side) const {
@@ -109,10 +113,11 @@ public:
         }
 
         Order &select_mean_rev_order(Side side) {
-            return side == Side::buy?lower:upper;;
+            return side == Side::buy?lower:upper;
         }
-        double select_mean_rev_price(Side side) const {
-            return bbema_mean + bbema_dev * bbema_band_multiplier * (center_band_index - static_cast<int>(side));
+        double select_mean_rev_price(Side side, int attempt) const {
+//            return bbema_mean + bbema_dev * bbema_band_multiplier * (center_band_index - attempt*static_cast<int>(side));
+            return last_trade_price.get().to_double() +bbema_dev * bbema_band_multiplier * (0 - attempt*static_cast<int>(side));
         }
         void recalculate_bands(Side side) {
             center_band_index = center_band_index - static_cast<int>(side);
@@ -126,24 +131,24 @@ public:
             auto side = order.get_parameters().side;
             if (rpt.status == OrderStatus::filled) {
                 recalculate_bands(side);
-                place_mean_rev_order(select_mean_rev_price(side), side, {});
+                place_mean_rev_order_rep(side, {});
             } else if (order == select_mean_rev_order(side) && !(rpt.status == OrderStatus::rejected && rpt.rejection_reason == OrderRejectionReason::adapter_stopped)) {
                 //just test, if not stopped
                 if (co_await timer.sleep_for(std::chrono::seconds(10))) {
                     if (order == select_mean_rev_order(side)) {
-                        place_mean_rev_order(select_mean_rev_price(side), side, {});
+                        place_mean_rev_order_rep( side, {});
                     }
                 }
             }
         }
 
 
-        void place_mean_rev_order(Decimal new_price, Side side, Order replace_order) {
+        bool place_mean_rev_order(Decimal new_price, Side side, Order replace_order) {
             int dir = sgn(position);
             if (dir == 0) dir = static_cast<int>(side);
             Decimal diff = calc_order_diff(new_price, dir);
             if (sgn(diff) != static_cast<int>(side)) {
-                return;
+                return false;
             }
             Order &cur_order = select_mean_rev_order(side);                    
             cur_order = instrument.place_order(OrderRequest{
@@ -155,6 +160,13 @@ public:
             }, replace_order);
                 
             sync.run(follow_mean_rev_order(cur_order));
+            return true;
+        }
+
+        bool place_mean_rev_order_rep( Side side, Order replace_order) {
+            int a = 1;
+            while (a< 1000 && !place_mean_rev_order(select_mean_rev_price(side,a), side, replace_order)) ++a;
+            return a<1000;
         }
 
         StrategyFragment trend_detection_period(Decimal price) {
@@ -170,15 +182,13 @@ public:
                 if (!ltcp) ltcp = price;
                 double initial_pos_cur = (initial_budget + benchmark_profit) * initial_pos_percent * 0.01;
                 Decimal oracle_position = dir * initial_pos_cur / ltcp;
-                Decimal prev_pos = oracle_pos;
-                oracle_pos = oracle_position;
-                auto prev_pnl = info.calc_pnl(ltcp, price, prev_pos).to_double();
+//              Decimal prev_pos = oracle_pos;
+                oracle_pos = oracle_position*oracle_pos_fract;
+//              auto prev_pnl = info.calc_pnl(ltcp, price, prev_pos).to_double();
                 auto new_pnl = info.calc_pnl(ltcp, price, oracle_position).to_double();
-                if (total_loss > calc_loss && new_pnl > 0) new_pnl = 0; //failed benchmark we are on risk
-                auto adj_pnl = new_pnl - prev_pnl;
-                benchmark_profit = benchmark_profit + new_pnl;
-                total_loss = std::max(0.0,total_loss + adj_pnl);  //move oracle profit into loss of mean reversion;
-                calc_loss = std::max(0.0,calc_loss + adj_pnl);
+//                auto adj_pnl = new_pnl - prev_pnl;
+                benchmark_profit = (benchmark_profit + new_pnl)*limiter.get();
+                total_loss = std::max(0.0,benchmark_profit.get() - current_profit.get());
                 last_trend_check_price = price;
 
                 if (dir == sgn(position.get())) {                
@@ -231,8 +241,10 @@ public:
                  auto r = bbema.update(dp);
                  bbema_mean = r.mean;
                  bbema_dev = r.dev;
-                 place_mean_rev_order(select_mean_rev_price(Side::buy), Side::buy, lower);
-                 place_mean_rev_order(select_mean_rev_price(Side::sell), Side::sell, upper);
+                 bbupper = select_mean_rev_price(Side::sell,1);
+                 bblower = select_mean_rev_price(Side::buy, 1);
+                 place_mean_rev_order_rep( Side::buy, lower);
+                 place_mean_rev_order_rep( Side::sell, upper);
             }
         }
 
@@ -257,6 +269,8 @@ public:
             cfg["mean_rev_check_interval_min"],
             cfg["bbema_band_multiplier"],
             cfg["reversal_multiplier"],
+            cfg["reversal_power"],
+            cfg["oracle_pos_fract"],
             cfg["initial_budget"],
             cfg["initial_pos_percent"],
             cfg["max_loss_percent"],            
@@ -268,12 +282,14 @@ public:
             {ns, "position"},
             {ns,"last_trade_price"},
             {ns,"total_loss"},
-            {ns,"calc_loss"},
+            {ns,"limiter"},
             {ns,"last_trend_check_price"},
             {ns,"benchmark_profit"},
             {ns,"current_profit"},
             {ns,"center_band_index"},
             {ns,"oracle_pos"},
+            {ns,"bbupper"},
+            {ns,"bblower"},
         };
 
         Quote qt;

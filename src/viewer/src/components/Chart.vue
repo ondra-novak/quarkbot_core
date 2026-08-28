@@ -136,12 +136,13 @@ function create_serie_for(n:string, stp: SeriesSetupItem, pane:PaneType) : Serie
     }
 }
 
-function update_series_list() {
+function update_series_list(force?:boolean) {
     for (const k in props.options.series_to_panes) {
         const s = Object.fromEntries(props.options.series_to_panes[k as PaneType].map(x=>[x,true]));
         const d = all_series[k as PaneType]
         for (const n in s) {
-            if (!d[n]) {
+            if (!d[n] || force) {
+                if (d[n]) chart?.removeSeries(d[n].api);
                 const srs = create_serie_for(n, sanity_setup(n, props.options.setup[n]), k as PaneType);                
                 if (srs) {
                     d[n] = srs;
@@ -290,6 +291,9 @@ watch(()=>props.options.interval, ()=>{
 })
 watch(current_report, ()=>{
     update_data();
+})
+watch(()=>props.report.vars, ()=>{
+    update_series_list(true);
 })
 watch(()=>props.options.setup, ()=>{
     update_setup();

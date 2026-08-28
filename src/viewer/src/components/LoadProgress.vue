@@ -4,8 +4,9 @@ import { computed } from 'vue';
 
 const props = defineProps<{
     bytes: number,
-    total: number|null
-    error: string|null
+    total?: number|null,
+    error?: string|null,
+    status?: string|null    
 }>();
 
 
@@ -23,6 +24,7 @@ const progress= computed(()=>{
 <div class="t">
     <div>
         <h1 v-if="error" class="error">{{error}}</h1>
+        <h1 v-else-if="status"> {{ status }}</h1>
         <h1 v-else>Loading...</h1>
         <div class="p">
             <div :style="{width: progress}"></div>

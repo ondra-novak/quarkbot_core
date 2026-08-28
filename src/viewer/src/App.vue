@@ -11,11 +11,12 @@ const report_url = '/api/report';
 
 const parsed_data = ref<ParsedReport>();
 
-const loading_info = reactive<{loading:boolean, bytes:number, total:number|null, error:string|null}>({
+const loading_info = reactive<{loading:boolean, bytes:number, total:number|null, error:string|null, status:string|null}>({
     loading: false,
     bytes: 0,
     total: null,
-    error:null
+    error:null,
+    status:null
 })
 
 function emit_error(s:string) {
@@ -25,6 +26,7 @@ function emit_error(s:string) {
 async function load_data() {
     try {
         loading_info.loading = true;
+        loading_info.status = null;
         const response = await fetch(report_url);
         if (response) {
             if (response.status==200) {
@@ -37,10 +39,10 @@ async function load_data() {
                 loading_info.bytes = 0;
                 if (response.body) {
                     try {
-                        parsed_data.value = await ParsedReport.load(response.body, x=>loading_info.bytes = x);                    
+                        parsed_data.value = await ParsedReport.load(response.body, x=>typeof x=="string"?loading_info.status=x:loading_info.bytes = x);                    
                         loading_info.loading = false;
                         options.value.instrument = parsed_data.value.get_default_instrumnet(options.value.instrument);  
-                        options.value.interval = Math.max(options.value.interval, parsed_data.value.baseInterval ??0);
+                        options.value.interval = Math.max(options.value.interval, parsed_data.value.baseInterval ??0);                        
                         console.log(parsed_data.value);
                     } catch (e) {
                         loading_info.error = `Error reading report: ${(e as Error).message}`;
@@ -84,7 +86,7 @@ function on_reload() {
 </script>
 
 <template>
-    <LoadProgress v-if="loading_info.loading" :bytes="loading_info.bytes" :total="loading_info.total" :error="loading_info.error"></LoadProgress>
+    <LoadProgress v-if="loading_info.loading" :bytes="loading_info.bytes" :total="loading_info.total" :error="loading_info.error" :status="loading_info.status"></LoadProgress>
     <div v-if="parsed_data" class="split" >
         <TopBar :report="parsed_data" v-model="options" @reload="on_reload"></TopBar>
         <Chart :report="parsed_data" :options="options"></Chart>

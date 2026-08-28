@@ -76,6 +76,12 @@ export class ParsedInstrumentReport {
     }
 }
 
+async function yield_exec() {
+    return new Promise(ok=>{
+        setTimeout(ok,10);
+    })
+}
+
 export class ParsedReport {
 
     vars = new  Map<string, VarUpdate[]>();
@@ -84,7 +90,7 @@ export class ParsedReport {
     start_tp?: number;
     end_tp?:number;
 
-    static async load(stream: ReadableStream<Uint8Array<ArrayBuffer> >, progress: (x:number)=>{}) {
+    static async load(stream: ReadableStream<Uint8Array<ArrayBuffer> >, progress: (x:number|string)=>{}) {
         let baseIntervalSeen = false
         let bytesRead = 0
         let remainder = ''
@@ -173,8 +179,11 @@ export class ParsedReport {
 
             }
         }
-
+        progress(bytesRead);
+        progress("Analyzing...")
+        await yield_exec();
         out.recalc();
+        await yield_exec();
 
 
         return out;

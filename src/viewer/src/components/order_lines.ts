@@ -18,7 +18,7 @@ import type { OrderInstance } from '../types/parsed_report';
  * skryje - při takovém zoomu by z ní byla jen nerozlišitelná kaše a překreslení
  * na každý frame by trhalo panování. Vrstva se vrátí sama po přiblížení.
  */
-const MAX_VISIBLE = 20000;
+const MAX_VISIBLE = 50000;
 
 /**
  * Hranice (v barech) mezi krátkými a dlouhými pokyny. Krátké se hledají binárně
@@ -35,10 +35,10 @@ const enum OrderStyle {
 }
 
 const STYLES: { color: string, dash: number[] }[] = [
-    { color: '#26a69a', dash: [] },      // buy limit  - zeď, solid
-    { color: '#26a69a', dash: [3, 3] },  // buy stop   - reaguje na propad, dashed
-    { color: '#ef5350', dash: [] },      // sell limit
-    { color: '#ef5350', dash: [3, 3] },  // sell stop
+    { color: '#26a69a80', dash: [] },      // buy limit  - zeď, solid
+    { color: '#26a69a80', dash: [3, 3] },  // buy stop   - reaguje na propad, dashed
+    { color: '#ef535080', dash: [] },      // sell limit
+    { color: '#ef535080', dash: [3, 3] },  // sell stop
 ];
 
 const STYLE_COUNT = STYLES.length;
