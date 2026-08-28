@@ -1,5 +1,6 @@
 #pragma once
 
+#include "quarkbot/abstract/backtest_data_source.hpp"
 #include "quarkbot/event_stream.hpp"
 #include "quarkbot/exchange.hpp"
 #include "quarkbot/json/json.hpp"
@@ -45,7 +46,7 @@ protected:
 
     StrategyFragment run_stream(EventStream<ClosedBar> stream, std::string name);
 
-    auto create_report_sink();
+    ReportSink create_report_sink();
 
     Storage _storage;
     Storage::Replicator::Connection _storage_report;

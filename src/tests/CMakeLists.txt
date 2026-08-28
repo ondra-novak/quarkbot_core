@@ -20,6 +20,7 @@ set(BASIC_TESTS
     hub.cpp
     timer.cpp
     csv_report.cpp
+    json_report.cpp
     config.cpp
     tagset.cpp
     strategy_fragment.cpp

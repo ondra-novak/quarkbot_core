@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ParsedReport } from './types/parsed_report';
 import LoadProgress from './components/LoadProgress.vue';
 import Chart from './components/Chart.vue';
 import TopBar from './components/TopBar.vue';
-import { DisplayOptions } from './types/options';
+import { DisplayOptions, default_options } from './types/options';
+import { load_options, save_options } from './types/profile';
 
 const report_url = '/api/report';
 
@@ -59,20 +60,22 @@ async function load_data() {
 }
 
 
-onMounted(load_data);
+const options = ref<DisplayOptions>(default_options());
 
-const options = ref<DisplayOptions>({
-    instrument: "",
-    interval: 5,
-    fills:true,
-    orders: false,      
-    series_to_panes:{main:[],pane_1:["Equity"],pane_2:[],secondary:[],pane_3:[]},
-    volume:true,
-    setup:{
-        "Equity":{color:"#000000", line_style:"area"},
-        "Position":{color:"#000000", line_style:"area"}
-    }
-})
+// autosave se zapne teprve po načtení profilu, aby první přiřazení options
+// neuložilo hned to, co jsme právě přečetli
+let autosave = false;
+
+watch(options, (v)=>{
+    if (autosave) save_options(v);
+}, {deep:true});
+
+onMounted(async ()=>{
+    options.value = await load_options();
+    await nextTick();
+    autosave = true;
+    await load_data();
+});
 
 function on_reload() {
     load_data()    

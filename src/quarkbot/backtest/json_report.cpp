@@ -54,7 +54,7 @@ namespace quarkbot {
         }
     }
 
-    auto JsonReport::create_report_sink() {
+    ReportSink JsonReport::create_report_sink() {
         return [this](const Order &ord, const OrderStatusUpdate &rpt) {
             auto instr = ord.get_instrument();
             const auto &info = instr.get_info();
@@ -70,7 +70,7 @@ namespace quarkbot {
                 order.set("limit_price", JsonNumber(params.limit_price.to_string()));
             }
             if (is_stop_order(params.type)) {
-                order.set("stop_price", JsonNumber(params.limit_price.to_string()));
+                order.set("stop_price", JsonNumber(params.stop_price.to_string()));
             }
             auto repl = ord.get_replaced_order();
             if (repl.has_value()) {
