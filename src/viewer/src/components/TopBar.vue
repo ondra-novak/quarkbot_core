@@ -8,6 +8,7 @@ const model = defineModel<DisplayOptions>();
 const props = defineProps<{
     report:ParsedReport
 }>();
+const emit = defineEmits(["reload"]);
 
 const interval_list = {
     "1m": 1,
@@ -26,10 +27,17 @@ const interval_list = {
     "1M":43200
 };
 
+function invoke_reload() {
+    emit("reload");
+}
+
 </script>
 
 <template>
 <div class="topbar" v-if="model">
+    <div class="buttons">
+        <button @click="invoke_reload()">↻</button>
+    </div>
     <select v-model="model.instrument">
         <option v-for="v of report.instruments" :key="v[0]" :value="v[0]"> {{ v[0] }}</option>
     </select>

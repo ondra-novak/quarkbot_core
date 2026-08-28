@@ -48,7 +48,11 @@ function simple_update(source: ()=>[number, number][]|undefined) {
                 const bt = Math.floor(time/(interval*1000))*interval as Time;
                 const prev = mapped_data.pop();
                 if (prev && prev.time != bt ) {
-                    mapped_data.push(prev);
+                    const steps = Math.round((bt as number) - (prev.time  as number))/interval;
+                    for (let i = 0; i < steps; ++i) {
+                        const bt2 = ((prev.time as number) + ((bt as number) - (prev.time as number)) * i / steps) as Time;
+                        mapped_data.push({time:bt2, value: prev.value});
+                    }
                 }
                 mapped_data.push({time:bt, value: value});
             }

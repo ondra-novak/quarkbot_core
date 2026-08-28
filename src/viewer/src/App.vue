@@ -73,12 +73,16 @@ const options = ref<DisplayOptions>({
     }
 })
 
+function on_reload() {
+    load_data()    
+}
+
 </script>
 
 <template>
     <LoadProgress v-if="loading_info.loading" :bytes="loading_info.bytes" :total="loading_info.total" :error="loading_info.error"></LoadProgress>
     <div v-else-if="parsed_data" class="split">
-        <TopBar :report="parsed_data" v-model="options"></TopBar>
+        <TopBar :report="parsed_data" v-model="options" @reload="on_reload"></TopBar>
         <Chart :report="parsed_data" :options="options"></Chart>
     </div>
     
