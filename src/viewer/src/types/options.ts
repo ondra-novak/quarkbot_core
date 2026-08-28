@@ -10,7 +10,7 @@ export type SeriesSetup = Record<string, SeriesSetupItem>
 
 
 
-export const paneTypes = ["main", "secondary", "pane_1", "pane_2"] as const;
+export const paneTypes = ["main", "secondary", "pane_1", "pane_2","pane_3"] as const;
 
 export type PaneType = (typeof paneTypes)[number];
 

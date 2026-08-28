@@ -1,9 +1,21 @@
 import { side_value } from "./constants";
 import { calculate_pnl } from "./contract";
-import { Candle, Fill, OrderUpdate, VarUpdate, FillStatsEntry, InstrumentMeta  } from "./report_types";
+import { Candle, Fill, OrderUpdate, VarUpdate, FillStatsEntry, InstrumentMeta, Side  } from "./report_types";
 
 function round_to_lot(n:number, l:number) {
     return Math.round(n/l)*l;
+}
+
+
+export interface OrderInstance {
+    id: string;
+    start: number;
+    end: number;
+    side: Side;
+    price: number;
+    quantity: number;
+    is_stop: boolean;
+    events: OrderUpdate[];
 }
 
 
@@ -15,7 +27,8 @@ export class ParsedInstrumentReport {
     fill_stats : FillStatsEntry[] = [];
     eq_chart: [number,number][] = [];
     pos_chart: [number,number][] = [];
-    orders: OrderUpdate[] = [];
+    order_updates: OrderUpdate[] = [];
+    order_instances: OrderInstance[] = [];
 
     constructor(info:InstrumentMeta) {
         this.info = info;
@@ -35,7 +48,31 @@ export class ParsedInstrumentReport {
             pnl = pnl + dpln;
             this.eq_chart.push([f.time,pnl]);
             this.pos_chart.push([f.time, pos]);
+        });
+
+        const ords = this.order_updates.filter(x=>("limit_price" in x) || ("stop_price" in x));
+        ords.sort((a,b)=>{
+            if (a.order_id < b.order_id) return -1;
+            if (a.order_id > b.order_id) return 1;
+            return a.time - b.time;            
         })
+        const order_sets=Object.groupBy(ords, (x)=>x.order_id);
+        const ord_insts : OrderInstance[] = [];
+        for (const k in order_sets) {
+            const items = (order_sets[k]!);
+            const ts = items.map(x=>x.time);
+            ord_insts.push({
+               start: Math.min(...ts),
+               end: Math.min(...ts),
+               id: k,
+               price: items[0].stop_price ?? items[0].limit_price ?? 0,
+               side: items[0].side,
+               quantity: items[0].quantity,
+               is_stop: !!items[0].stop_price,
+               events :items
+            });
+        }
+        this.order_instances = ord_insts;
     }
 }
 
@@ -116,7 +153,7 @@ export class ParsedReport {
                     const p = payload as (OrderUpdate & {instrument:string});
                     p.time = tp;
                     const instr = out.instruments.get(p.instrument);
-                    if (instr) instr.orders.push(p);
+                    if (instr) instr.order_updates.push(p);
                     break;                                    
                 }
                 case 'v': {

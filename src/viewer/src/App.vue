@@ -40,6 +40,7 @@ async function load_data() {
                         loading_info.loading = false;
                         options.value.instrument = parsed_data.value.get_default_instrumnet(options.value.instrument);  
                         options.value.interval = Math.max(options.value.interval, parsed_data.value.baseInterval ??0);
+                        console.log(parsed_data.value);
                     } catch (e) {
                         loading_info.error = `Error reading report: ${(e as Error).message}`;
                     }
@@ -65,7 +66,7 @@ const options = ref<DisplayOptions>({
     interval: 5,
     fills:true,
     orders: false,      
-    series_to_panes:{main:[],pane_1:["Equity"],pane_2:[],secondary:[]},
+    series_to_panes:{main:[],pane_1:["Equity"],pane_2:[],secondary:[],pane_3:[]},
     volume:true,
     setup:{
         "Equity":{color:"#000000", line_style:"area"},

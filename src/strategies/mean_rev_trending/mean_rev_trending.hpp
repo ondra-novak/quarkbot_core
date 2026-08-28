@@ -65,6 +65,7 @@ public:
         Persistent<double> benchmark_profit;
         Persistent<double> current_profit;
         Persistent<int> center_band_index;
+        Persistent<Decimal> oracle_pos;
 
         //orders
         Order upper = {};
@@ -80,9 +81,10 @@ public:
 
         std::pair<double, double> calculate_loss(Decimal cur_price) const {
             const auto &info = instrument.get_info();
-            double pnl = info.calc_pnl(last_trade_price, cur_price, position).to_double();            
+            double pnl = info.calc_pnl(last_trade_price, cur_price, position-oracle_pos).to_double();            
             double new_loss = std::max(total_loss - pnl,0.0);
-            double new_calc_loss = std::min(std::max(calc_loss - (pnl > 0?1.0:2.0)*pnl , 0.0), new_loss);
+            double limit = (initial_budget + benchmark_profit) * max_loss_percent / 100.0;
+            double new_calc_loss = std::min(std::max(calc_loss - (pnl > 0?1.0:2.0)*pnl , limit/2.0), std::min(new_loss,limit));            
             return {new_loss, new_calc_loss};
         }    
 
@@ -98,8 +100,8 @@ public:
         }
 
         Decimal calc_new_pos(Decimal new_price, int side) const {
-            auto new_loss = calculate_loss(new_price);
-            return (new_loss.second * reversal_multiplier / new_price) *side;
+            auto new_loss = calculate_loss(new_price);            
+            return (new_loss.second * reversal_multiplier / new_price) *side + oracle_pos;
         }
 
         Decimal calc_order_diff(Decimal new_price, int side) const {
@@ -128,7 +130,9 @@ public:
             } else if (order == select_mean_rev_order(side) && !(rpt.status == OrderStatus::rejected && rpt.rejection_reason == OrderRejectionReason::adapter_stopped)) {
                 //just test, if not stopped
                 if (co_await timer.sleep_for(std::chrono::seconds(10))) {
-                    place_mean_rev_order(select_mean_rev_price(side), side, {});
+                    if (order == select_mean_rev_order(side)) {
+                        place_mean_rev_order(select_mean_rev_price(side), side, {});
+                    }
                 }
             }
         }
@@ -138,16 +142,18 @@ public:
             int dir = sgn(position);
             if (dir == 0) dir = static_cast<int>(side);
             Decimal diff = calc_order_diff(new_price, dir);
-            if (diff == 0) return;
-            Decimal adj_diff = abs(diff * static_cast<int>(side));
-            Order &cur_order = select_mean_rev_order(side);
+            if (sgn(diff) != static_cast<int>(side)) {
+                return;
+            }
+            Order &cur_order = select_mean_rev_order(side);                    
             cur_order = instrument.place_order(OrderRequest{
                 .label={},
                 .side=side,
                 .type=OrderType::limit, 
-                .quantity={adj_diff, RoundStrategy::aggressive},
+                .quantity={abs(diff), RoundStrategy::aggressive},
                 .limit_price={new_price, RoundStrategy::defensive},
             }, replace_order);
+                
             sync.run(follow_mean_rev_order(cur_order));
         }
 
@@ -160,13 +166,19 @@ public:
                 double diff = fema - sema;
                 int dir = diff >= 0?1:-1;
 
+                Decimal ltcp = last_trend_check_price;
+                if (!ltcp) ltcp = price;
                 double initial_pos_cur = (initial_budget + benchmark_profit) * initial_pos_percent * 0.01;
-                Decimal oracle_position = dir * initial_pos_cur / last_trend_check_price.get();
-                auto pnl = info.calc_pnl(last_trend_check_price, price, oracle_position).to_double();
-                if (total_loss > calc_loss && pnl > 0) pnl = 0; //failed benchmark we are on risk
-                benchmark_profit = benchmark_profit + pnl;
-                total_loss = std::max(0.0,total_loss + pnl);  //move oracle profit into loss of mean reversion;
-                calc_loss = std::max(0.0,calc_loss + pnl);
+                Decimal oracle_position = dir * initial_pos_cur / ltcp;
+                Decimal prev_pos = oracle_pos;
+                oracle_pos = oracle_position;
+                auto prev_pnl = info.calc_pnl(ltcp, price, prev_pos).to_double();
+                auto new_pnl = info.calc_pnl(ltcp, price, oracle_position).to_double();
+                if (total_loss > calc_loss && new_pnl > 0) new_pnl = 0; //failed benchmark we are on risk
+                auto adj_pnl = new_pnl - prev_pnl;
+                benchmark_profit = benchmark_profit + new_pnl;
+                total_loss = std::max(0.0,total_loss + adj_pnl);  //move oracle profit into loss of mean reversion;
+                calc_loss = std::max(0.0,calc_loss + adj_pnl);
                 last_trend_check_price = price;
 
                 if (dir == sgn(position.get())) {                
@@ -261,6 +273,7 @@ public:
             {ns,"benchmark_profit"},
             {ns,"current_profit"},
             {ns,"center_band_index"},
+            {ns,"oracle_pos"},
         };
 
         Quote qt;
@@ -269,8 +282,8 @@ public:
             if (!co_await stream.receive(qt)) co_return;
         } while (!qt.both_sides());
 
-        if (inst.last_trend_check_price.get() == 0_dec) inst.last_trend_check_price  = qt.mid();
-        if (inst.last_trade_price.get() == 0_dec) inst.last_trend_check_price  = qt.mid();        
+//        if (inst.last_trend_check_price.get() == 0_dec) inst.last_trend_check_price  = qt.mid();
+        if (inst.last_trade_price.get() == 0_dec) inst.last_trade_price  = qt.mid();        
 
         auto p1 = inst.fast_interval(stream).launch();
         auto p2 = inst.slow_interval(stream).launch();

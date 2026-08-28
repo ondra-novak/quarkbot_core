@@ -65,7 +65,8 @@ const pane_index : Record<PaneType, [number, string]> = {
     main: [0,"right"],
     secondary: [0,"left"],
     pane_1: [1, "right"],
-    pane_2: [2, "right"]
+    pane_2: [2, "right"],
+    pane_3: [3, "right"]
 } as const;
 
 const line_style : Record<QLineStyle, [LineStyle,LineWidth,SeriesType]> = {
@@ -152,6 +153,9 @@ function update_series_list() {
                 delete d[n];
             }
         }
+        Object.values(d).forEach(x=>{
+            x.api.moveToPane(pane_index[k as PaneType][0]);            
+    });
     }
 }
 
@@ -195,7 +199,7 @@ let eq_series:ISeriesApi<"Line">;
 
 
 function on_mounted() {
-    chart = createChart(chartContainer.value!);
+    chart = createChart(chartContainer.value!, {leftPriceScale: { visible: true }});
     resizer = new ResizeObserver(entries=>{
         const entry = entries[0]
         chart!.resize(
