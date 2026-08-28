@@ -290,7 +290,7 @@ public:
     static Decimal from_double(double value) {
         if (value < 0.0) {
             auto lg = std::ceil(std::log10(-value));
-            return normalize(static_cast<std::int64_t>(-1*std::round(value * std::pow(10,-lg+mantissa_digits))), static_cast<Exponent>(lg));
+            return normalize(static_cast<std::int64_t>(std::round(value * std::pow(10,-lg+mantissa_digits))), static_cast<Exponent>(lg));
 
         } else if (value > 0.0) {
             auto lg = std::ceil(std::log10(value));
