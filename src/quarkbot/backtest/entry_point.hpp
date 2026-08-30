@@ -7,6 +7,11 @@
 #include <stop_token>
 namespace quarkbot {
 
+struct BacktestJsonReportSetup {
+    unsigned int interval;
+    std::ostream &output;
+};
+
 struct BacktestStartParams {
     ///strategy configuration
     std::filesystem::path strategy_config;
@@ -29,7 +34,13 @@ struct BacktestStartParams {
      */
     std::function<void(const BacktestConfig::Config &)> init_env = {};
 
-    bool json_report = false;
+    ///setup json report output. If not set, no json report is generated 
+    /** When set, default report.csv is not generated
+        (note default report.csv is considered as deprecated)
+    */
+    std::optional<BacktestJsonReportSetup> json_report = {};
+
+
 
     
 };

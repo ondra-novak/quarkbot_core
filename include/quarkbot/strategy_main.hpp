@@ -70,7 +70,7 @@ namespace quarkbot {
     /**
     
     */
-    int entry_point(std::string_view argv0, std::span<const char *const > args, std::function<StrategyFragment(StrategyContext &&)> start_fn);
+    int entry_point(std::filesystem::path argv0, std::span<const char *const > args, std::function<StrategyFragment(StrategyContext &&)> start_fn);
 
 
 }
