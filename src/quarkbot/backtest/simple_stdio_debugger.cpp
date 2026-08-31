@@ -303,10 +303,10 @@ void SimpleStdioDebugger::skip(std::string_view arg) {
     }
     Timestamp brk = _now;
     switch (*r.ptr) {
-        case 's': brk = brk + std::chrono::nanoseconds(static_cast<std::int64_t>(c*1'000'000'000LL));break;
-        case 'm': brk = brk + std::chrono::nanoseconds(static_cast<std::int64_t>(c*60'000'000'000LL));break;
-        case 'h': brk = brk + std::chrono::microseconds(static_cast<std::int64_t>(c*3600'000'000LL));break;
-        case 'd': brk = brk + std::chrono::microseconds(static_cast<std::int64_t>(c*86400'000'000LL));break;
+        case 's': brk = brk + std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::nanoseconds(static_cast<std::int64_t>(c*1'000'000'000LL)));break;
+        case 'm': brk = brk + std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::nanoseconds(static_cast<std::int64_t>(c*60'000'000'000LL)));break;
+        case 'h': brk = brk + std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::microseconds(static_cast<std::int64_t>(c*3600'000'000LL)));break;
+        case 'd': brk = brk + std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::microseconds(static_cast<std::int64_t>(c*86400'000'000LL)));break;
         case '-':   {//parse date
             int R = 0,M = 1,D = 1, h =0, m =0, s= 0;
             std::string str ( arg);
@@ -314,9 +314,13 @@ void SimpleStdioDebugger::skip(std::string_view arg) {
                 std::println(std::cout, "Argument is not valid date: {}", arg);
                 return;
             }
-            struct std::tm ts = {
-                s,m,h,D,M-1,R-1990,0,0,0,0,"UTC"
-            };
+            struct std::tm ts = {};
+            ts.tm_sec = s;
+            ts.tm_mday = m;
+            ts.tm_hour = h;
+            ts.tm_mday = D;
+            ts.tm_mon = M-1;
+            ts.tm_year = R-1900;
             brk = std::chrono::system_clock::from_time_t(custom_timegm(&ts));
         }break;
         case ':':   {
