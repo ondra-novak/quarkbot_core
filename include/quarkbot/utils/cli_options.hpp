@@ -345,8 +345,8 @@ public:
         std::vector<std::basic_string_view<_CharType> > args;
         for (int i = 1; i < argc; ++i) {
             args.push_back(std::basic_string_view<_CharType>(argv[i]));
-            return parse_options(args, target);
         }
+        return parse_options<_CharType>(args, target);
     }
     constexpr void generate_help( std::vector<char> &out, std::size_t line_len = std::size_t(-1)) const {
         std::size_t lsize = 0;
