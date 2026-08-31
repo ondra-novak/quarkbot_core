@@ -31,6 +31,7 @@ set(BASIC_TESTS
     sim_last_quote_per_instrument.cpp
     order_status_consistency.cpp
     cli.cpp
+    queue_as_stream.cpp
 )
 
 
