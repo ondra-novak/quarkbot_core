@@ -98,7 +98,7 @@ template<> inline constexpr std::string_view argument_name<std::string> = "strin
 template<> inline constexpr std::string_view argument_name<std::wstring> = "string";
 template<> inline constexpr std::string_view argument_name<bool> = "";
 template<> inline constexpr std::string_view argument_name<int> = "int";
-template<> inline constexpr std::string_view argument_name<uint> = "uint";
+template<> inline constexpr std::string_view argument_name<unsigned int> = "uint";
 template<> inline constexpr std::string_view argument_name<SInt> = "int";
 template<> inline constexpr std::string_view argument_name<UInt> = "uint";
 template<> inline constexpr std::string_view argument_name<float> = "num";
@@ -107,7 +107,7 @@ template<> inline constexpr std::string_view argument_name<std::filesystem::path
 template<> inline constexpr std::string_view argument_name<std::optional<std::string>> = "string";
 template<> inline constexpr std::string_view argument_name<std::optional<std::wstring>> = "string";
 template<> inline constexpr std::string_view argument_name<std::optional<int>> = "int";
-template<> inline constexpr std::string_view argument_name<std::optional<uint>> = "uint";
+template<> inline constexpr std::string_view argument_name<std::optional<unsigned int>> = "uint";
 template<> inline constexpr std::string_view argument_name<std::optional<SInt>> = "int";
 template<> inline constexpr std::string_view argument_name<std::optional<UInt>> = "uint";
 template<> inline constexpr std::string_view argument_name<std::optional<float>> = "num";
