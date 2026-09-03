@@ -20,7 +20,7 @@ public:
         @return event stream which produces historical data events. The stream is closed when all data has
         been produced or when the request has been interrupted by the stop token.
     */
-    template<MarketInstrumentStream T>
+    template<MarketInstrumentStreamOrHistory T>
     EventStream<T> get_history(const HistoryDataRequest &req) const {
         auto x = _ptr->subscribe_stream(class_hash<typename StreamViewType<T>::type>, &req);
         if (x) return EventStream<T>::from_base(std::move(x));

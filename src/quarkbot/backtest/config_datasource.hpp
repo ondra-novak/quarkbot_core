@@ -89,6 +89,27 @@ SYM3<=SYM4
 
 keys can be duplicated
 
+The history section declares historical data served to get_history() requests of a
+strategy. Unlike the data-source keys it produces no simulation events - it is read
+only when a strategy asks for history:
+
+[history]
+type=ohlc            ;ohlc, close, auction, quote or l1
+interval=d           ;s, m, h, d, w, optionally with a count (5m), or a count of seconds
+index=daily/index.csv
+
+  type     - what the files hold, and thus which streams the source can serve.
+             Mandatory.
+  index    - CSV with the columns symbol,file listing one file per symbol; the
+             paths in it are relative to the index file itself. Mandatory.
+  interval - interval of one record, defaulting to none (tick data). A request is
+             answered only when its interval matches this value exactly.
+
+Symbols of the index file go through [symbol-mapping] like the symbols of any other
+source. The files may be plain .csv or gzipped .csv.gz. One configuration file
+declares at most one [history] block; chain more of them with include=. See
+src/quarkbot/csv_history/formats.md for the columns of each type.
+
 Relative paths are resolved relative to configuration file
 
 */

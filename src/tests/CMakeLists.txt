@@ -33,6 +33,7 @@ set(BASIC_TESTS
     cli.cpp
     queue_as_stream.cpp
     history_formats.cpp
+    csv_history_source.cpp
 )
 
 

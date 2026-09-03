@@ -1,6 +1,7 @@
 #include "merged_data_source.hpp"
 #include "quarkbot/algoseek/algoseek_spec.hpp"
 #include "quarkbot/backtest/history_collector.hpp"
+#include "quarkbot/csv_history/formats.hpp"
 #include "quarkbot/csv_history/history_csv_source.hpp"
 #include "quarkbot/log.hpp"
 #include "quarkbot/stream/history.hpp"
@@ -62,6 +63,7 @@ public:
         std::vector<std::filesystem::path> algoseek_sources;
         AlgoseekSpec algoseek_spec;
         std::optional<HistoryCSVSourceConfig> history_cfg;
+        bool history_type_set = false;
 
 
         auto fcan = std::filesystem::canonical(file);
@@ -139,12 +141,26 @@ public:
                 if (!history_cfg) history_cfg.emplace();
                 if (row.key == "type") {
                     auto t = string_lookup<HistoryCSVSourceConfig::Type>(row.value);
-                    if (!t) throw std::runtime_error(std::format("Enum {} is not in list [{}]", row.value, lookup_available_options(string_lookup<HistoryCSVSourceConfig::Type>)));
+                    if (!t) throw std::runtime_error(std::format(
+                        "Unknown history type: `{}`, Expected: {} in config `{}`",
+                        row.value, lookup_available_options(string_lookup<HistoryCSVSourceConfig::Type>), fcan.string()));
                     history_cfg->type = t.value();
+                    history_type_set = true;
                 } else if (row.key == "index") {
+                    if (row.value.empty()) throw std::runtime_error(std::format(
+                        "Empty value of the key `index` in config `{}`", fcan.string()));
                     history_cfg->index_file = root/row.value;
                 } else if (row.key == "interval") {
-                    history_cfg->interval = static_cast<HistoryDataRequest::Interval>(std::stoll(std::string(row.value)));                    
+                    try {
+                        history_cfg->interval = parse_history_interval(row.value);
+                    } catch (const std::exception &e) {
+                        throw std::runtime_error(std::format(
+                            "Invalid interval `{}` in config `{}`: {}", row.value, fcan.string(), e.what()));
+                    }
+                } else {
+                    throw std::runtime_error(std::format(
+                        "Unknown key `{}` in section `[{}]` of config `{}`, Expected: type, interval, index",
+                        row.key, history_section_name, fcan.string()));
                 }
             } else if (row.section.empty() && row.key == "include") {
                 walk(root/row.value);
@@ -161,11 +177,14 @@ public:
             }
         }
         if (history_cfg.has_value()) {
-            if (!history_cfg->index_file.empty() && std::filesystem::exists(history_cfg->index_file)) {
-                history_sources.push_back(std::move(history_cfg).value());
-            } else {
-                throw std::runtime_error("Bad history source definition");
-            }
+            if (history_cfg->index_file.empty()) throw std::runtime_error(std::format(
+                "Section `[{}]` of config `{}` has no `index` key", history_section_name, fcan.string()));
+            if (!history_type_set) throw std::runtime_error(std::format(
+                "Section `[{}]` of config `{}` has no `type` key", history_section_name, fcan.string()));
+            if (!std::filesystem::exists(history_cfg->index_file)) throw std::runtime_error(std::format(
+                "History index file `{}` referenced from config `{}` does not exist",
+                history_cfg->index_file.string(), fcan.string()));
+            history_sources.push_back(std::move(history_cfg).value());
         }
     }
 
