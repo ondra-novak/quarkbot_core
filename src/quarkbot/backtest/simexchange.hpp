@@ -2,6 +2,7 @@
 
 
 #include "../common/orderdata.hpp"
+#include "quarkbot/abstract/backtest_data_source.hpp"
 #include "quarkbot/defs.hpp"
 #include "quarkbot/event_stream.hpp"
 #include "quarkbot/market_instrument.hpp"
@@ -58,6 +59,8 @@ public:
     void set_slippage(double slippage) { _executor.set_slippage(slippage); }
     void set_latency(std::chrono::system_clock::duration dur) {_executor.set_latency(dur);}
     void set_reporter(ReportSink sink) {_executor.set_report_sink(std::move(sink));}
+    void set_history_source(BacktestHistorySource source) {_hist_source = std::move(source);}
+    const BacktestHistorySource get_history_source() const {return _hist_source;}
 
     ///create account, set up initial wallet
     PAccount create_account(std::string name, std::span<const std::pair<std::string, Decimal> > wallet);
@@ -100,6 +103,8 @@ protected:
 
     ///Get already existing SimInstrument for given name, never creates a new one
     std::shared_ptr<SimInstrument> instrument_for_event(const std::string &instr);
+
+    BacktestHistorySource _hist_source;
 
 
 

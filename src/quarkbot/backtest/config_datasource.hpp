@@ -111,9 +111,10 @@ enum class SymbologyMapMode {
 
 Function process all files referenced by include= key (must be specified above all sections)
 */
-BacktestDataSource configure_datasources(std::filesystem::path ini_config, 
+std::pair<BacktestDataSource, BacktestHistorySource> configure_datasources(std::filesystem::path ini_config, 
         SymbologyMapMode smm = SymbologyMapMode::ignore_missing,
         std::string_view data_section = "data-source",
+        std::string_view history_section = "history",
         std::string_view symbology_mapping_section = "symbol-mapping"
         
 );

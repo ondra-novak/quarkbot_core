@@ -1,6 +1,10 @@
 #include "merged_data_source.hpp"
 #include "quarkbot/algoseek/algoseek_spec.hpp"
+#include "quarkbot/backtest/history_collector.hpp"
+#include "quarkbot/csv_history/history_csv_source.hpp"
 #include "quarkbot/log.hpp"
+#include "quarkbot/stream/history.hpp"
+#include "quarkbot/types.hpp"
 #include "quarkbot_compile_config.h"
 #include "config_datasource.hpp"
 #include "quarkbot/abstract/backtest_data_source.hpp"
@@ -34,14 +38,16 @@ namespace quarkbot {
 class SourceCollector {
 public:
 
-    SourceCollector(std::string_view data_section_name, std::string_view mapping_section_name)
-        :data_section_name(data_section_name), mapping_section_name(mapping_section_name) {}
+    SourceCollector(std::string_view data_section_name, std::string_view history_section_name, std::string_view mapping_section_name)
+        :data_section_name(data_section_name), history_section_name(history_section_name), mapping_section_name(mapping_section_name) {}
     
 
     std::unordered_set<std::filesystem::path> processed;
     std::vector<BacktestDataSource> sources;
     std::unordered_map<std::string, std::string> mapping;
+    std::vector<HistoryCSVSourceConfig> history_sources;
     std::string_view data_section_name;
+    std::string_view history_section_name;
     std::string_view mapping_section_name;
 
     struct Reader {
@@ -55,6 +61,7 @@ public:
     void walk(std::filesystem::path file) {
         std::vector<std::filesystem::path> algoseek_sources;
         AlgoseekSpec algoseek_spec;
+        std::optional<HistoryCSVSourceConfig> history_cfg;
 
 
         auto fcan = std::filesystem::canonical(file);
@@ -128,7 +135,17 @@ public:
                     throw std::runtime_error(
                     std::format("Duplicate mapping for: {} in config file: {}", from_symbol, fcan.string()));
                 }
-
+            } else if (row.section == history_section_name) {
+                if (!history_cfg) history_cfg.emplace();
+                if (row.key == "type") {
+                    auto t = string_lookup<HistoryCSVSourceConfig::Type>(row.value);
+                    if (!t) throw std::runtime_error(std::format("Enum {} is not in list [{}]", row.value, lookup_available_options(string_lookup<HistoryCSVSourceConfig::Type>)));
+                    history_cfg->type = t.value();
+                } else if (row.key == "index") {
+                    history_cfg->index_file = root/row.value;
+                } else if (row.key == "interval") {
+                    history_cfg->interval = static_cast<HistoryDataRequest::Interval>(std::stoll(std::string(row.value)));                    
+                }
             } else if (row.section.empty() && row.key == "include") {
                 walk(root/row.value);
             }
@@ -141,6 +158,13 @@ public:
                 auto spec = algoseek_spec;
                 spec.file = s;
                 sources.push_back(AlgoseekDataSource(std::move(spec)));
+            }
+        }
+        if (history_cfg.has_value()) {
+            if (!history_cfg->index_file.empty() && std::filesystem::exists(history_cfg->index_file)) {
+                history_sources.push_back(std::move(history_cfg).value());
+            } else {
+                throw std::runtime_error("Bad history source definition");
             }
         }
     }
@@ -163,10 +187,24 @@ public:
     BacktestDataSource build(SymbologyMapMode smm) {
         if (mapping.empty() || smm == SymbologyMapMode::no_mapping) return build_raw();
         else if (smm == SymbologyMapMode::skip_missing) {
-            return SymbologyMapping_SkipMissing<decltype(mapping), BacktestDataSource>(std::move(mapping), build_raw());
+            return SymbologyMapping_SkipMissing<decltype(mapping), BacktestDataSource>(mapping, build_raw());
         } else {
-            return SymbologyMapping_IgnoreMissing<decltype(mapping), BacktestDataSource>(std::move(mapping), build_raw());
+            return SymbologyMapping_IgnoreMissing<decltype(mapping), BacktestDataSource>(mapping, build_raw());
         } 
+    }
+    BacktestHistorySource history_build(SymbologyMapMode smm) {
+        HistorySourceCollector sources;
+        for (auto &s: history_sources) {
+            if (!mapping.empty()) {
+                if (smm == SymbologyMapMode::skip_missing) {
+                    s.set_symbology_map_remove_missing(mapping);    
+                } else {
+                    s.set_symbology_map_ignore_missing(mapping);    
+                }
+            }
+            sources.push_back(create_csv_history_source(s));
+        }
+        return sources;
     }
 
 };
@@ -174,15 +212,16 @@ public:
 
 
 
-BacktestDataSource configure_datasources(std::filesystem::path ini_config,
+std::pair<BacktestDataSource, BacktestHistorySource> configure_datasources(std::filesystem::path ini_config,
         SymbologyMapMode smm,
         std::string_view data_section ,
+        std::string_view history_section,
         std::string_view symbology_mapping_section 
 ) {
 
-    SourceCollector coll(data_section, symbology_mapping_section);
+    SourceCollector coll(data_section, history_section, symbology_mapping_section);
     coll.walk(ini_config);
-    return coll.build(smm);
+    return {coll.build(smm), coll.history_build(smm)};
 
 }
 

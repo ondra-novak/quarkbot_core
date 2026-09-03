@@ -543,7 +543,7 @@ static void test_config_wiring() {
                "algoseek.time_zone=America/New_York\n";
     }
 
-    auto ds = configure_datasources(dir / "backtest.ini");
+    auto [ds,_] = configure_datasources(dir / "backtest.ini");
     BacktestEvent ev;
     CHECK(ds(ev));
     CHECK_EQUAL(ev.symbol, std::string("IBM"));
@@ -569,7 +569,7 @@ static void test_config_wiring() {
                "algoseek.symbol=IBM.NASDAQ\n";
     }
     {
-        auto multi = configure_datasources(dir / "multi.ini");
+        auto [multi,_] = configure_datasources(dir / "multi.ini");
         std::vector<Decimal> prices;
         BacktestEvent mev;
         while (multi(mev)) {

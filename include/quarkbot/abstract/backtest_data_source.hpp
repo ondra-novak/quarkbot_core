@@ -1,11 +1,15 @@
 #pragma once
 
+#include "quarkbot/abstract/ieventstream.hpp"
+#include "quarkbot/abstract/imarket_instrument.hpp"
 #include "quarkbot/order.hpp"
 #include "quarkbot/order_defs.hpp"
 #include "quarkbot/stream/auction.hpp"
+#include "quarkbot/stream/history.hpp"
 #include "quarkbot/stream/orderbook.hpp"
 #include "quarkbot/stream/quote.hpp"
 #include "quarkbot/stream/trade.hpp"
+#include "quarkbot/timestamp.hpp"
 #include <chrono>
 #include <functional>
 #include <string>
@@ -55,5 +59,15 @@ class OrderStatusUpdate;
 ///Report sink is a function that is called for each order update, it can be used to generate reports
 using ReportSink = std::function<void(const Order &, const OrderStatusUpdate &)>;
 
+
+///Request for history source
+/**
+@param instr reference to instrument
+@param class_hash hash of expected type (stream)
+@param query query
+@param sim_time current simulation time. Source must end the stream when this time
+*/
+using BacktestHistorySource = std::function<std::shared_ptr<IEventStreamBase>(const PMarketInstrument &instr, std::size_t class_hash, 
+        const HistoryDataRequest& query, const Timestamp &sim_time)>;
 
 } // namespace quarkbot

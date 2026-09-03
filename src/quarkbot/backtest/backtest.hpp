@@ -136,6 +136,8 @@ public:
     */
     bool run(BacktestDataSource data_soruce);
 
+    void set_history_source(BacktestHistorySource src);
+
     auto get_execution_worker() const {return _worker;}
     auto get_exchange() const {return _exchange;}
     auto get_account() const {return _account;}

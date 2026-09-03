@@ -35,7 +35,7 @@ void write_source(const std::filesystem::path &path, std::string_view ticker) {
 
 ///symbols of every event the configured source produces, joined by ','
 std::string replay(const std::filesystem::path &config) {
-    auto ds = configure_datasources(config);
+    auto [ds,_] = configure_datasources(config);
     std::string symbols;
     BacktestEvent ev;
     while (ds(ev)) {
@@ -108,7 +108,7 @@ static void test_tardis_keys() {
                "tardis.trades=t.csv.gz\n";
     }
 
-    auto ds = configure_datasources(dir/"both.ini");
+    auto [ds,_] = configure_datasources(dir/"both.ini");
     std::string order;
     BacktestEvent ev;
     std::chrono::system_clock::time_point prev = {};

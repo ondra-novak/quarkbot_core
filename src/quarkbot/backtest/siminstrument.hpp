@@ -29,10 +29,7 @@ public:
 
     virtual awaitable<bool> receive_snapshot(Snapshot &v, std::stop_token stop_token = {}) override;
 
-    virtual PHistoryAdapter get_history() override {
-        //todo
-        return nullptr;
-    }
+    virtual PHistoryAdapter get_history() override ;
 
     auto get_sim_exchange() const {return _exchange;}
 protected:

@@ -9,7 +9,8 @@ namespace quarkbot {
 struct HistoryDataRequest {
 
     using Interval = std::size_t;
-    static constexpr Interval interval_undefined = 1;
+    ///undefined interval (tick)
+    static constexpr Interval interval_undefined = 0;
 
     static constexpr Interval interval_second = 1;
     ///predefined constant for minute interval

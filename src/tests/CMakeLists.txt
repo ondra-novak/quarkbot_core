@@ -32,6 +32,7 @@ set(BASIC_TESTS
     order_status_consistency.cpp
     cli.cpp
     queue_as_stream.cpp
+    history_formats.cpp
 )
 
 

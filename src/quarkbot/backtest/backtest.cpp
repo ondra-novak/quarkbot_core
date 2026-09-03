@@ -198,4 +198,9 @@ BacktestEnv::BacktestEnv(std::string_view account_name,
         return _debugger;
     }
 
+
+    void BacktestEnv::set_history_source(BacktestHistorySource src) {
+        auto ex = std::static_pointer_cast<SimExchange>(_exchange.get_handle());
+        ex->set_history_source(std::move(src));
+    }
 }

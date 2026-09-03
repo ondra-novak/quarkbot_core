@@ -21,6 +21,7 @@ endif()
 add_subdirectory("tardis" EXCLUDE_FROM_ALL)
 add_subdirectory("trth" EXCLUDE_FROM_ALL)
 add_subdirectory("algoseek" EXCLUDE_FROM_ALL)
+add_subdirectory("csv_history" EXCLUDE_FROM_ALL)
 
 
 target_include_directories(quarkbot_backtest PRIVATE ${CMAKE_BINARY_DIR}/)

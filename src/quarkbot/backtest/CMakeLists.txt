@@ -38,5 +38,8 @@ target_sources(quarkbot_backtest PRIVATE
     var_inspector.cpp
     json_report.hpp
     json_report.cpp
+    simhistoryadapter.hpp
+    simhistoryadapter.cpp
+    history_collector.hpp
  
 )

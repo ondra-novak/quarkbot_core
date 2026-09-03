@@ -111,7 +111,9 @@ namespace quarkbot {
         try {
             auto simcfg = params.json_report?cfg.configure_simulation_no_report():cfg.configure_simulation();
             BacktestEnv bt("backtest-account", cfg.configure_wallet(), configure_instruments(params.backtest_config), simcfg);
-            auto data_source = configure_datasources(params.backtest_config);            
+            auto [data_source, hist_source] = configure_datasources(params.backtest_config);                        
+
+            bt.set_history_source(std::move(hist_source));
 
             std::optional<JsonReport> jsnrpt;
 
