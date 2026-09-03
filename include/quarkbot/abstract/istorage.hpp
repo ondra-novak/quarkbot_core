@@ -9,6 +9,16 @@
 #include <stdexcept>
 namespace quarkbot {
 
+    enum class CommitMode {
+        ///All writes are committed to the storage, but the commit may be delayed by OS caching or other optimizations. This is the default mode.
+        local,
+        ///All writes are committed to the storage and synchronized with the external device. This mode is slower than `local` but ensures that the data is physically written to the storage device.
+        sync,
+        ///All writes are committed on background, so they are not immediatelly visible to other readers. This mode is faster than `local` but the data may be lost if the application crashes before the background commit is completed.
+        lazy
+    };
+
+
     class IStorageTransaction;
     using PStorageTransaction =  std::unique_ptr<IStorageTransaction> ;
 
@@ -174,7 +184,7 @@ namespace quarkbot {
         virtual bool is_schema_stored(srl::SchemaHash h) const = 0;
 
         ///create write transaction
-        virtual PStorageTransaction write() = 0;
+        virtual PStorageTransaction write(CommitMode mode = CommitMode::local) = 0;
 
       
         ///Retrieve current namespace if defined (default is not defined)
@@ -242,7 +252,7 @@ namespace quarkbot {
         @param sync set true causes that data are immediately copied to external storage. If false, OS caching
         can delay the write.
          */
-        virtual void commit(bool sync = false) = 0;
+        virtual void commit() = 0;
 
         ///Put single value to a variable
         /**
@@ -328,7 +338,7 @@ namespace quarkbot {
         virtual Value get_schema_binary(srl::SchemaHash) const override{
             return {{},{}, false, {}};
         }
-        virtual PStorageTransaction write() override{
+        virtual PStorageTransaction write(CommitMode ) override{
             throw std::runtime_error("Cannot open transaction:  Storage is read only");            
         }
         virtual void add_replicator(Replicator::Connection) override {

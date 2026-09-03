@@ -80,7 +80,7 @@ namespace quarkbot {
         virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &from, const RecordKey &to, RangeDirection dir) const override;
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
         virtual Value get_schema_binary(srl::SchemaHash h) const override;
-        virtual PStorageTransaction write() override;
+        virtual PStorageTransaction write(CommitMode cmode) override;
         virtual void add_replicator(Replicator::Connection consumer) override;
         virtual bool is_schema_stored(srl::SchemaHash hash) const override;
 
@@ -120,10 +120,11 @@ class LevelDBTransaction final: public IStorageTransaction {
 public:
     using PDB = LevelDBStorageManager::PDB;
 
-    explicit LevelDBTransaction(std::shared_ptr<LevelDBStorage> storage);
+    explicit LevelDBTransaction(std::shared_ptr<LevelDBStorage> storage, CommitMode cmode)
+        :_storage(std::move(storage)), _cmode(cmode) {};
     
     virtual PStorage get_storage() const  override;
-    virtual void commit(bool sync) override;
+    virtual void commit() override;
     virtual RecordKey put(std::string_view variable_name, std::string_view content) override;
     virtual void put(std::string_view variable_name, const RecordKey &key, std::string_view content,
         UpdateLastRevision update_last_revision) override;
@@ -135,6 +136,7 @@ public:
 protected:
     leveldb::WriteBatch _batch;    
     std::shared_ptr<LevelDBStorage> _storage;
+    CommitMode _cmode;
 
 
 };

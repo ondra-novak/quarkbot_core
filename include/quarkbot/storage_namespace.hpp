@@ -41,7 +41,7 @@ namespace quarkbot {
         virtual void add_replicator(Replicator::Connection consumer) override {
             _root->add_replicator(std::move(consumer));
         }
-        virtual PStorageTransaction write() override;
+        virtual PStorageTransaction write(CommitMode cmode) override;
             
         virtual std::string_view get_namespace() const override {return {_key.data(), _prefix_size};}
         virtual PStorage get_root_storage() const override {return  _root;}
@@ -62,14 +62,14 @@ namespace quarkbot {
     class StorageNamespaceTransaction final: public IStorageTransaction {
     public:
 
-        StorageNamespaceTransaction(std::shared_ptr<StorageNamespace> storage, std::string_view key) 
+        StorageNamespaceTransaction(std::shared_ptr<StorageNamespace> storage, std::string_view key, CommitMode cmode) 
             :_storage(std::move(storage))
-            ,_root_tx(_storage->get_root_storage()->write())
+            ,_root_tx(_storage->get_root_storage()->write(cmode))
             ,_key(key)
             ,_prefix_size(key.size()) {}
 
         virtual PStorage get_storage() const  override {return _storage;}
-        virtual void commit(bool sync) override {_root_tx->commit(sync);}
+        virtual void commit() override {_root_tx->commit();}
         virtual RecordKey put(std::string_view variable_name, std::string_view content) override {
             return _root_tx->put(add_prefix(variable_name), content);
         }
@@ -103,8 +103,8 @@ namespace quarkbot {
     };
 
 
-    inline PStorageTransaction StorageNamespace::write() {
-        return std::make_unique<StorageNamespaceTransaction>(shared_from_this(),std::string_view{_key.data(), _prefix_size});
+    inline PStorageTransaction StorageNamespace::write(CommitMode cmode) {
+        return std::make_unique<StorageNamespaceTransaction>(shared_from_this(),std::string_view{_key.data(), _prefix_size}, cmode);
     }
 
     inline PStorage IStorage::create_namespace(PStorage root, std::string_view prefix)  {

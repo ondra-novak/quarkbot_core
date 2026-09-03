@@ -27,7 +27,7 @@ public:
 
             ///retrieve associated storage of this transaction
     virtual PStorage get_storage() const  override;
-    virtual void commit(bool sync) override;
+    virtual void commit() override;
     virtual RecordKey put(std::string_view variable_name, std::string_view content) override;
     virtual void put(std::string_view variable_name, const RecordKey &key, std::string_view content,
         UpdateLastRevision update) override;
@@ -64,7 +64,7 @@ public:
         virtual Enumerator get_enumerator(std::string_view variable_name, const RecordKey &from, const RecordKey &to, RangeDirection dir) const override;
         virtual std::vector<std::string> list(std::string_view prefix ) const override;
         virtual Value get_schema_binary(srl::SchemaHash h) const override;
-        virtual PStorageTransaction write() override;
+        virtual PStorageTransaction write(CommitMode mode) override;
         virtual void add_replicator(Replicator::Connection consumer) override {
             connect(_watcher, consumer);
         }
@@ -103,7 +103,7 @@ inline  std::uint64_t MemStorage::random_key_counter ;
 inline PStorage MemStorageTransaction::get_storage() const  {
     return _storage;
 }
-inline void MemStorageTransaction::commit(bool) {
+inline void MemStorageTransaction::commit() {
     for (auto &x: _ops) {
         std::visit([&](auto &x) {
             _storage->apply(std::move(x));
@@ -213,7 +213,7 @@ inline MemStorage::Value MemStorage::get_schema_binary(srl::SchemaHash h) const 
     }
     return {{}, iter->second, true, {}};
 }
-inline PStorageTransaction MemStorage::write() {
+inline PStorageTransaction MemStorage::write(CommitMode) {
     return std::make_unique<MemStorageTransaction>(shared_from_this());
 }
 

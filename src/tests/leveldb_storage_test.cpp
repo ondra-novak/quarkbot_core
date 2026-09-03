@@ -424,10 +424,10 @@ void test_persistence() {
     {
         auto mgr = open_fresh(tmp.path);
         auto storage = mgr.get_storage("s");
-        auto tx = storage->write();
+        auto tx = storage->write(CommitMode::sync);
         key = tx->put("survivor", "payload");
         tx->put_schema_binary(srl::SchemaHash{7}, "schema-blob");
-        tx->commit(true);
+        tx->commit();
     }
     {
         auto mgr = open_existing(tmp.path);

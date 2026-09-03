@@ -263,23 +263,20 @@ LevelDBStorage::Value LevelDBStorage::get_schema_binary(srl::SchemaHash h) const
     return out;
 };
 
-PStorageTransaction LevelDBStorage::write() {
-    return std::make_unique<LevelDBTransaction>(shared_from_this());
+PStorageTransaction LevelDBStorage::write(CommitMode cmode) {
+    return std::make_unique<LevelDBTransaction>(shared_from_this(), cmode);    
 }
 uint8_t LevelDBStorage::get_keyspace_id() const {return _keyspace_id;}
 LevelDBStorage::PDB LevelDBStorage::get_db() const {return _proxy;}
 
 
-LevelDBTransaction::LevelDBTransaction(std::shared_ptr<LevelDBStorage> storage)
-    :_storage(std::move(storage)) {}
-
 PStorage LevelDBTransaction::get_storage() const {
     return _storage;
 }
-void LevelDBTransaction::commit(bool sync) {
+void LevelDBTransaction::commit() {
     auto db = _storage->get_db();
     leveldb::WriteOptions opts;
-    opts.sync = sync;
+    opts.sync = _cmode == CommitMode::sync;
     check_status(db->Write(opts,&_batch));    
     auto repl = _storage->get_replicator();
     _batch.Iterate(&repl);

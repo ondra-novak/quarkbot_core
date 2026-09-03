@@ -42,7 +42,7 @@ class Persistent;
 
 
 
-inline StorageTransaction &shared_transaction(Storage storage) {
+inline StorageTransaction &shared_transaction(Storage storage, CommitMode cmode) {
     static thread_local std::optional<StorageTransaction> trn;
     if (trn) {
         if (trn->get_storage() == storage.get_handle()) {
@@ -63,7 +63,7 @@ inline StorageTransaction &shared_transaction(Storage storage) {
         worker.run_on_idle(flush_coro());
     }
     trn = {};
-    trn = storage.write();
+    trn = storage.write(cmode);
     return trn.value();
 }
 
@@ -203,12 +203,12 @@ protected:
 
     void store() {        
         if constexpr(cs == CommitStrategy::delayed) {
-            auto &trn = shared_transaction(group.get_storage());
+            auto &trn = shared_transaction(group.get_storage(), CommitMode::lazy);
             trn.store(group.get_name(), value);
         } else {
-            auto trn = group.get_storage().write();
+            auto trn = group.get_storage().write(cs == CommitStrategy::immediately_sync ? CommitMode::sync : CommitMode::local);
             trn.store(group.get_name(), value);
-            trn.commit(cs == CommitStrategy::immediately_sync);
+            trn.commit();
         }
     }
 };

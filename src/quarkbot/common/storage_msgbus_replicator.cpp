@@ -109,7 +109,7 @@ StrategyFragment replicate_events(EventStream<Message> msg_stream, Storage stora
     while (co_await msg_stream.receive(msg)) {
         if ((msg.content_type == repl_content_type)
             && (filter.empty() || msg.target == filter)) {
-                auto &trn = shared_transaction(storage);
+                auto &trn = shared_transaction(storage, CommitMode::lazy);
                 replicate_from_message(msg.payload, trn );
         }
     }

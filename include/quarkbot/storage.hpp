@@ -83,7 +83,14 @@ public:
     ///Retrieve schema - schema is stored as JSON string
     Value get_schema(srl::SchemaHash h) const {return _ptr->get_schema_binary(h);}
 
-    StorageTransaction write();
+
+    ///Create a transaction to write data to the storage.
+    /**
+        @param mode commit mode - see CommitMode for details
+        @return transaction object - you can use it to put or erase values. 
+        When transaction is destroyed without commit, all changes are discarded.
+    */
+    StorageTransaction write(CommitMode mode = CommitMode::local);
 
     ///Retrieve current namespace if defined (default is not defined)
     std::string_view get_namespace() const {return _ptr->get_namespace();}
@@ -117,10 +124,8 @@ public:
     ///commit the write
     /**
     @note state of the transaction after commit is undefined. You need to destroy transaction and recreate its
-    @param sync set true causes that data are immediately copied to external storage. If false, OS caching
-    can delay the write.
     */
-    void commit(bool sync = false) {_ptr->commit(sync);}
+    void commit() {_ptr->commit();}
 
     ///Put single value to a variable
     /**
@@ -201,8 +206,8 @@ protected:
     PStorageTransaction _ptr;
 };
 
-inline StorageTransaction Storage::write() {
-    return _ptr->write();
+inline StorageTransaction Storage::write(CommitMode mode) {
+    return _ptr->write(mode);
 }
 
 class StorageManager : public Wrapper<IStorageManager> {

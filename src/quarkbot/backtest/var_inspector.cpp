@@ -85,7 +85,7 @@ namespace quarkbot {
     }
     void VariableInspector::flush() {        
         try {
-            shared_transaction({}); //will throw exception, but will flush pending transaction
+            shared_transaction({}, CommitMode::lazy); //will throw exception, but will flush pending transaction
         } catch (...) {
             //ignore exception, we just want to flush pending transaction
         }

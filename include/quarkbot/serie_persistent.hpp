@@ -44,14 +44,14 @@ public:
         ++_rev.ordered;
 
         if constexpr(cs == CommitStrategy::delayed) {
-            auto &trn = shared_transaction(_storage);
+            auto &trn = shared_transaction(_storage, CommitMode::lazy);
             trn.store(_key, _rev, value);
             if (_size) trn.erase(_key, {_rev.ordered-_size, _rev.random});
         } else {
-            auto trn = _storage.write();
+            auto trn = _storage.write(cs == CommitStrategy::immediately_sync ? CommitMode::sync : CommitMode::local);
             trn.store(_key, _rev, value);
             if (_size) trn.erase(_key, {_rev.ordered-_size, _rev.random});
-            trn.commit(cs == CommitStrategy::immediately_sync);
+            trn.commit();
         }
     }
 
