@@ -8,6 +8,7 @@ set(BASIC_TESTS
     pubsub.cpp
     strategy_publisher.cpp
     mem_storage_test.cpp
+    storage_replication_msgbus.cpp
     tardis_source_test.cpp
     algoseek_source_test.cpp
     config_datasource_test.cpp

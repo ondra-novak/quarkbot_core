@@ -3,13 +3,15 @@
 #include "quarkbot/message_bus.hpp"
 #include "quarkbot/persistent.hpp"
 #include "quarkbot/storage.hpp"
+#include "quarkbot/utils/bigendian.hpp"
+#include "storage_common.hpp"
 #include <chrono>
 #include <cstdint>
+#include <optional>
+#include <span>
 #include <string_view>
 
 namespace quarkbot {
-
-constexpr std::string_view repl_content_type = "application/prs.db-repl.command";
 
 static std::uint8_t *write_size_2(std::uint8_t *iter, std::size_t sz) {
     if (sz) {
@@ -30,31 +32,80 @@ static std::uint8_t *write_blob(std::uint8_t *iter, std::string_view data) {
     return iter;
 }
 
-static void replicate_with_buffer(const Storage::ReplicatorEvent &event, std::uint8_t *buffer, MessageBus &bus, const std::string &target) {
-    auto *iter = buffer;
-    *iter++ = event.erase?'E':'P';
-    *iter++ = event.is_schema?'S':'R';
-    iter = write_blob(iter, event.key);
-    iter = write_blob(iter, event.value);
-    std::size_t final_size = static_cast<std::size_t>(iter - buffer);
-    bus.send(Message{
-        MessageType::normal_message,{}, target, {reinterpret_cast<const char *>(buffer), final_size},
-        repl_content_type,0,std::chrono::system_clock::now(),{}        
-});
+constexpr std::string_view repl_content_type = "application/prs.db-repl.command.v2";
+
+///one type byte, a 16 byte recordkey and two variable length sizes
+static constexpr std::size_t repl_fixed_overhead = 1 + recordkey_string_size
+        + 2 * ((sizeof(std::size_t)*8+6)/7);
+
+static char type_to_wire(Storage::ReplicatorEvent::Type t) {
+    using Type = Storage::ReplicatorEvent::Type;
+    switch (t) {
+        case Type::put_schema: return 'S';
+        case Type::put_key_value: return 'P';
+        case Type::update_latest: return 'L';
+        case Type::erase_key: return 'K';
+        case Type::erase_latest: return 'R';
+        case Type::erase_name: return 'N';
+    }
+    return 0;
+}
+
+std::size_t replication_message_size(const Storage::ReplicatorEvent &ev) {
+    return repl_fixed_overhead + ev.name.size() + ev.value.size() + sizeof(srl::SchemaHash);
+}
+
+std::span<char> encode_replication_message(const Storage::ReplicatorEvent &ev, std::span<char> buffer) {
+    using Type = Storage::ReplicatorEvent::Type;
+    auto *begin = reinterpret_cast<std::uint8_t *>(buffer.data());
+    auto *iter = begin;
+    *iter++ = static_cast<std::uint8_t>(type_to_wire(ev.type));
+    switch (ev.type) {
+        case Type::put_schema:
+            //big_endian_binarize writes through a char iterator; iter here is uint8_t*
+            //(write_blob's currency), so hand it a char* view of the same bytes
+            big_endian_binarize(ev.schema_hash, reinterpret_cast<char *>(iter));
+            iter += sizeof(srl::SchemaHash);
+            iter = write_blob(iter, ev.value);
+            break;
+        case Type::put_key_value: {
+            iter = write_blob(iter, ev.name);
+            auto rw = record_key_to_string(ev.recordkey);
+            iter = std::copy(rw.begin(), rw.end(), iter);
+            iter = write_blob(iter, ev.value);
+        } break;
+        case Type::update_latest:
+        case Type::erase_key: {
+            iter = write_blob(iter, ev.name);
+            auto rw = record_key_to_string(ev.recordkey);
+            iter = std::copy(rw.begin(), rw.end(), iter);
+        } break;
+        case Type::erase_latest:
+        case Type::erase_name:
+            iter = write_blob(iter, ev.name);
+            break;
+    }
+    return buffer.subspan(0, static_cast<std::size_t>(iter - begin));
 }
 
 Storage::Replicator::Connection attach_replicator(Storage storage, MessageBus bus, std::string target) {
     return storage.add_replicator(
-        [bus, target](const Storage::ReplicatorEvent &event)   mutable noexcept{
-            auto needsz = event.key.size()+event.value.size() + 2*((sizeof(std::size_t)*8+6)/7)+2; //reserved space            
+        [bus, target](const Storage::ReplicatorEvent &event) mutable noexcept{
+            auto send = [&](std::span<char> buffer){
+                auto msg = encode_replication_message(event, buffer);
+                bus.send(Message{
+                    MessageType::normal_message,{}, target, {msg.data(), msg.size()},
+                    repl_content_type,0,std::chrono::system_clock::now(),{}
+                });
+            };
+            auto needsz = replication_message_size(event);
             if (needsz > 512) {
-                std::vector<std::uint8_t> buffer;
-                buffer.resize(needsz);
-                replicate_with_buffer(event, buffer.data(), bus, target);
+                std::vector<char> buffer(needsz);
+                send(buffer);
             } else {
-                std::uint8_t buffer[512];
-                replicate_with_buffer(event, buffer, bus, target);
-            }        
+                char buffer[512];
+                send(buffer);
+            }
     });
 }
 
@@ -80,29 +131,60 @@ static std::string_view extract_blob(auto &iter, auto end_iter) {
     return {reinterpret_cast<const char *>(bin.data()), bin.size()};
 }
 
+///reads a fixed count of bytes, or returns nothing when the message is too short
+static std::optional<std::string_view> extract_fixed(auto &iter, auto end_iter, std::size_t count) {
+    if (static_cast<std::size_t>(std::distance(iter, end_iter)) < count) return {};
+    auto begin = iter;
+    std::advance(iter, count);
+    return std::string_view(&*begin, count);
+}
+
 bool replicate_from_message(const std::string_view &msg, StorageTransaction &trn) {
-    if (msg.size()<4) return false;
+    using Type = Storage::ReplicatorEvent::Type;
+    if (msg.empty()) return false;
     auto iter = msg.begin();
     auto end = msg.end();
-    char ch1 =*iter++;
-    char ch2 =*iter++;
-    bool erase;
-    bool schema;
-    if (ch1 == 'E')  erase = true;
-    else if (ch2 == 'P') erase = false;
-    else return false;
+    char t = *iter++;
 
-    if (ch2 == 'R') schema = false;
-    else if (ch2 == 'S') schema = true;
-    else return false;
+    //a blob length is clamped to the rest of the message, but a fixed width field cut
+    //short would otherwise yield a RecordKey built from arbitrary bytes
+    auto read_recordkey = [&](RecordKey &out) {
+        auto bin = extract_fixed(iter, end, recordkey_string_size);
+        if (!bin) return false;
+        out = string_to_record_key(*bin);
+        return true;
+    };
 
-    std::string_view key = extract_blob(iter, end);
-    std::string_view value = extract_blob(iter, end);
-    using Type = Storage::ReplicatorEvent::Type;
-    trn.apply(Storage::ReplicatorEvent{
-        .type = schema?Type::put_schema:(erase?Type::erase_key:Type::put_key_value),
-        .value = value, .key = key, .erase = erase, .is_schema = schema
-    });
+    Storage::ReplicatorEvent ev{.type = Type::put_key_value};
+    switch (t) {
+        case 'S': {
+            auto bin = extract_fixed(iter, end, sizeof(srl::SchemaHash));
+            if (!bin) return false;
+            ev.type = Type::put_schema;
+            big_endian_unbinarize(ev.schema_hash, bin->begin());
+            ev.value = extract_blob(iter, end);
+        } break;
+        case 'P':
+            ev.type = Type::put_key_value;
+            ev.name = extract_blob(iter, end);
+            if (!read_recordkey(ev.recordkey)) return false;
+            ev.value = extract_blob(iter, end);
+            break;
+        case 'L':
+        case 'K':
+            ev.type = t == 'L'?Type::update_latest:Type::erase_key;
+            ev.name = extract_blob(iter, end);
+            if (!read_recordkey(ev.recordkey)) return false;
+            break;
+        case 'R':
+        case 'N':
+            ev.type = t == 'R'?Type::erase_latest:Type::erase_name;
+            ev.name = extract_blob(iter, end);
+            break;
+        default:
+            return false;
+    }
+    trn.apply(ev);
     return true;
 }
 
