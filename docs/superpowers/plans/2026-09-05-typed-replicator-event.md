@@ -1554,7 +1554,11 @@ Remove every `.key = ...`, `.erase = ...` and `.is_schema = ...` from the `Repli
 
 In `src/tests/leveldb_storage_test.cpp`, remove `key`, `erase` and `is_schema` from `CapturedEvent`, from the push_back in `EventLog::attach` and from the event built in `EventLog::replay_into`.
 
-- [ ] **Step 5: Delete the schema-hash string helpers**
+- [ ] **Step 5: Stop populating `value` on `update_latest`**
+
+The field-validity table says `update_latest` carries `name` and `recordkey` only, but both backends also set `.value` to the encoded revision bytes. That was load-bearing while the transitional path wrote the pointer from `event.value`; since `apply()` composes the pointer from `ev.recordkey`, nothing reads it any more. Remove `.value = ...` from the `update_latest` events emitted by `MemStorage::apply(OpPut&&)`, `MemStorage::apply(OpReplicate&&)` and `LevelDBStorage::ReplicatorHandler::emit`, so the documented contract is true.
+
+- [ ] **Step 6: Delete the schema-hash string helpers**
 
 In `src/quarkbot/common/mem_storage.hpp`, delete `schema_hash_to_key` and `schema_key_to_hash` together with their doc comment. `MemStorage::apply(OpPutSchema&&)` and `apply(OpReplicate&&)` no longer build a binary schema key.
 
@@ -1576,7 +1580,7 @@ In `src/quarkbot/leveldb/leveldb_storage.cpp`, `ReplicatorHandler::emit` used `s
 
 Remove the `#include "../common/mem_storage.hpp"` from `leveldb_storage.cpp` if it was added in Task 1 and is now unused.
 
-- [ ] **Step 6: Run the full suite**
+- [ ] **Step 7: Run the full suite**
 
 ```bash
 cmake --build build -j$(nproc) && ctest --test-dir build
@@ -1584,7 +1588,7 @@ cmake --build build -j$(nproc) && ctest --test-dir build
 
 Expected: build succeeds, every test passes.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add include/quarkbot/abstract/istorage.hpp \
