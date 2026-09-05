@@ -15,6 +15,7 @@
 - Every task ends with the whole tree building and `ctest` green. No commit may leave a target uncompilable.
 - Build and test with the already-configured build directory: `cmake --build build -j$(nproc)` then `ctest --test-dir build`. It is configured with `CMAKE_CXX_COMPILER=/usr/bin/clang++` and `QUARKBOT_LEVELDB:BOOL=ON`; do not reconfigure. If a fresh configure is ever needed: `cmake -DCMAKE_CXX_COMPILER=g++-14 -DQUARKBOT_LEVELDB=ON ..`. `QUARKBOT_LEVELDB` is **not** implied by `QUARKBOT_TESTS`, and without it neither the LevelDB backend nor its test compiles.
 - `CHECK_EQUAL(a,b)` streams both operands with `operator<<`. `RecordKey` and `ReplicatorEvent::Type` have no `operator<<` — compare them with `CHECK(a == b)`, never `CHECK_EQUAL`.
+- The macros in `check.h` are not variadic, and the preprocessor balances only `()` when splitting macro arguments — never `{}`. A braced initialiser containing a comma must therefore be wrapped in its own parentheses: `CHECK((ev.recordkey == RecordKey{1,0}))`, not `CHECK(ev.recordkey == RecordKey{1,0})`. The bare form is a compile error, not a style preference.
 - Use only the macros from `src/tests/check.h`: `CHECK`, `CHECK_EQUAL`, `CHECK_NOT_EQUAL`, `CHECK_GREATER`, `CHECK_EXCEPTION`. A failing macro calls `exit(1)`, so a test binary stops at the first failure.
 - Comments in English, matching the density and tone of the surrounding code. Explain *why*, not *what*.
 - Public interfaces use the `shared_ptr` aliases (`PStorage`, `PStorageTransaction`).
@@ -101,7 +102,7 @@ void test_put_event_sequence() {
     CHECK_EQUAL(log.events.size(), 1u);
     CHECK(log.events[0].type == Type::put_key_value);
     CHECK_EQUAL(log.events[0].name, "v");
-    CHECK(log.events[0].recordkey == RecordKey{1,0});
+    CHECK((log.events[0].recordkey == RecordKey{1,0}));
     CHECK_EQUAL(log.events[0].value, "c1");
 
     // enable: the data record, then the pointer
@@ -111,10 +112,10 @@ void test_put_event_sequence() {
     tx->commit();
     CHECK_EQUAL(log.events.size(), 2u);
     CHECK(log.events[0].type == Type::put_key_value);
-    CHECK(log.events[0].recordkey == RecordKey{2,0});
+    CHECK((log.events[0].recordkey == RecordKey{2,0}));
     CHECK(log.events[1].type == Type::update_latest);
     CHECK_EQUAL(log.events[1].name, "v");
-    CHECK(log.events[1].recordkey == RecordKey{2,0});
+    CHECK((log.events[1].recordkey == RecordKey{2,0}));
 
     // enable_erase_last: the data record, the erase of the *previous* revision, the pointer
     log.clear();
@@ -123,12 +124,12 @@ void test_put_event_sequence() {
     tx->commit();
     CHECK_EQUAL(log.events.size(), 3u);
     CHECK(log.events[0].type == Type::put_key_value);
-    CHECK(log.events[0].recordkey == RecordKey{3,0});
+    CHECK((log.events[0].recordkey == RecordKey{3,0}));
     CHECK(log.events[1].type == Type::erase_key);
     CHECK_EQUAL(log.events[1].name, "v");
-    CHECK(log.events[1].recordkey == RecordKey{2,0});
+    CHECK((log.events[1].recordkey == RecordKey{2,0}));
     CHECK(log.events[2].type == Type::update_latest);
-    CHECK(log.events[2].recordkey == RecordKey{3,0});
+    CHECK((log.events[2].recordkey == RecordKey{3,0}));
 }
 
 void test_schema_event_is_numeric() {
@@ -163,7 +164,7 @@ void test_erase_single_revision_event() {
     CHECK_EQUAL(log.events.size(), 1u);
     CHECK(log.events[0].type == Type::erase_key);
     CHECK_EQUAL(log.events[0].name, "v");
-    CHECK(log.events[0].recordkey == RecordKey{1,0});
+    CHECK((log.events[0].recordkey == RecordKey{1,0}));
 }
 ```
 
@@ -540,12 +541,12 @@ void test_replicated_event_is_typed() {
         } else if (ev.type == Type::put_key_value) {
             ++data;
             CHECK_EQUAL(ev.name, "alpha");
-            CHECK(ev.recordkey == RecordKey{1,0});
+            CHECK((ev.recordkey == RecordKey{1,0}));
             CHECK_EQUAL(ev.value, "a1");
         } else if (ev.type == Type::update_latest) {
             ++pointer;
             CHECK_EQUAL(ev.name, "alpha");
-            CHECK(ev.recordkey == RecordKey{1,0});
+            CHECK((ev.recordkey == RecordKey{1,0}));
         }
     }
     CHECK_EQUAL(data, 1);
@@ -577,7 +578,7 @@ void test_erase_variable_decomposes() {
         if (ev.type == Type::erase_key) {
             ++keys;
             CHECK_EQUAL(ev.name, "alpha");
-            CHECK(ev.recordkey == RecordKey{1,0} || ev.recordkey == RecordKey{2,0});
+            CHECK((ev.recordkey == RecordKey{1,0} || ev.recordkey == RecordKey{2,0}));
         } else if (ev.type == Type::erase_latest) {
             ++latest;
             CHECK_EQUAL(ev.name, "alpha");
@@ -674,7 +675,7 @@ void test_apply_into_namespace() {
     CHECK_EQUAL(ns->get("alpha", RecordKey{1,0}).data, "a1");
     CHECK_EQUAL(ns->get("alpha").data, "a1");
     CHECK_EQUAL(root->get("ns/alpha", RecordKey{1,0}).data, "a1");
-    CHECK(!root->get("alpha", RecordKey{1,0}).exists);
+    CHECK((!root->get("alpha", RecordKey{1,0}).exists));
 
     // a same-named variable outside the namespace must survive erase_name inside it
     tx = root->write();
@@ -685,7 +686,7 @@ void test_apply_into_namespace() {
     tx->apply(IStorage::ReplicatorEvent{.type = Type::erase_name, .name = "alpha"});
     tx->commit();
 
-    CHECK(!ns->get("alpha", RecordKey{1,0}).exists);
+    CHECK((!ns->get("alpha", RecordKey{1,0}).exists));
     CHECK_EQUAL(root->get("alpha", RecordKey{9,0}).data, "root-value");
 }
 ```
@@ -883,8 +884,8 @@ void test_apply_erase_name_decomposes() {
     tx->apply(IStorage::ReplicatorEvent{.type = Type::erase_name, .name = "alpha"});
     tx->commit();
 
-    CHECK(!storage->get("alpha", RecordKey{1,0}).exists);
-    CHECK(!storage->get("alpha", RecordKey{2,0}).exists);
+    CHECK((!storage->get("alpha", RecordKey{1,0}).exists));
+    CHECK((!storage->get("alpha", RecordKey{2,0}).exists));
     CHECK(!storage->get("alpha").exists);
 
     // the bulk intent decomposes into per-record deletions on the way out again
@@ -1044,7 +1045,7 @@ void test_put_key_value_round_trip() {
     CHECK_EQUAL(out.size(), 1u);
     CHECK(out[0].type == Type::put_key_value);
     CHECK_EQUAL(out[0].name, "alpha");
-    CHECK(out[0].recordkey == RecordKey{1,2});
+    CHECK((out[0].recordkey == RecordKey{1,2}));
     CHECK_EQUAL(out[0].value, "a1");
 }
 
@@ -1062,7 +1063,7 @@ void test_update_latest_round_trip() {
     CHECK_EQUAL(out.size(), 1u);
     CHECK(out[0].type == Type::update_latest);
     CHECK_EQUAL(out[0].name, "alpha");
-    CHECK(out[0].recordkey == RecordKey{7,8});
+    CHECK((out[0].recordkey == RecordKey{7,8}));
 }
 
 void test_erase_key_round_trip() {
@@ -1070,7 +1071,7 @@ void test_erase_key_round_trip() {
     CHECK_EQUAL(out.size(), 1u);
     CHECK(out[0].type == Type::erase_key);
     CHECK_EQUAL(out[0].name, "alpha");
-    CHECK(out[0].recordkey == RecordKey{3,4});
+    CHECK((out[0].recordkey == RecordKey{3,4}));
 }
 
 void test_erase_latest_round_trip() {
