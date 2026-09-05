@@ -1515,6 +1515,8 @@ MSG
 
 ### Task 5: Remove the transitional fields and the dead helpers
 
+> **Run Task 6 before this task.** `test_erase_replicates_as_erase` in `src/tests/mem_storage_test.cpp` still reads `ev.erase`, and Task 6 is what replaces that test. Deleting the fields first leaves that reader dangling.
+
 Nothing reads `key`, `erase` or `is_schema` any more. Removing them also removes the last use of the schema-hash-as-string helpers.
 
 **Files:**
@@ -1610,6 +1612,8 @@ MSG
 ---
 
 ### Task 6: MemStorage reports a bulk erase as one erase_name
+
+> **This task runs before Task 5.** Replacing `test_erase_replicates_as_erase` here removes the last reader of the transitional `erase` field, which Task 5 then deletes.
 
 The last behaviour change. `MemStorage::apply(OpErase&&)` knows the caller asked for `erase(variable_name)`, so it says so once instead of describing the removal record by record. A LevelDB source still decomposes, because its batch no longer carries the intent.
 
