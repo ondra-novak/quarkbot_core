@@ -338,14 +338,36 @@ void LevelDBStorage::add_replicator(Replicator::Connection consumer) {
     connect(_watcher,consumer);
 }
 
-void LevelDBTransaction::put(const IStorage::ReplicatorEvent &event) {
-    //the event key is logical - prepend the keyspace this transaction writes into
-    auto kid = event.is_schema? LevelDBStorage::schema_keyspace: _storage->get_keyspace_id();
-    auto key = build_key(kid, event.key);
-    if (event.erase) {
-        _batch.Delete(key);
-    } else {
-        _batch.Put(key, {event.value.data(), event.value.size()});
+void LevelDBTransaction::apply(const IStorage::ReplicatorEvent &event) {
+    using Type = IStorage::ReplicatorEvent::Type;
+    auto kid = _storage->get_keyspace_id();
+    switch (event.type) {
+        case Type::put_schema:
+            put_schema_binary(event.schema_hash, event.value);
+            break;
+        case Type::put_key_value:
+            //straight into the batch: put() would also write the pointer, which arrives
+            //as its own update_latest event
+            _batch.Put(build_key(kid, event.name, event.recordkey),
+                       {event.value.data(), event.value.size()});
+            break;
+        case Type::update_latest: {
+            auto rw = record_key_to_string(event.recordkey);
+            _batch.Put(build_key(kid, event.name), {rw.data(), rw.size()});
+        } break;
+        case Type::erase_key:
+            erase(event.name, event.recordkey);
+            break;
+        case Type::erase_latest:
+            _batch.Delete(build_key(kid, event.name));
+            break;
+        case Type::erase_name:
+            //decomposes into one Delete per record, so it re-emits as erase_key x N
+            //plus erase_latest on this transaction's own commit. Note erase() scans the
+            //database, not this batch: records written earlier in the same uncommitted
+            //transaction are not removed.
+            erase(event.name);
+            break;
     }
 }
 

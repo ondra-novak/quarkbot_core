@@ -167,8 +167,8 @@ public:
     void put_schema_binary(srl::SchemaHash hash, std::string_view binary) {
         _ptr->put_schema_binary(hash, binary);
     }
-    void put(const Storage::ReplicatorEvent &ev) {
-        _ptr->put(ev);
+    void apply(const Storage::ReplicatorEvent &ev) {
+        _ptr->apply(ev);
     }
 
     ///Serialize value, store schema

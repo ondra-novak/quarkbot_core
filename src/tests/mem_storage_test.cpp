@@ -362,12 +362,43 @@ void test_erase_single_revision_event() {
     CHECK((log.events[0].recordkey == RecordKey{1,0}));
 }
 
+void test_apply_into_namespace() {
+    using Type = IStorage::ReplicatorEvent::Type;
+    auto root = MemStorage::create();
+    auto ns = IStorage::create_namespace(root, "ns/");
+
+    auto tx = ns->write();
+    tx->apply(IStorage::ReplicatorEvent{.type = Type::put_key_value, .name = "alpha",
+                                        .recordkey = {1,0}, .value = "a1"});
+    tx->apply(IStorage::ReplicatorEvent{.type = Type::update_latest, .name = "alpha",
+                                        .recordkey = {1,0}});
+    tx->commit();
+
+    // visible inside the namespace and under the prefixed name, never at the root name
+    CHECK_EQUAL(ns->get("alpha", RecordKey{1,0}).data, "a1");
+    CHECK_EQUAL(ns->get("alpha").data, "a1");
+    CHECK_EQUAL(root->get("ns/alpha", RecordKey{1,0}).data, "a1");
+    CHECK(!root->get("alpha", RecordKey{1,0}).exists);
+
+    // a same-named variable outside the namespace must survive erase_name inside it
+    tx = root->write();
+    tx->put("alpha", {9,0}, "root-value");
+    tx->commit();
+
+    tx = ns->write();
+    tx->apply(IStorage::ReplicatorEvent{.type = Type::erase_name, .name = "alpha"});
+    tx->commit();
+
+    CHECK(!ns->get("alpha", RecordKey{1,0}).exists);
+    CHECK_EQUAL(root->get("alpha", RecordKey{9,0}).data, "root-value");
+}
+
 ///forwards every committed change of `from` into `to`, one transaction per event
 static IStorage::Replicator::Connection forward(const PStorage &from, const PStorage &to) {
     auto conn = IStorage::Replicator::create_connection(
         [to](const IStorage::ReplicatorEvent &ev) noexcept {
             auto tx = to->write();
-            tx->put(ev);
+            tx->apply(ev);
             tx->commit();
         });
     from->add_replicator(conn);
@@ -443,6 +474,7 @@ int main() {
     test_put_event_sequence();
     test_schema_event_is_numeric();
     test_erase_single_revision_event();
+    test_apply_into_namespace();
     return 0;
 }
 

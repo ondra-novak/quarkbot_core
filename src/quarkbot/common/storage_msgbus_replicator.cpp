@@ -99,7 +99,7 @@ bool replicate_from_message(const std::string_view &msg, StorageTransaction &trn
     std::string_view key = extract_blob(iter, end);
     std::string_view value = extract_blob(iter, end);
     using Type = Storage::ReplicatorEvent::Type;
-    trn.put(Storage::ReplicatorEvent{
+    trn.apply(Storage::ReplicatorEvent{
         .type = schema?Type::put_schema:(erase?Type::erase_key:Type::put_key_value),
         .value = value, .key = key, .erase = erase, .is_schema = schema
     });

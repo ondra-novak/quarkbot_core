@@ -129,7 +129,7 @@ public:
     virtual void erase(std::string_view variable_name) override;
     virtual void erase(std::string_view variable_name, const RecordKey &key) override;
     virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override;
-    virtual void put(const IStorage::ReplicatorEvent &event) override;
+    virtual void apply(const IStorage::ReplicatorEvent &event) override;
 
 protected:
     leveldb::WriteBatch _batch;    

@@ -470,7 +470,7 @@ public:
     void replay_into(const PStorage &target) const {
         auto tx = target->write();
         for (const auto &ev: events) {
-            tx->put(IStorage::ReplicatorEvent{
+            tx->apply(IStorage::ReplicatorEvent{
                 .type = ev.type, .name = ev.name, .recordkey = ev.recordkey,
                 .value = ev.value, .schema_hash = ev.schema_hash,
                 .key = ev.key, .erase = ev.erase, .is_schema = ev.is_schema});
@@ -615,6 +615,67 @@ void test_erase_variable_decomposes() {
     CHECK_EQUAL(latest, 1);
 }
 
+void test_apply_erase_name_decomposes() {
+    using Type = IStorage::ReplicatorEvent::Type;
+    TempDB tmp("apply_erase_name");
+    auto mgr = open_fresh(tmp.path);
+    auto storage = mgr.get_storage("s");
+
+    auto tx = storage->write();
+    tx->put("alpha", {1,0}, "a1");
+    tx->put("alpha", {2,0}, "a2");
+    tx->commit();
+
+    EventLog log;
+    auto conn = log.attach(storage);
+    tx = storage->write();
+    tx->apply(IStorage::ReplicatorEvent{.type = Type::erase_name, .name = "alpha"});
+    tx->commit();
+
+    CHECK(!storage->get("alpha", RecordKey{1,0}).exists);
+    CHECK(!storage->get("alpha", RecordKey{2,0}).exists);
+    CHECK(!storage->get("alpha").exists);
+
+    // the bulk intent decomposes into per-record deletions on the way out again
+    int keys = 0, latest = 0;
+    for (const auto &ev: log.events) {
+        CHECK(ev.type != Type::erase_name);
+        if (ev.type == Type::erase_key) ++keys;
+        if (ev.type == Type::erase_latest) ++latest;
+    }
+    CHECK_EQUAL(keys, 2);
+    CHECK_EQUAL(latest, 1);
+}
+
+void test_apply_pointer_and_data_independently() {
+    using Type = IStorage::ReplicatorEvent::Type;
+    TempDB tmp("apply_independent");
+    auto mgr = open_fresh(tmp.path);
+    auto storage = mgr.get_storage("s");
+
+    // a data record alone is reachable by its key but does not move the pointer
+    auto tx = storage->write();
+    tx->apply(IStorage::ReplicatorEvent{.type = Type::put_key_value, .name = "alpha",
+                                        .recordkey = {1,0}, .value = "a1"});
+    tx->commit();
+    CHECK_EQUAL(storage->get("alpha", RecordKey{1,0}).data, "a1");
+    CHECK(!storage->get("alpha").exists);
+
+    // the pointer alone moves get(name) without writing data
+    tx = storage->write();
+    tx->apply(IStorage::ReplicatorEvent{.type = Type::update_latest, .name = "alpha",
+                                        .recordkey = {1,0}});
+    tx->commit();
+    CHECK_EQUAL(storage->get("alpha").data, "a1");
+
+    // erasing the pointer leaves the data record in place
+    tx = storage->write();
+    tx->apply(IStorage::ReplicatorEvent{.type = Type::erase_latest, .name = "alpha"});
+    tx->commit();
+    CHECK(!storage->get("alpha").exists);
+    CHECK_EQUAL(storage->get("alpha", RecordKey{1,0}).data, "a1");
+}
+
 void test_replication_to_other_keyspace() {
     TempDB src_tmp("repl_src");
     TempDB dst_tmp("repl_dst");
@@ -669,6 +730,8 @@ int main() {
     test_replicator_fires_on_commit();
     test_replicated_event_is_typed();
     test_erase_variable_decomposes();
+    test_apply_erase_name_decomposes();
+    test_apply_pointer_and_data_independently();
     test_replication_to_other_keyspace();
     test_replication_to_mem_storage();
     return 0;

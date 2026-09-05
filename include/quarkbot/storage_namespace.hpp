@@ -86,8 +86,17 @@ namespace quarkbot {
         virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) override {
             _root_tx->put_schema_binary(hash, binary);
         }
-        virtual void put(const IStorage::ReplicatorEvent &event) override {
-            _root_tx->put(event);
+        virtual void apply(const IStorage::ReplicatorEvent &event) override {
+            //every other method prefixes; a replicated event must not be the exception,
+            //or replication into a namespace writes outside it. Schemas are global and
+            //carry no name.
+            if (event.type == IStorage::ReplicatorEvent::Type::put_schema) {
+                _root_tx->apply(event);
+                return;
+            }
+            IStorage::ReplicatorEvent prefixed = event;
+            prefixed.name = add_prefix(event.name);
+            _root_tx->apply(prefixed);
         }
     protected:
         std::shared_ptr<StorageNamespace> _storage;

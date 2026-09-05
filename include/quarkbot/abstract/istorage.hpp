@@ -330,8 +330,13 @@ namespace quarkbot {
         ///Puts schema to database as binary
         virtual void put_schema_binary(srl::SchemaHash hash, std::string_view binary) = 0;
 
-        ///Replicate from different database
-        virtual void put(const IStorage::ReplicatorEvent &event) = 0;
+        ///Apply a change described by a replicator event, from this or another database
+        /**
+            The inverse of IStorage::Replicator: the backend composes its own physical
+            key from the event's logical fields. Which fields are read depends on
+            event.type - see IStorage::ReplicatorEvent.
+        */
+        virtual void apply(const IStorage::ReplicatorEvent &event) = 0;
         ///Serialize value, store schema
         /**
             @param val value to serialize - must be serializable
