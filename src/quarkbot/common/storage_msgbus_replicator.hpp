@@ -9,11 +9,8 @@
 #include <span>
 namespace quarkbot {
 
-
-    ///attach replicator
+    ///Wire format shared by encode_replication_message, replicate_from_message and attach_replicator
     /**
-        Attaches replicator to a storage and replays events into message bus as messages
-
         Format of messages:
 
         <T><payload...>
@@ -28,11 +25,9 @@ namespace quarkbot {
         <blob>      = <size><bytes>, size variable length big endian with continuation bit 7
         <recordkey> = 16 bytes big endian, the same encoding a physical key uses
 
-        @param storage storage
-        @param bus a message bus
-        @param target target name (receiver)
-        @return connection which must be held to keep replication alive. To stop
-        replication simply drop the return value
+        Messages carrying this format are sent with content type
+        "application/prs.db-repl.command.v2"; replicate_events() filters incoming
+        messages on that content type before decoding them.
     */
 
     ///Number of bytes encode_replication_message needs for this event
@@ -46,6 +41,14 @@ namespace quarkbot {
     */
     std::span<char> encode_replication_message(const Storage::ReplicatorEvent &ev, std::span<char> buffer);
 
+    ///Attaches replicator to a storage and replays events into message bus as messages
+    /**
+        @param storage storage
+        @param bus a message bus
+        @param target target name (receiver)
+        @return connection which must be held to keep replication alive. To stop
+        replication simply drop the return value
+    */
     Storage::Replicator::Connection attach_replicator(Storage storage, MessageBus bus, std::string target);
 
 

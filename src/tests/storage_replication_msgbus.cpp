@@ -86,8 +86,8 @@ void test_erase_latest_round_trip() {
 
 void test_erase_name_round_trip() {
     auto out = round_trip({.type = Type::erase_name, .name = "alpha"});
-    // a MemStorage with nothing stored under "alpha" reports only the pointer removal
-    CHECK_GREATER_EQUAL(out.size(), 1u);
+    CHECK_EQUAL(out.size(), 1u);
+    CHECK(out[0].type == Type::erase_name);
     CHECK_EQUAL(out[0].name, "alpha");
 }
 
@@ -113,6 +113,9 @@ void test_malformed_messages_are_rejected() {
     auto sch = encode({.type = Type::put_schema, .value = "b",
                        .schema_hash = srl::SchemaHash{0xDEADBEEF}});
     CHECK(!decodes(std::string_view(sch).substr(0, 4)));
+
+    // a bare type byte with no blob at all: the length prefix is truncated, not zero
+    CHECK(!decodes("N"));
 }
 
 int main() {

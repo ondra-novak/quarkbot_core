@@ -89,10 +89,10 @@ namespace quarkbot {
 
         ///Turns records of a committed WriteBatch into ReplicatorEvents
         /**
-            Physical keys carry a leading keyspace byte, which is stripped here: events
-            must expose logical keys only, so they stay applicable to a different keyspace
-            or a different backend. The keyspace byte also tells data records apart from
-            schema records, which share the batch but live in schema_keyspace.
+            Decodes this backend's own physical key format - keyspace byte, variable name,
+            recordkey - back into the event's typed logical fields. The keyspace byte tells
+            data records apart from schema records, which share the batch but live in
+            schema_keyspace.
         */
         class ReplicatorHandler final: public leveldb::WriteBatch::Handler {
         public:

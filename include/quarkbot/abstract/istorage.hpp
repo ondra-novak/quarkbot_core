@@ -57,6 +57,20 @@ namespace quarkbot {
 
             The string_view members borrow their buffers and are valid only for the
             duration of the handler call. A handler that retains an event copies it.
+
+            Erase granularity is backend-dependent. A bulk erase(variable_name) reaches
+            a consumer as EITHER a single erase_name, OR a run of erase_key events (one
+            per record) plus an erase_latest, depending on whether the source backend
+            knows the bulk intent at the time it reports the change or is instead
+            replicating from a committed physical batch that only records per-record
+            deletions. Both sequences leave the same logical state, so a portable
+            consumer must handle both rather than assuming its development backend's
+            choice is the only one.
+
+            The intra-transaction event order is contract, not accident: a put is
+            always put_key_value, then - only when UpdateLastRevision::enable_erase_last
+            dropped the previous revision - erase_key for that revision, then
+            update_latest. Every backend must emit events in this order.
         */
         struct ReplicatorEvent {
 

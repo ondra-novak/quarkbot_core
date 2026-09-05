@@ -5,6 +5,7 @@
 #include "quarkbot/storage.hpp"
 #include "quarkbot/utils/bigendian.hpp"
 #include "storage_common.hpp"
+#include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -51,12 +52,15 @@ static char type_to_wire(Storage::ReplicatorEvent::Type t) {
     return 0;
 }
 
+//the schema-hash term covers put_schema, whose 8-byte fixed field is not part of
+//repl_fixed_overhead - every other type leaves it unused
 std::size_t replication_message_size(const Storage::ReplicatorEvent &ev) {
     return repl_fixed_overhead + ev.name.size() + ev.value.size() + sizeof(srl::SchemaHash);
 }
 
 std::span<char> encode_replication_message(const Storage::ReplicatorEvent &ev, std::span<char> buffer) {
     using Type = Storage::ReplicatorEvent::Type;
+    assert(buffer.size() >= replication_message_size(ev));
     auto *begin = reinterpret_cast<std::uint8_t *>(buffer.data());
     auto *iter = begin;
     *iter++ = static_cast<std::uint8_t>(type_to_wire(ev.type));
@@ -109,26 +113,30 @@ Storage::Replicator::Connection attach_replicator(Storage storage, MessageBus bu
     });
 }
 
-static std::size_t extract_size(auto &iter, auto end_iter) {
+///reads a variable length size, or nothing when the message ends mid-encoding (a
+///genuine zero is a single byte with the continuation bit clear, so it is never
+///confused with running off the end before that terminating byte is seen)
+static std::optional<std::size_t> extract_size(auto &iter, auto end_iter) {
     std::size_t out = 0;
     while (iter != end_iter) {
-        auto x = static_cast<std::uint8_t>(*iter++);        
+        auto x = static_cast<std::uint8_t>(*iter++);
         out = (out << 7) | (x & 0x7F);
         if ((x & 0x80) == 0) return out;
     }
-    out = 0;
-    return out;
-    
+    return std::nullopt;
 }
-static std::string_view extract_blob(auto &iter, auto end_iter) {
-    std::size_t sz = extract_size(iter, end_iter);
+///reads a blob, or nothing when its length prefix is truncated; a zero-length blob
+///is legitimate and still returns a (valid, empty) string_view
+static std::optional<std::string_view> extract_blob(auto &iter, auto end_iter) {
+    auto sz = extract_size(iter, end_iter);
+    if (!sz) return std::nullopt;
     std::size_t remain = static_cast<std::size_t>(std::distance(iter, end_iter));
-    sz = std::min(sz, remain);
+    std::size_t n = std::min(*sz, remain);
     auto end_blob = iter;
-    std::advance(end_blob, sz);
+    std::advance(end_blob, n);
     std::span bin(iter, end_blob);
     iter = end_blob;
-    return {reinterpret_cast<const char *>(bin.data()), bin.size()};
+    return std::string_view(reinterpret_cast<const char *>(bin.data()), bin.size());
 }
 
 ///reads a fixed count of bytes, or returns nothing when the message is too short
@@ -154,6 +162,14 @@ bool replicate_from_message(const std::string_view &msg, StorageTransaction &trn
         out = string_to_record_key(*bin);
         return true;
     };
+    //a truncated length prefix must be refused rather than read as an empty blob -
+    //a zero-length blob still round-trips fine since it is a genuine, complete size
+    auto read_blob = [&](std::string_view &out) {
+        auto bin = extract_blob(iter, end);
+        if (!bin) return false;
+        out = *bin;
+        return true;
+    };
 
     Storage::ReplicatorEvent ev{.type = Type::put_key_value};
     switch (t) {
@@ -162,24 +178,24 @@ bool replicate_from_message(const std::string_view &msg, StorageTransaction &trn
             if (!bin) return false;
             ev.type = Type::put_schema;
             big_endian_unbinarize(ev.schema_hash, bin->begin());
-            ev.value = extract_blob(iter, end);
+            if (!read_blob(ev.value)) return false;
         } break;
         case 'P':
             ev.type = Type::put_key_value;
-            ev.name = extract_blob(iter, end);
+            if (!read_blob(ev.name)) return false;
             if (!read_recordkey(ev.recordkey)) return false;
-            ev.value = extract_blob(iter, end);
+            if (!read_blob(ev.value)) return false;
             break;
         case 'L':
         case 'K':
             ev.type = t == 'L'?Type::update_latest:Type::erase_key;
-            ev.name = extract_blob(iter, end);
+            if (!read_blob(ev.name)) return false;
             if (!read_recordkey(ev.recordkey)) return false;
             break;
         case 'R':
         case 'N':
             ev.type = t == 'R'?Type::erase_latest:Type::erase_name;
-            ev.name = extract_blob(iter, end);
+            if (!read_blob(ev.name)) return false;
             break;
         default:
             return false;

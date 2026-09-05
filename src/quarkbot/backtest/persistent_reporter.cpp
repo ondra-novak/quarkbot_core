@@ -56,7 +56,7 @@ static auto reporter_replicator(std::ostream &out) {
                 std::println(out, "{:%Y-%m-%d %H:%M:%S}\t{}\t{}", now, ev.name, jval.to_string());
             }
         } catch (const std::exception &e) {
-            logError("Execption in variable renderer: {}, key={}", e.what(), ev.name);
+            logError("Execption in variable renderer: {}, name={}", e.what(), ev.name);
         }
     };
 }

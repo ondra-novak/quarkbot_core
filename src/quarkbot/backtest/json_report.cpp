@@ -4,7 +4,6 @@
 #include "quarkbot/common/deserialize_resolver.hpp"
 #include "quarkbot/common/mem_storage.hpp"
 #include "quarkbot/common/order_internal_defs.hpp"
-#include "quarkbot/common/storage_common.hpp"
 #include "quarkbot/execution_worker.hpp"
 #include "quarkbot/json/json.hpp"
 #include "quarkbot/order_defs.hpp"
@@ -157,7 +156,8 @@ namespace quarkbot {
             } else if (ev.type == Type::put_key_value) {
                 srl::SchemaHash sch;
                 Json jval;
-                extract_srl(ev.value, sch, sch);
+                std::nullptr_t dummy;
+                extract_srl(ev.value, dummy, sch);
                 auto schiter = schema_map.find(sch);
                 if (schiter == schema_map.end()) {
                     jval = binary_content(ev.value);

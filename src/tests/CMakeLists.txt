@@ -35,6 +35,7 @@ set(BASIC_TESTS
     queue_as_stream.cpp
     history_formats.cpp
     csv_history_source.cpp
+    var_inspector_test.cpp
 )
 
 

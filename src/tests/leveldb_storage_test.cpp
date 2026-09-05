@@ -500,7 +500,7 @@ void test_replicator_fires_on_commit() {
     CHECK_EQUAL(log.events.size(), 2u);
     for (const auto &ev: log.events) CHECK(ev.type == Type::put_key_value || ev.type == Type::update_latest);
 
-    log.events.clear();
+    log.clear();
     tx = storage->write();
     tx->erase("v", {1,0});
     tx->commit();
@@ -595,12 +595,15 @@ void test_erase_variable_decomposes() {
 
     // LevelDB deletes record by record, so the batch never carries the bulk intent
     int keys = 0, latest = 0;
+    bool saw_first = false, saw_second = false;
     for (const auto &ev: log.events) {
         CHECK(ev.type != Type::erase_name);
         if (ev.type == Type::erase_key) {
             ++keys;
             CHECK_EQUAL(ev.name, "alpha");
             CHECK((ev.recordkey == RecordKey{1,0} || ev.recordkey == RecordKey{2,0}));
+            saw_first = saw_first || ev.recordkey == RecordKey{1,0};
+            saw_second = saw_second || ev.recordkey == RecordKey{2,0};
         } else if (ev.type == Type::erase_latest) {
             ++latest;
             CHECK_EQUAL(ev.name, "alpha");
@@ -608,6 +611,10 @@ void test_erase_variable_decomposes() {
     }
     CHECK_EQUAL(keys, 2);
     CHECK_EQUAL(latest, 1);
+    // the count alone can't rule out one recordkey being reported twice and the
+    // other never - pin down that both distinct revisions were actually seen
+    CHECK(saw_first);
+    CHECK(saw_second);
 }
 
 void test_apply_erase_name_decomposes() {
