@@ -36,10 +36,11 @@ void report_variable_type(std::ostream &out, std::string_view key, std::string_v
 static auto reporter_replicator(std::ostream &out) {
     std::unordered_map<srl::SchemaHash, Json> schema_cache;
     return [&out, schema_cache](const Storage::ReplicatorEvent &ev)mutable noexcept{
+        using Type = Storage::ReplicatorEvent::Type;
         try {
-            if (ev.is_schema) {
-                schema_cache.emplace(schema_key_to_hash(ev.key).value(), Json::from_string(ev.value));            
-            } else {
+            if (ev.type == Type::put_schema) {
+                schema_cache.emplace(ev.schema_hash, Json::from_string(ev.value));
+            } else if (ev.type == Type::put_key_value) {
                 srl::SchemaHash hash;
                 std::nullptr_t dummy;
                 extract_srl(ev.value, dummy, hash);
@@ -52,10 +53,10 @@ static auto reporter_replicator(std::ostream &out) {
                     jval = srl::deserialize_from_schema(schiter->second, arch,get_desrl_resolver());
                 }
                 auto now = ExecutionWorker::current().now();
-                std::println(out, "{:%Y-%m-%d %H:%M:%S}\t{}\t{}", now,ev.key, jval.to_string());
+                std::println(out, "{:%Y-%m-%d %H:%M:%S}\t{}\t{}", now, ev.name, jval.to_string());
             }
         } catch (const std::exception &e) {
-            logError("Execption in variable renderer: {}, key={}", e.what(), ev.key);
+            logError("Execption in variable renderer: {}, key={}", e.what(), ev.name);
         }
     };
 }

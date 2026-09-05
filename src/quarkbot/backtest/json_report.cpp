@@ -147,38 +147,29 @@ namespace quarkbot {
         auto schema_map = std::unordered_map<srl::SchemaHash, Json>();
         _storage = storage;
         _storage_report = storage.add_replicator([this, schema_map](const Storage::ReplicatorEvent &ev)mutable noexcept{
-            if (ev.is_schema) {
-                auto sch = schema_key_to_hash(ev.key);
-                if (sch.has_value()) {
-                    try {
-                        auto js = Json::from_string(ev.value);
-                        schema_map[*sch] = std::move(js);
-                    } catch (...) {
-
-                    }
+            using Type = Storage::ReplicatorEvent::Type;
+            if (ev.type == Type::put_schema) {
+                try {
+                    schema_map[ev.schema_hash] = Json::from_string(ev.value);
+                } catch (...) {
+                    //an unparseable schema just means values render as binary
                 }
-            } else if (!ev.erase && ev.key.size() > sizeof(RecordKey)) {
-                    std::string_view s = ev.key;
-                    s.remove_suffix(16);
-                    if (s.back() == 0) {
-                        s.remove_suffix(1);
-                        auto rc = string_to_record_key(ev.key.substr(ev.key.size()-16));
-                        srl::SchemaHash sch;
-                        Json jval;
-                        extract_srl(ev.value, sch, sch);
-                        auto schiter = schema_map.find(sch);
-                        if (schiter == schema_map.end()) {
-                            jval = binary_content(ev.value);
-                        } else {
-                            auto arch = srl::string_deserializer(ev.value);
-                            jval = srl::deserialize_from_schema(schiter->second, arch, get_desrl_resolver());
-                        }            
-                        out(Event::var_update,{
-                            {"name", s},
-                            {"rev", {rc.ordered,rc.random}},
-                            {"val",std::move(jval)}
-                        });
-                    }
+            } else if (ev.type == Type::put_key_value) {
+                srl::SchemaHash sch;
+                Json jval;
+                extract_srl(ev.value, sch, sch);
+                auto schiter = schema_map.find(sch);
+                if (schiter == schema_map.end()) {
+                    jval = binary_content(ev.value);
+                } else {
+                    auto arch = srl::string_deserializer(ev.value);
+                    jval = srl::deserialize_from_schema(schiter->second, arch, get_desrl_resolver());
+                }
+                out(Event::var_update,{
+                    {"name", ev.name},
+                    {"rev", {ev.recordkey.ordered, ev.recordkey.random}},
+                    {"val",std::move(jval)}
+                });
             }
         });
     }

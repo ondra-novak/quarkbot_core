@@ -12,18 +12,18 @@ namespace quarkbot {
         std::scoped_lock _(_mx);
         _storage = std::move(storage);
         _conn = _storage.add_replicator([this](const Storage::ReplicatorEvent &ev) noexcept {
+            using Type = Storage::ReplicatorEvent::Type;
             std::scoped_lock _(_mx);
-            if (ev.is_schema) {
-                auto h = schema_key_to_hash(ev.key);
-                if (h.has_value()) {
-                    try {
-                        _schema_cache[*h] = Json::from_string(ev.value);
-                    } catch (const std::exception &e) {
-                        logWarning("Failed to parse schema for variable {}: {}", ev.key, e.what());
-                    }
-                }                
-            } else {
-                _updated_vars.insert(std::string(ev.key));
+            if (ev.type == Type::put_schema) {
+                try {
+                    _schema_cache[ev.schema_hash] = Json::from_string(ev.value);
+                } catch (const std::exception &e) {
+                    logWarning("Failed to parse schema {}: {}", ev.schema_hash, e.what());
+                }
+            } else if (ev.type == Type::put_key_value) {
+                //the record itself, not the last-revision pointer: a put with
+                //UpdateLastRevision::disable emits no pointer event but still updates
+                _updated_vars.insert(std::string(ev.name));
             }
         });
     }
