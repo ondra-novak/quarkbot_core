@@ -297,7 +297,10 @@ inline void MemStorage::apply(MemStorageTransaction::OpPut &&x) {
     std::string erased_key;
     if (x.mode != UpdateLastRevision::disable) {
         auto &currev = _storage[x.variable];
-        if (x.mode == UpdateLastRevision::enable_erase_last && !currev.empty()) {
+        //the width check is what makes decoding safe - a pointer of any other length is
+        //not a RecordKey, the same guard MemStorage::get applies before using one
+        if (x.mode == UpdateLastRevision::enable_erase_last
+                && currev.size() == recordkey_string_size) {
             erased_rev = string_to_record_key(currev);
             erased_key = wholeKey(x.variable, currev);
             _storage.erase(erased_key);
@@ -1176,7 +1179,7 @@ Replace the doc comment above `attach_replicator` with the new format and add th
 
 - [ ] **Step 5: Implement the encoder in `src/quarkbot/common/storage_msgbus_replicator.cpp`**
 
-Bump the content type and replace `replicate_with_buffer` / `attach_replicator` (lines 12-61). Keep `write_size_2`, `write_size` and `write_blob` as they are, and add `#include "storage_common.hpp"` plus `#include <span>`.
+Replace line 12 (`repl_content_type`) and lines 33-61 (`replicate_with_buffer`, `attach_replicator`). Leave `write_size_2`, `write_size` and `write_blob` (lines 14-31) untouched — `encode_replication_message` calls `write_blob`. Add `#include "storage_common.hpp"`, `#include "quarkbot/utils/bigendian.hpp"` and `#include <span>`.
 
 ```cpp
 constexpr std::string_view repl_content_type = "application/prs.db-repl.command.v2";
