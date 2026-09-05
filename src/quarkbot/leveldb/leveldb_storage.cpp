@@ -1,4 +1,5 @@
 #include "leveldb_storage.hpp"
+#include "../common/mem_storage.hpp"
 #include "../common/storage_common.hpp"
 #include "quarkbot/abstract/istorage.hpp"
 #include <algorithm>
@@ -339,7 +340,7 @@ void LevelDBStorage::add_replicator(Replicator::Connection consumer) {
 
 void LevelDBTransaction::put(const IStorage::ReplicatorEvent &event) {
     //the event key is logical - prepend the keyspace this transaction writes into
-    auto kid = event.schema_hash? LevelDBStorage::schema_keyspace: _storage->get_keyspace_id();
+    auto kid = event.is_schema? LevelDBStorage::schema_keyspace: _storage->get_keyspace_id();
     auto key = build_key(kid, event.key);
     if (event.erase) {
         _batch.Delete(key);
@@ -356,16 +357,52 @@ void LevelDBStorage::ReplicatorHandler::Delete(const leveldb::Slice& key) {
 }
 
 void LevelDBStorage::ReplicatorHandler::emit(const leveldb::Slice &key, std::string_view value, bool erase) {
+    using Type = ReplicatorEvent::Type;
     auto k = slice2string_view(key);
     if (k.empty()) return;
     auto kid = static_cast<std::uint8_t>(k[0]);
     bool is_schema = kid == schema_keyspace;
-    repl(ReplicatorEvent{k.substr(1), value, erase, is_schema});
+    auto logical = k.substr(1);
+
+    if (is_schema) {
+        //no IStorageTransaction operation erases a schema and delete_storage never
+        //touches the schema keyspace, so a delete here has no event type and is dropped
+        if (erase) return;
+        auto h = schema_key_to_hash(logical);
+        if (!h) return;
+        repl(ReplicatorEvent{.type = Type::put_schema, .value = value, .schema_hash = *h,
+                             .key = logical, .erase = erase, .is_schema = true});
+        return;
+    }
+
+    //a data key ends with '\0' plus the 16 byte RecordKey; a last-revision pointer is
+    //the bare name. A name whose own tail looks like that suffix would be misread, which
+    //is inherent to the layout - variable names are identifiers in practice.
+    const auto suffix = recordkey_string_size + 1;
+    if (logical.size() > suffix && logical[logical.size() - suffix] == '\0') {
+        repl(ReplicatorEvent{
+            .type = erase?Type::erase_key:Type::put_key_value,
+            .name = logical.substr(0, logical.size() - suffix),
+            .recordkey = string_to_record_key(logical.substr(logical.size() - recordkey_string_size)),
+            .value = value, .key = logical, .erase = erase});
+        return;
+    }
+
+    if (erase) {
+        repl(ReplicatorEvent{.type = Type::erase_latest, .name = logical,
+                             .key = logical, .erase = true});
+        return;
+    }
+    //the pointer keeps the newest revision in its *value*, not in its key
+    if (value.size() != recordkey_string_size) return;
+    repl(ReplicatorEvent{.type = Type::update_latest, .name = logical,
+                         .recordkey = string_to_record_key(value),
+                         .value = value, .key = logical});
 }
 
 
 LevelDBStorage::ReplicatorHandler LevelDBStorage::get_replicator()  {
-    return {_watcher, _keyspace_id};
+    return ReplicatorHandler{_watcher};
 }
 
 bool LevelDBStorage::is_schema_stored(srl::SchemaHash hash) const {

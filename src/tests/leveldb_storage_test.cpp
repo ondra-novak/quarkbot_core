@@ -444,8 +444,12 @@ void test_persistence() {
 
 ///Collected copy of a ReplicatorEvent - the event itself only borrows its buffers
 struct CapturedEvent {
-    std::string key;
+    IStorage::ReplicatorEvent::Type type;
+    std::string name;
+    RecordKey recordkey;
     std::string value;
+    srl::SchemaHash schema_hash;
+    std::string key;
     bool erase;
     bool is_schema;
 };
@@ -454,8 +458,10 @@ class EventLog {
 public:
     IStorage::Replicator::Connection attach(const PStorage &storage) {
         auto conn = IStorage::Replicator::create_connection(
-            [this](IStorage::ReplicatorEvent ev) noexcept {
-                events.push_back(CapturedEvent{std::string(ev.key), std::string(ev.value), ev.erase, ev.schema_hash});
+            [this](const IStorage::ReplicatorEvent &ev) noexcept {
+                events.push_back(CapturedEvent{ev.type, std::string(ev.name), ev.recordkey,
+                                               std::string(ev.value), ev.schema_hash,
+                                               std::string(ev.key), ev.erase, ev.is_schema});
             });
         storage->add_replicator(conn);
         return conn;
@@ -464,14 +470,19 @@ public:
     void replay_into(const PStorage &target) const {
         auto tx = target->write();
         for (const auto &ev: events) {
-            tx->put(IStorage::ReplicatorEvent{ev.key, ev.value, ev.erase, ev.is_schema});
+            tx->put(IStorage::ReplicatorEvent{
+                .type = ev.type, .name = ev.name, .recordkey = ev.recordkey,
+                .value = ev.value, .schema_hash = ev.schema_hash,
+                .key = ev.key, .erase = ev.erase, .is_schema = ev.is_schema});
         }
         tx->commit();
     }
+    void clear() {events.clear();}
     std::vector<CapturedEvent> events;
 };
 
 void test_replicator_fires_on_commit() {
+    using Type = IStorage::ReplicatorEvent::Type;
     TempDB tmp("replicator_commit");
     auto mgr = open_fresh(tmp.path);
     auto storage = mgr.get_storage("s");
@@ -492,14 +503,14 @@ void test_replicator_fires_on_commit() {
     tx->commit();
     // one data record plus the last-revision pointer
     CHECK_EQUAL(log.events.size(), 2u);
-    for (const auto &ev: log.events) CHECK(!ev.erase);
+    for (const auto &ev: log.events) CHECK(ev.type == Type::put_key_value || ev.type == Type::update_latest);
 
     log.events.clear();
     tx = storage->write();
     tx->erase("v", {1,0});
     tx->commit();
     CHECK_EQUAL(log.events.size(), 1u);
-    CHECK(log.events[0].erase);
+    CHECK(log.events[0].type == Type::erase_key);
 }
 
 
@@ -531,8 +542,9 @@ static void check_replication_fixture(const PStorage &storage) {
     CHECK_EQUAL(lst[1], "beta");
 }
 
-void test_replicated_key_is_logical() {
-    TempDB tmp("repl_logical");
+void test_replicated_event_is_typed() {
+    using Type = IStorage::ReplicatorEvent::Type;
+    TempDB tmp("repl_typed");
     auto mgr = open_fresh(tmp.path);
     auto storage = mgr.get_storage("s");
 
@@ -547,20 +559,60 @@ void test_replicated_key_is_logical() {
     // data record + last-revision pointer + schema
     CHECK_EQUAL(log.events.size(), 3u);
 
-    int schemas = 0;
+    int data = 0, pointer = 0, schemas = 0;
     for (const auto &ev: log.events) {
-        if (ev.is_schema) {
+        if (ev.type == Type::put_schema) {
             ++schemas;
+            CHECK_EQUAL(ev.schema_hash, srl::SchemaHash{0xABCD});
             CHECK_EQUAL(ev.value, "schema-blob");
-            CHECK_EQUAL(ev.key.size(), sizeof(srl::SchemaHash));
-        } else {
-            // logical key: "alpha", or "alpha" + '\0' + 16 byte RecordKey.
-            // No keyspace byte, so the name starts at offset 0.
-            CHECK(ev.key.compare(0, 5, "alpha") == 0);
-            CHECK(ev.key.size() == 5 || ev.key.size() == 5 + 1 + 2*sizeof(std::uint64_t));
+        } else if (ev.type == Type::put_key_value) {
+            ++data;
+            CHECK_EQUAL(ev.name, "alpha");
+            CHECK((ev.recordkey == RecordKey{1,0}));
+            CHECK_EQUAL(ev.value, "a1");
+        } else if (ev.type == Type::update_latest) {
+            ++pointer;
+            CHECK_EQUAL(ev.name, "alpha");
+            CHECK((ev.recordkey == RecordKey{1,0}));
         }
     }
+    CHECK_EQUAL(data, 1);
+    CHECK_EQUAL(pointer, 1);
     CHECK_EQUAL(schemas, 1);
+}
+
+void test_erase_variable_decomposes() {
+    using Type = IStorage::ReplicatorEvent::Type;
+    TempDB tmp("erase_decompose");
+    auto mgr = open_fresh(tmp.path);
+    auto storage = mgr.get_storage("s");
+
+    auto tx = storage->write();
+    tx->put("alpha", {1,0}, "a1");
+    tx->put("alpha", {2,0}, "a2");
+    tx->commit();
+
+    EventLog log;
+    auto conn = log.attach(storage);
+    tx = storage->write();
+    tx->erase("alpha");
+    tx->commit();
+
+    // LevelDB deletes record by record, so the batch never carries the bulk intent
+    int keys = 0, latest = 0;
+    for (const auto &ev: log.events) {
+        CHECK(ev.type != Type::erase_name);
+        if (ev.type == Type::erase_key) {
+            ++keys;
+            CHECK_EQUAL(ev.name, "alpha");
+            CHECK((ev.recordkey == RecordKey{1,0} || ev.recordkey == RecordKey{2,0}));
+        } else if (ev.type == Type::erase_latest) {
+            ++latest;
+            CHECK_EQUAL(ev.name, "alpha");
+        }
+    }
+    CHECK_EQUAL(keys, 2);
+    CHECK_EQUAL(latest, 1);
 }
 
 void test_replication_to_other_keyspace() {
@@ -615,7 +667,8 @@ int main() {
     test_schema_binary();
     test_persistence();
     test_replicator_fires_on_commit();
-    test_replicated_key_is_logical();
+    test_replicated_event_is_typed();
+    test_erase_variable_decomposes();
     test_replication_to_other_keyspace();
     test_replication_to_mem_storage();
     return 0;

@@ -259,10 +259,113 @@ void test_records_sharing_ordered_value() {
     check_range(storage, {30,0}, {40,0}, desc, {});
 }
 
+///Collected copy of a ReplicatorEvent - the event itself only borrows its buffers
+struct CapturedEvent {
+    IStorage::ReplicatorEvent::Type type;
+    std::string name;
+    RecordKey recordkey;
+    std::string value;
+    srl::SchemaHash schema_hash;
+};
+
+///Records every event a storage emits, in order
+class EventLog {
+public:
+    IStorage::Replicator::Connection attach(const PStorage &storage) {
+        auto conn = IStorage::Replicator::create_connection(
+            [this](const IStorage::ReplicatorEvent &ev) noexcept {
+                events.push_back(CapturedEvent{ev.type, std::string(ev.name), ev.recordkey,
+                                               std::string(ev.value), ev.schema_hash});
+            });
+        storage->add_replicator(conn);
+        return conn;
+    }
+    void clear() {events.clear();}
+    std::vector<CapturedEvent> events;
+};
+
+void test_put_event_sequence() {
+    using Type = IStorage::ReplicatorEvent::Type;
+    auto storage = MemStorage::create();
+    EventLog log;
+    auto conn = log.attach(storage);
+
+    // disable: the data record alone, no pointer
+    auto tx = storage->write();
+    tx->put("v", {1,0}, "c1", UpdateLastRevision::disable);
+    tx->commit();
+    CHECK_EQUAL(log.events.size(), 1u);
+    CHECK(log.events[0].type == Type::put_key_value);
+    CHECK_EQUAL(log.events[0].name, "v");
+    CHECK((log.events[0].recordkey == RecordKey{1,0}));
+    CHECK_EQUAL(log.events[0].value, "c1");
+
+    // enable: the data record, then the pointer
+    log.clear();
+    tx = storage->write();
+    tx->put("v", {2,0}, "c2", UpdateLastRevision::enable);
+    tx->commit();
+    CHECK_EQUAL(log.events.size(), 2u);
+    CHECK(log.events[0].type == Type::put_key_value);
+    CHECK((log.events[0].recordkey == RecordKey{2,0}));
+    CHECK(log.events[1].type == Type::update_latest);
+    CHECK_EQUAL(log.events[1].name, "v");
+    CHECK((log.events[1].recordkey == RecordKey{2,0}));
+
+    // enable_erase_last: the data record, the erase of the *previous* revision, the pointer
+    log.clear();
+    tx = storage->write();
+    tx->put("v", {3,0}, "c3", UpdateLastRevision::enable_erase_last);
+    tx->commit();
+    CHECK_EQUAL(log.events.size(), 3u);
+    CHECK(log.events[0].type == Type::put_key_value);
+    CHECK((log.events[0].recordkey == RecordKey{3,0}));
+    CHECK(log.events[1].type == Type::erase_key);
+    CHECK_EQUAL(log.events[1].name, "v");
+    CHECK((log.events[1].recordkey == RecordKey{2,0}));
+    CHECK(log.events[2].type == Type::update_latest);
+    CHECK((log.events[2].recordkey == RecordKey{3,0}));
+}
+
+void test_schema_event_is_numeric() {
+    using Type = IStorage::ReplicatorEvent::Type;
+    auto storage = MemStorage::create();
+    EventLog log;
+    auto conn = log.attach(storage);
+
+    auto tx = storage->write();
+    tx->put_schema_binary(srl::SchemaHash{0x1234}, "blob");
+    tx->commit();
+
+    CHECK_EQUAL(log.events.size(), 1u);
+    CHECK(log.events[0].type == Type::put_schema);
+    CHECK_EQUAL(log.events[0].schema_hash, srl::SchemaHash{0x1234});
+    CHECK_EQUAL(log.events[0].value, "blob");
+}
+
+void test_erase_single_revision_event() {
+    using Type = IStorage::ReplicatorEvent::Type;
+    auto storage = MemStorage::create();
+    auto tx = storage->write();
+    tx->put("v", {1,0}, "c1", UpdateLastRevision::disable);
+    tx->commit();
+
+    EventLog log;
+    auto conn = log.attach(storage);
+    tx = storage->write();
+    tx->erase("v", {1,0});
+    tx->commit();
+
+    CHECK_EQUAL(log.events.size(), 1u);
+    CHECK(log.events[0].type == Type::erase_key);
+    CHECK_EQUAL(log.events[0].name, "v");
+    CHECK((log.events[0].recordkey == RecordKey{1,0}));
+}
+
 ///forwards every committed change of `from` into `to`, one transaction per event
 static IStorage::Replicator::Connection forward(const PStorage &from, const PStorage &to) {
     auto conn = IStorage::Replicator::create_connection(
-        [to](IStorage::ReplicatorEvent ev) noexcept {
+        [to](const IStorage::ReplicatorEvent &ev) noexcept {
             auto tx = to->write();
             tx->put(ev);
             tx->commit();
@@ -307,7 +410,7 @@ void test_erase_replicates_as_erase() {
     auto storage = MemStorage::create();
     std::vector<bool> erase_flags;
     auto conn = IStorage::Replicator::create_connection(
-        [&](IStorage::ReplicatorEvent ev) noexcept {
+        [&](const IStorage::ReplicatorEvent &ev) noexcept {
             erase_flags.push_back(ev.erase);
         });
     storage->add_replicator(conn);
@@ -337,6 +440,9 @@ int main() {
     test_records_sharing_ordered_value();
     test_replication_cascade();
     test_erase_replicates_as_erase();
+    test_put_event_sequence();
+    test_schema_event_is_numeric();
+    test_erase_single_revision_event();
     return 0;
 }
 

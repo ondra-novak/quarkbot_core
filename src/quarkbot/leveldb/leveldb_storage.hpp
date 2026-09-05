@@ -96,13 +96,11 @@ namespace quarkbot {
         */
         class ReplicatorHandler final: public leveldb::WriteBatch::Handler {
         public:
-            ReplicatorHandler(Replicator &repl, std::uint8_t keyspace_id)
-                :repl(repl), keyspace_id(keyspace_id) {}
+            explicit ReplicatorHandler(Replicator &repl):repl(repl) {}
             virtual void Put(const leveldb::Slice& key, const leveldb::Slice& value) override;
             virtual void Delete(const leveldb::Slice& key) override;
         protected:
             Replicator &repl;
-            std::uint8_t keyspace_id;
 
             void emit(const leveldb::Slice &key, std::string_view value, bool erase);
         };

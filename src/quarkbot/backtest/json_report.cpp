@@ -147,7 +147,7 @@ namespace quarkbot {
         auto schema_map = std::unordered_map<srl::SchemaHash, Json>();
         _storage = storage;
         _storage_report = storage.add_replicator([this, schema_map](const Storage::ReplicatorEvent &ev)mutable noexcept{
-            if (ev.schema_hash) {
+            if (ev.is_schema) {
                 auto sch = schema_key_to_hash(ev.key);
                 if (sch.has_value()) {
                     try {

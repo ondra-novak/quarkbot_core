@@ -37,7 +37,7 @@ static auto reporter_replicator(std::ostream &out) {
     std::unordered_map<srl::SchemaHash, Json> schema_cache;
     return [&out, schema_cache](const Storage::ReplicatorEvent &ev)mutable noexcept{
         try {
-            if (ev.schema_hash) {
+            if (ev.is_schema) {
                 schema_cache.emplace(schema_key_to_hash(ev.key).value(), Json::from_string(ev.value));            
             } else {
                 srl::SchemaHash hash;

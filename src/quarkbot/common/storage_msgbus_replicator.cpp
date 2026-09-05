@@ -33,7 +33,7 @@ static std::uint8_t *write_blob(std::uint8_t *iter, std::string_view data) {
 static void replicate_with_buffer(const Storage::ReplicatorEvent &event, std::uint8_t *buffer, MessageBus &bus, const std::string &target) {
     auto *iter = buffer;
     *iter++ = event.erase?'E':'P';
-    *iter++ = event.schema_hash?'S':'R';
+    *iter++ = event.is_schema?'S':'R';
     iter = write_blob(iter, event.key);
     iter = write_blob(iter, event.value);
     std::size_t final_size = static_cast<std::size_t>(iter - buffer);
@@ -98,8 +98,10 @@ bool replicate_from_message(const std::string_view &msg, StorageTransaction &trn
 
     std::string_view key = extract_blob(iter, end);
     std::string_view value = extract_blob(iter, end);
+    using Type = Storage::ReplicatorEvent::Type;
     trn.put(Storage::ReplicatorEvent{
-        key, value, erase, schema
+        .type = schema?Type::put_schema:(erase?Type::erase_key:Type::put_key_value),
+        .value = value, .key = key, .erase = erase, .is_schema = schema
     });
     return true;
 }

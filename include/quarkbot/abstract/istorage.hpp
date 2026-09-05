@@ -37,22 +37,67 @@ namespace quarkbot {
         
         ///Describes single record change performed by a committed transaction
         /**
-            The event carries a *logical* key - it never contains any backend specific
-            keyspace or instance prefix. This makes events portable: they can be applied
-            to a different backend, or to a different logical keyspace of the same backend,
-            via IStorageTransaction::put(const ReplicatorEvent &).
+            The event is *logical*: it never carries a backend specific keyspace or
+            instance prefix, nor the binary key layout a backend happens to use. A
+            backend decodes its own key format when emitting events and encodes it
+            back when applying them, so an event stays applicable to a different
+            keyspace, a different backend, or a store that is not key-value at all -
+            a relational table keyed by (name, recordkey).
+
+            Which fields carry meaning is decided by `type`:
+
+            | type          | name | recordkey | value | schema_hash |
+            |---------------|------|-----------|-------|-------------|
+            | put_schema    |      |           |  yes  |     yes     |
+            | put_key_value | yes  |    yes    |  yes  |             |
+            | update_latest | yes  |    yes    |       |             |
+            | erase_key     | yes  |    yes    |       |             |
+            | erase_latest  | yes  |           |       |             |
+            | erase_name    | yes  |           |       |             |
+
+            The string_view members borrow their buffers and are valid only for the
+            duration of the handler call. A handler that retains an event copies it.
         */
         struct ReplicatorEvent {
 
+            ///Kind of the change; selects which of the fields below carry meaning
+            enum class Type: std::uint8_t {
+                ///a schema was stored - schema_hash, value
+                put_schema,
+                ///a record was written - name, recordkey, value
+                put_key_value,
+                ///the last-revision pointer of a variable now points at recordkey - name, recordkey
+                update_latest,
+                ///a single record was removed - name, recordkey
+                erase_key,
+                ///the last-revision pointer of a variable was removed - name
+                erase_latest,
+                ///every record of a variable was removed, its pointer included - name
+                erase_name,
+            };
 
-            std::string_view key;
-            std::string_view value;
-            bool erase;
-            bool schema_hash;
+            Type type;
+            ///name of the variable
+            std::string_view name = {};
+            ///which revision of the variable
+            RecordKey recordkey = {};
+            ///stored content
+            std::string_view value = {};
+            ///hash of the stored schema
+            srl::SchemaHash schema_hash = {};
+
+            ///@{
+            ///Transitional binary form, kept only until every consumer reads the typed
+            ///fields above. Removed by the "remove the transitional fields" step of the
+            ///typed-ReplicatorEvent change. Do not read these in new code.
+            std::string_view key = {};
+            bool erase = false;
+            bool is_schema = false;
+            ///@}
         };
 
-        using Buffer = std::string;    
-        using Replicator = signals::SignalSlot<void(ReplicatorEvent)>;
+        using Buffer = std::string;
+        using Replicator = signals::SignalSlot<void(const ReplicatorEvent &)>;
 
         struct Extractor {
 

@@ -13,7 +13,7 @@ namespace quarkbot {
         _storage = std::move(storage);
         _conn = _storage.add_replicator([this](const Storage::ReplicatorEvent &ev) noexcept {
             std::scoped_lock _(_mx);
-            if (ev.schema_hash) {
+            if (ev.is_schema) {
                 auto h = schema_key_to_hash(ev.key);
                 if (h.has_value()) {
                     try {

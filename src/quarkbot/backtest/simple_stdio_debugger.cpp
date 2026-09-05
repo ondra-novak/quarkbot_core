@@ -39,7 +39,7 @@ public:
             _inspector.attach_storage(_store);
             _watcher = _store.add_replicator([this](const Storage::ReplicatorEvent &ev) noexcept {
                 std::scoped_lock lock(_mx);
-                if (!ev.schema_hash) {
+                if (!ev.is_schema) {
                     auto it = _watches.find(ev.key);
                     if (it != _watches.end() && it->second) {
                         _control->set_running(false);
