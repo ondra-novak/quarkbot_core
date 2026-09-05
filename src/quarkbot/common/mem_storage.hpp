@@ -221,21 +221,13 @@ inline PStorageTransaction MemStorage::write(CommitMode) {
 inline void MemStorage::apply(MemStorageTransaction::OpErase &&x) {
     using Type = ReplicatorEvent::Type;
     _storage.erase(x.variable);
-    _watcher(ReplicatorEvent{.type = Type::erase_latest, .name = x.variable,
-                             .key = x.variable, .erase = true});
     std::string beg = x.variable + '\0';
     std::string end = x.variable + '\x01';
-    auto beg_iter = _storage.lower_bound(beg);
-    auto end_iter = _storage.lower_bound(end);
-    // +1 skips the '\0' separator between variable_name and the big-endian RecordKey
-    auto sz = x.variable.size() + 1;
-    auto iter = beg_iter;
-    while (iter != end_iter ) {
-        _watcher(ReplicatorEvent{.type = Type::erase_key, .name = x.variable,
-                                 .recordkey = string_to_record_key(std::string_view(iter->first).substr(sz)),
-                                 .key = iter->first, .erase = true});
-        iter = _storage.erase(iter);
-    }
+    _storage.erase(_storage.lower_bound(beg), _storage.lower_bound(end));
+    //the caller asked for the whole variable, so say that once - a replica backed by a
+    //relational store turns it into a single DELETE ... WHERE name = ?. A LevelDB source
+    //cannot do this: its committed batch holds per-record deletions and nothing else.
+    _watcher(ReplicatorEvent{.type = Type::erase_name, .name = x.variable});
 }
 inline void MemStorage::apply(MemStorageTransaction::OpEraseRev &&x) {
     using Type = ReplicatorEvent::Type;

@@ -437,27 +437,24 @@ void test_replication_cascade() {
     }
 }
 
-void test_erase_replicates_as_erase() {
+void test_erase_emits_erase_name() {
+    using Type = IStorage::ReplicatorEvent::Type;
     auto storage = MemStorage::create();
-    std::vector<bool> erase_flags;
-    auto conn = IStorage::Replicator::create_connection(
-        [&](const IStorage::ReplicatorEvent &ev) noexcept {
-            erase_flags.push_back(ev.erase);
-        });
-    storage->add_replicator(conn);
-
     auto tx = storage->write();
     tx->put("var", {1,0}, "v1");
+    tx->put("var", {2,0}, "v2");
     tx->commit();
-    erase_flags.clear();
 
+    EventLog log;
+    auto conn = log.attach(storage);
     tx = storage->write();
     tx->erase("var");
     tx->commit();
 
-    // the data record and the last-revision pointer, both as deletions
-    CHECK_EQUAL(erase_flags.size(), 2u);
-    for (bool f: erase_flags) CHECK(f);
+    // MemStorage has the bulk intent, so it states it once rather than record by record
+    CHECK_EQUAL(log.events.size(), 1u);
+    CHECK(log.events[0].type == Type::erase_name);
+    CHECK_EQUAL(log.events[0].name, "var");
 }
 
 
@@ -470,7 +467,7 @@ int main() {
     test_range_direction();
     test_records_sharing_ordered_value();
     test_replication_cascade();
-    test_erase_replicates_as_erase();
+    test_erase_emits_erase_name();
     test_put_event_sequence();
     test_schema_event_is_numeric();
     test_erase_single_revision_event();
