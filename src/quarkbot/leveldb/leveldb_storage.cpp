@@ -1,5 +1,4 @@
 #include "leveldb_storage.hpp"
-#include "../common/mem_storage.hpp"
 #include "../common/storage_common.hpp"
 #include "quarkbot/abstract/istorage.hpp"
 #include <algorithm>
@@ -390,10 +389,11 @@ void LevelDBStorage::ReplicatorHandler::emit(const leveldb::Slice &key, std::str
         //no IStorageTransaction operation erases a schema and delete_storage never
         //touches the schema keyspace, so a delete here has no event type and is dropped
         if (erase) return;
-        auto h = schema_key_to_hash(logical);
-        if (!h) return;
-        repl(ReplicatorEvent{.type = Type::put_schema, .value = value, .schema_hash = *h,
-                             .key = logical, .erase = erase, .is_schema = true});
+        if (logical.size() != sizeof(srl::SchemaHash)) return;
+        std::array<char, sizeof(srl::SchemaHash)> bin;
+        std::copy(logical.begin(), logical.end(), bin.begin());
+        repl(ReplicatorEvent{.type = Type::put_schema, .value = value,
+                             .schema_hash = std::bit_cast<srl::SchemaHash>(bin)});
         return;
     }
 
@@ -406,20 +406,18 @@ void LevelDBStorage::ReplicatorHandler::emit(const leveldb::Slice &key, std::str
             .type = erase?Type::erase_key:Type::put_key_value,
             .name = logical.substr(0, logical.size() - suffix),
             .recordkey = string_to_record_key(logical.substr(logical.size() - recordkey_string_size)),
-            .value = value, .key = logical, .erase = erase});
+            .value = value});
         return;
     }
 
     if (erase) {
-        repl(ReplicatorEvent{.type = Type::erase_latest, .name = logical,
-                             .key = logical, .erase = true});
+        repl(ReplicatorEvent{.type = Type::erase_latest, .name = logical});
         return;
     }
     //the pointer keeps the newest revision in its *value*, not in its key
     if (value.size() != recordkey_string_size) return;
     repl(ReplicatorEvent{.type = Type::update_latest, .name = logical,
-                         .recordkey = string_to_record_key(value),
-                         .value = value, .key = logical});
+                         .recordkey = string_to_record_key(value)});
 }
 
 

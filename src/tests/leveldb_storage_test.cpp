@@ -449,9 +449,6 @@ struct CapturedEvent {
     RecordKey recordkey;
     std::string value;
     srl::SchemaHash schema_hash;
-    std::string key;
-    bool erase;
-    bool is_schema;
 };
 
 class EventLog {
@@ -460,8 +457,7 @@ public:
         auto conn = IStorage::Replicator::create_connection(
             [this](const IStorage::ReplicatorEvent &ev) noexcept {
                 events.push_back(CapturedEvent{ev.type, std::string(ev.name), ev.recordkey,
-                                               std::string(ev.value), ev.schema_hash,
-                                               std::string(ev.key), ev.erase, ev.is_schema});
+                                               std::string(ev.value), ev.schema_hash});
             });
         storage->add_replicator(conn);
         return conn;
@@ -472,8 +468,7 @@ public:
         for (const auto &ev: events) {
             tx->apply(IStorage::ReplicatorEvent{
                 .type = ev.type, .name = ev.name, .recordkey = ev.recordkey,
-                .value = ev.value, .schema_hash = ev.schema_hash,
-                .key = ev.key, .erase = ev.erase, .is_schema = ev.is_schema});
+                .value = ev.value, .schema_hash = ev.schema_hash});
         }
         tx->commit();
     }

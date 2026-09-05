@@ -85,15 +85,6 @@ namespace quarkbot {
             std::string_view value = {};
             ///hash of the stored schema
             srl::SchemaHash schema_hash = {};
-
-            ///@{
-            ///Transitional binary form, kept only until every consumer reads the typed
-            ///fields above. Removed by the "remove the transitional fields" step of the
-            ///typed-ReplicatorEvent change. Do not read these in new code.
-            std::string_view key = {};
-            bool erase = false;
-            bool is_schema = false;
-            ///@}
         };
 
         using Buffer = std::string;

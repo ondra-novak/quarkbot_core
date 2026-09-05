@@ -233,8 +233,7 @@ inline void MemStorage::apply(MemStorageTransaction::OpEraseRev &&x) {
     using Type = ReplicatorEvent::Type;
     std::string key = wholeKey(x.variable, x.rev);
     _storage.erase(key);
-    _watcher(ReplicatorEvent{.type = Type::erase_key, .name = x.variable, .recordkey = x.rev,
-                             .key = key, .erase = true});
+    _watcher(ReplicatorEvent{.type = Type::erase_key, .name = x.variable, .recordkey = x.rev});
 }
 inline void MemStorage::apply(MemStorageTransaction::OpPut &&x) {
     using Type = ReplicatorEvent::Type;
@@ -258,34 +257,20 @@ inline void MemStorage::apply(MemStorageTransaction::OpPut &&x) {
     std::string key = wholeKey(x.variable, tmp);
     auto &ref = _storage[key] = std::move(x.data);
     _watcher(ReplicatorEvent{.type = Type::put_key_value, .name = x.variable,
-                             .recordkey = x.key, .value = ref, .key = key});
+                             .recordkey = x.key, .value = ref});
     if (erased_rev) {
         _watcher(ReplicatorEvent{.type = Type::erase_key, .name = x.variable,
-                                 .recordkey = *erased_rev, .key = erased_key, .erase = true});
+                                 .recordkey = *erased_rev});
     }
     if (x.mode != UpdateLastRevision::disable) {
         _watcher(ReplicatorEvent{.type = Type::update_latest, .name = x.variable,
-                                 .recordkey = x.key, .value = tmp, .key = x.variable});
+                                 .recordkey = x.key});
     }
 }
-///the logical key of a schema record is the binary SchemaHash
-inline std::array<char, sizeof(srl::SchemaHash)> schema_hash_to_key(srl::SchemaHash h) {
-    return std::bit_cast<std::array<char, sizeof(srl::SchemaHash)> >(h);
-}
-
-inline std::optional<srl::SchemaHash> schema_key_to_hash(std::string_view key) {
-    if (key.size() != sizeof(srl::SchemaHash)) return {};
-    std::array<char, sizeof(srl::SchemaHash)> bin;
-    std::copy(key.begin(), key.end(), bin.begin());
-    return std::bit_cast<srl::SchemaHash>(bin);
-}
-
 inline void MemStorage::apply(MemStorageTransaction::OpPutSchema &&x) {
     using Type = ReplicatorEvent::Type;
     auto &ref = _schemas[x.hash] = std::move(x.schema);
-    auto key = schema_hash_to_key(x.hash);
-    _watcher(ReplicatorEvent{.type = Type::put_schema, .value = ref, .schema_hash = x.hash,
-                             .key = {key.data(), key.size()}, .is_schema = true});
+    _watcher(ReplicatorEvent{.type = Type::put_schema, .value = ref, .schema_hash = x.hash});
 }
 
 
@@ -296,33 +281,30 @@ inline void MemStorage::apply(MemStorageTransaction::OpReplicate &&x) {
     switch (x.type) {
         case Type::put_schema: {
             auto &ref = _schemas[x.schema_hash] = std::move(x.value);
-            auto key = schema_hash_to_key(x.schema_hash);
             _watcher(ReplicatorEvent{.type = Type::put_schema, .value = ref,
-                                     .schema_hash = x.schema_hash,
-                                     .key = {key.data(), key.size()}, .is_schema = true});
+                                     .schema_hash = x.schema_hash});
         } break;
         case Type::put_key_value: {
             std::string key = wholeKey(x.name, x.recordkey);
             auto &ref = _storage[key] = std::move(x.value);
             _watcher(ReplicatorEvent{.type = Type::put_key_value, .name = x.name,
-                                     .recordkey = x.recordkey, .value = ref, .key = key});
+                                     .recordkey = x.recordkey, .value = ref});
         } break;
         case Type::update_latest: {
             auto rk = record_key_to_string(x.recordkey);
             _storage[x.name] = rk;
             _watcher(ReplicatorEvent{.type = Type::update_latest, .name = x.name,
-                                     .recordkey = x.recordkey, .value = rk, .key = x.name});
+                                     .recordkey = x.recordkey});
         } break;
         case Type::erase_key: {
             std::string key = wholeKey(x.name, x.recordkey);
             _storage.erase(key);
             _watcher(ReplicatorEvent{.type = Type::erase_key, .name = x.name,
-                                     .recordkey = x.recordkey, .key = key, .erase = true});
+                                     .recordkey = x.recordkey});
         } break;
         case Type::erase_latest:
             _storage.erase(x.name);
-            _watcher(ReplicatorEvent{.type = Type::erase_latest, .name = x.name,
-                                     .key = x.name, .erase = true});
+            _watcher(ReplicatorEvent{.type = Type::erase_latest, .name = x.name});
             break;
         case Type::erase_name:
             apply(MemStorageTransaction::OpErase{std::move(x.name)});
