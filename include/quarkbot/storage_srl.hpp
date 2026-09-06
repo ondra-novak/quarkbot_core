@@ -10,16 +10,22 @@
 #include <iterator>
 namespace quarkbot {
 
-template<typename T>
-inline bool extract_srl(std::string_view value, T &out, srl::SchemaHash &type_hash) {
-    if (value.size() < sizeof(srl::SchemaHash)) return false;
+inline std::pair<std::optional<srl::SchemaHash>, std::string_view> extrach_schema_hash(std::string_view value) {
+    if (value.size() < sizeof(srl::SchemaHash)) return {std::nullopt, value};
     std::array<char, sizeof(srl::SchemaHash)> buff;
     std::string_view tail = value.substr(value.size() - sizeof(srl::SchemaHash));
     std::copy(tail.begin(), tail.end(),buff.begin());
     value.remove_suffix(sizeof(srl::SchemaHash));
-    
-    type_hash = std::bit_cast<srl::SchemaHash>(buff);
-    
+    return {std::bit_cast<srl::SchemaHash>(buff), value}; 
+}
+
+template<typename T>
+inline bool extract_srl(std::string_view value, T &out, srl::SchemaHash &type_hash) {
+    auto ex = extrach_schema_hash(value);
+    if (!ex.first) return false;
+    value = ex.second;
+    type_hash = ex.first.value();
+        
     if (type_hash != srl::schema_hash<T>) return false;
 
     bool valid = false;
