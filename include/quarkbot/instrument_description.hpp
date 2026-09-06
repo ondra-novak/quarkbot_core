@@ -4,7 +4,7 @@
 #include "quarkbot/types.hpp"
 #include "quarkbot/underlying.hpp"
 #include "quarkbot/utils/lookup.hpp"
-#include "quarkbot/utils/tagset.hpp"
+#include <unordered_map>
 namespace quarkbot {
 
 enum class InstrumentCategory {
@@ -57,6 +57,10 @@ struct InstrumentGeometry {
 
 };
 
+using InstrumentPropValue = std::variant<std::string, Decimal,  bool>;
+
+using InstrumentProperties = std::unordered_map<std::string, InstrumentPropValue>;
+
 struct InstrumentDescription : ContractInfo, InstrumentGeometry{            
     ///underlying currency for quotes
     UnderlyingCurrency quote_currency = {};
@@ -68,16 +72,11 @@ struct InstrumentDescription : ContractInfo, InstrumentGeometry{
     std::string name = {};
     ///Instrument category (optional description)
     InstrumentCategory category = {};
-    ///various tags (optional)
-    TagSet tags = {};
+    ///various properties (optional)
+    InstrumentProperties properties = {};
     ///instrument time zone - can be nullptr for UTC
     const std::chrono::time_zone *time_zone = {};
-    ///instrument unique ID related to given exchange - not always used (optional)
-    std::size_t uid = 0;
-
-    ///contains class hash of extension. It allows to check that structure contains correct extension. Default value is 0, no extension
-    std::size_t extension_hash = 0;
-    
+   
 
     ///instrument is leveraged
     bool is_leveraged() const {return leverage > 0;}

@@ -15,7 +15,7 @@
 #include "quarkbot/underlying.hpp"
 #include "quarkbot/utils/lookup.hpp"
 #include "quarkbot/utils/simple_ini.hpp"
-#include "quarkbot/utils/tagset.hpp"
+#include "quarkbot/utils/string_utils.hpp"
 namespace quarkbot {
 
 class InstrumentCollector {
@@ -38,7 +38,8 @@ public:
                                std::size_t InstrumentDescription::*,
                                const std::chrono::time_zone *InstrumentDescription::*,
                                Decimal InstrumentDescription::*,
-                               Decimal InstrumentGeometry::*>;
+                               Decimal InstrumentGeometry::*,
+                               InstrumentProperties InstrumentDescription::*>;
 
     static constexpr auto field_lookup = make_lookup_table<std::string_view, Field>({
         {"quote_currency", &InstrumentDescription::quote_currency},
@@ -46,7 +47,7 @@ public:
         {"asset_wallet", &InstrumentDescription::asset_wallet},
         {"name", &InstrumentDescription::name},
         {"category", &InstrumentDescription::category},
-        {"uid", &InstrumentDescription::uid},
+        {"property", &InstrumentDescription::properties},
         {"type", &InstrumentDescription::type},
         {"time_zone", &InstrumentDescription::time_zone},
         {"multiplier", &InstrumentDescription::multiplier},
@@ -152,6 +153,25 @@ public:
                         [&](const std::chrono::time_zone *InstrumentDescription::*ptr) {
                             auto &tzdb = std::chrono::get_tzdb();
                             desc.*ptr = tzdb.locate_zone(row.value);                                                        
+                        },
+                        [&](InstrumentProperties InstrumentDescription::*ptr) {
+                            auto tmp = row.value;
+                            auto key = trim(split(tmp,":"));
+                            auto val = trim(tmp);
+                            InstrumentProperties &props = desc.*ptr;
+                            InstrumentPropValue &prop = props[std::string(key)];
+                            if (val == "true") {
+                                prop = true;
+                            } else if (val == "false") {
+                                prop = false;
+                            } else {
+                                try {
+                                    Decimal d = Decimal::from_string(val);
+                                    prop = d;                                
+                                } catch (...) {
+                                    prop = std::string(val);
+                                }
+                            }
                         }
                     );
                 

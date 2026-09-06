@@ -23,7 +23,6 @@ set(BASIC_TESTS
     csv_report.cpp
     json_report.cpp
     config.cpp
-    tagset.cpp
     strategy_fragment.cpp
     replay_csv.cpp
     persistent.cpp
