@@ -100,8 +100,18 @@ namespace quarkbot {
     }
 
     void ThreadExecutor::worker(std::stop_token tkn) {
-        _current_worker = shared_from_this();
-        std::stop_callback _(tkn, [&]{_cv.notify_one();});
+        //weak_from_this(), not shared_from_this(): the owner can drop the last reference
+        //before this thread gets here, and shared_from_this() would then throw bad_weak_ptr
+        //out of the thread entry point. An expired _current_worker is correct in that case -
+        //the loop below exits immediately anyway.
+        _current_worker = weak_from_this();
+        //_mx must be held to notify: the stop state is set outside the mutex, so without it
+        //the notification can land in the window between the stop_requested() check below and
+        //_cv.wait(), get lost, and leave ~ThreadExecutor blocked in join() forever.
+        std::stop_callback _(tkn, [&]{
+            std::lock_guard lk(_mx);
+            _cv.notify_one();
+        });
         //lock internals
         std::unique_lock lk(_mx);
         while (!tkn.stop_requested()) {            
