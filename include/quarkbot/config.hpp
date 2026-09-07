@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <optional>
+#include <string_view>
 #include <type_traits>
 namespace quarkbot {
 
@@ -124,9 +125,8 @@ public:
             return source(key).transform([](const ConfigValueType & x){return get_value(x);});
         }
 
-        ///automatic conversion operator to various types, enabled for bool, arithmetic types, enums with string lookup and types with from_string method
         template<typename T> 
-        constexpr operator T() const {
+        constexpr T as() const {
             std::optional<ConfigValueType> value = source(key);
 
             if (!value.has_value()) {
@@ -137,6 +137,18 @@ public:
 
             return parse_value(actual_str, std::type_identity<T>{});
         }    
+
+        constexpr operator bool() const {return as<bool>();}
+        constexpr operator std::string() const {return as<std::string>();}
+        operator std::filesystem::path() const {return as<std::filesystem::path>();}
+        constexpr operator std::string_view() const {return as<std::string_view>();}
+        template<HasStringLookup _X>
+        constexpr operator _X() const {return as<_X>();}
+        template<HasFromStringMethod _X>
+        constexpr operator _X() const {return as<_X>();}
+        template<IsArithmetic _X>
+        constexpr operator _X() const {return as<_X>();}
+
 
         ///overload of operator() to provide default value if key is not found,
         template<typename T> 

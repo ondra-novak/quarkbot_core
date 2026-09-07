@@ -9,6 +9,7 @@
 #include <limits>
 #include <stdexcept>
 #include <tuple>
+#include <type_traits>
 namespace quarkbot {
 
 template<typename T> struct FromString;
@@ -17,6 +18,9 @@ template<typename T>
 inline constexpr std::nullptr_t string_lookup = {};
 template<typename T>
 inline constexpr bool assert_false = false;
+
+template<typename T>
+concept IsArithmetic = std::is_arithmetic_v<T>;
 
 template<typename T>
 concept HasFromStringMethod = requires(std::string_view v) {
