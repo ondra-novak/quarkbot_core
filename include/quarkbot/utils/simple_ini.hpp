@@ -75,7 +75,7 @@ public:
             if (ln->empty()) continue;
             if (ln->starts_with('#') || ln->starts_with(';')) {
                 if constexpr(need_comments) {
-                    row = Row{_current_section, {} , {}, ln};
+                    row = Row{_current_section, {} , {}, *ln};
                     return true;                    
                 } else {
                     continue;
@@ -85,15 +85,40 @@ public:
                 _current_section = std::string(ln->substr(1, ln->length()-2));
                 continue;;
             } 
+
+                        
+            auto remove_quotes = [](std::string_view x) {   //"value" -> value 
+                if (x.size()>1 && ((x.starts_with('"') && x.ends_with('"')) || (x.starts_with('\'') && x.ends_with('\'')))) {
+                    x.remove_prefix(1);
+                    x.remove_suffix(1);
+                } 
+                return x;
+            };
+            char fch = (*ln)[0];    // get first char, can be ' or "
+            if (fch == '"' || fch == '\'') { //test first char
+                std::string_view ln2 = ln->substr(1);     //remove first char
+                auto e = ln2.find(fch);     //find end ' or "  (no escape here, first appearence)
+                if (e != ln2.npos) {                        //found
+                    auto key = ln2.substr(0,e); //retrieve key
+                    ln2 = trim(ln2.substr(e+1));                //trim key part
+                    if (ln2.starts_with('=')) {                         //rest line should be =value
+                        auto value = remove_quotes(trim(ln2.substr(1)));    //read value, remove quotes
+                        row = Row(_current_section, key, value);                //done
+                        return true;
+                    }
+                }
+                //all failed? "key" extra = value | "key = value | "key = value" 
+                //fallback : ignore quotes around the key
+            }
             auto sep = ln->find('=');
-            if (sep == ln->npos) {
-                row = Row(_current_section, *ln, {});
+            if (sep != ln->npos) {
+                auto key = trim(ln->substr(0,sep));
+                auto value = remove_quotes(trim(ln->substr(sep+1)));
+                row = Row(_current_section, key, value);
                 return true;
-            } 
-            auto key = trim(ln->substr(0,sep));
-            auto value = trim(ln->substr(sep+1));
-            row = Row(_current_section, key, value);
-            return true;
+            }
+            row = Row(_current_section, *ln, {});
+            return true;             
         }
     }
 

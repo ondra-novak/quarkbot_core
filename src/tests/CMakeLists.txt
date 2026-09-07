@@ -36,6 +36,7 @@ set(BASIC_TESTS
     csv_history_source.cpp
     var_inspector_test.cpp
     thread_executor.cpp
+    simple_ini.cpp
 )
 
 
