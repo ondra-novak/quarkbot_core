@@ -91,34 +91,37 @@ namespace quarkbot {
 
     bool MessageBusStdIo::process_message(std::istream &input) {
         if (std::getline(input,_line_buffer)) {
-            try {
-                auto jmsg = std::make_unique<MessageObj>(Json::from_string(_line_buffer));
-                Message msg;
-                msg.sender = jmsg->data[0].as_text();
-                msg.target = jmsg->data[1].as_text();
-                msg.send_time = std::chrono::system_clock::time_point(std::chrono::duration_cast<std::chrono::system_clock::duration>(
-                    std::chrono::milliseconds(jmsg->data[2].as<std::int64_t>())
-                ));
-                msg.type = static_cast<MessageType>(jmsg->data[3].as_int());
-                msg.conversation_id = jmsg->data[4].as<std::uint_least32_t>();
-                msg.content_type = jmsg->data[5].as_text();
-                bool isbin = jmsg->data[6].as_bool();
-                msg.payload = jmsg->data[7].as_text();
-                if (isbin) {
-                    jmsg->binary.reserve((msg.payload.size()*3+3)/4);
-                    base64.decode(msg.payload.begin(), msg.payload.end(), std::back_inserter(jmsg->binary));
-                    msg.payload = std::string_view(jmsg->binary.data(), jmsg->binary.size());
-                }
-                msg.ownership = jmsg.release();
-                _publisher->publish(std::move(msg));
-
-            } catch (std::exception &e) {
-                logError("MessageBus: message dropped because: {}, - message: {}", e.what(), _line_buffer);                
-            }
+            process_line(_line_buffer);
             return true;
         }
         return false;
 
+    }
+    void MessageBusStdIo::process_line(const std::string &_line_buffer) {
+        try {
+            auto jmsg = std::make_unique<MessageObj>(Json::from_string(_line_buffer));
+            Message msg;
+            msg.sender = jmsg->data[0].as_text();
+            msg.target = jmsg->data[1].as_text();
+            msg.send_time = std::chrono::system_clock::time_point(std::chrono::duration_cast<std::chrono::system_clock::duration>(
+                std::chrono::milliseconds(jmsg->data[2].as<std::int64_t>())
+            ));
+            msg.type = static_cast<MessageType>(jmsg->data[3].as_int());
+            msg.conversation_id = jmsg->data[4].as<std::uint_least32_t>();
+            msg.content_type = jmsg->data[5].as_text();
+            bool isbin = jmsg->data[6].as_bool();
+            msg.payload = jmsg->data[7].as_text();
+            if (isbin) {
+                jmsg->binary.reserve((msg.payload.size()*3+3)/4);
+                base64.decode(msg.payload.begin(), msg.payload.end(), std::back_inserter(jmsg->binary));
+                msg.payload = std::string_view(jmsg->binary.data(), jmsg->binary.size());
+            }
+            msg.ownership = jmsg.release();
+            _publisher->publish(std::move(msg));
+
+        } catch (std::exception &e) {
+            logError("MessageBus: message dropped because: {}, - message: {}", e.what(), _line_buffer);                
+        }
     }
     void MessageBusStdIo::process_all_messages(std::istream &input) {
         while (process_message(input));        

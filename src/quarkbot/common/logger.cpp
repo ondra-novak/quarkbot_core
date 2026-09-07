@@ -105,6 +105,7 @@ namespace {
          }
          *ins++ = '\n';
         file.write(_format_buffer.data(),static_cast<int>( _format_buffer.size()));
+        file.flush();
         _format_buffer.clear();
     }
 

@@ -21,6 +21,7 @@ namespace quarkbot {
 
         bool process_message(std::istream &input);
         void process_all_messages(std::istream &input);
+        void process_line(const std::string &line_buffer);
 
 
     protected:
