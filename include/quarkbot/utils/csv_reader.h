@@ -193,6 +193,7 @@ protected:
     char _quotes = '"';
     bool _eof_reached = false;
     bool _beg_line = true;
+    bool _beg_file = true;
 
 };
 
@@ -242,11 +243,22 @@ inline auto parseCSVString(std::string_view str) {
     });
 }
 
+
 template<typename Source>
 inline typename CSVReader<Source>::CSVState CSVReader<Source>::read(std::string &buffer) {
     buffer.clear();
     if (_eof_reached) return CSVState::eof;
     int c = _src();
+    if (_beg_file) {
+        if (c == 0xEF) {
+            c = _src();
+            if (c == 0xBB) {
+                c = _src();
+                if (c == 0xBF) c = _src();                
+            }
+        }
+        _beg_file = false;
+    }
     if (_beg_line) {
         while (c != eof && std::iscntrl(c)) c = _src();
     }
