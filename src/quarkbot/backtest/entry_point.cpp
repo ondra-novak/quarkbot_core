@@ -128,7 +128,7 @@ namespace quarkbot {
                 jsnrpt->attach_storage(ctx.storage);
             }
 
-            if (params.init_env) params.init_env(cfg.as_config());
+            if (params.init_env) params.init_env(cfg.as_config(), bt);
             if (params.debugger) params.debugger(bt.enable_debugger(), ctx.storage);
             bt.add_strategy([start_fn = std::move(params.start_fn)](StrategyContext &&context){
                 return start_fn(std::move(context));

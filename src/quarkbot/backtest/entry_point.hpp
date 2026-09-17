@@ -30,9 +30,9 @@ struct BacktestStartParams {
     std::function<void(std::shared_ptr<IBacktestDebugger>, Storage)> debugger = {};
     ///function is called to initialize inveronment, for example scripting language context
     /**
-    Function receives configuration object
+    Function receives configuration object and BacktestEnv object, so it can add new configuration to backtest environment
      */
-    std::function<void(const BacktestConfig::Config &)> init_env = {};
+    std::function<void(const BacktestConfig::Config &, BacktestEnv &)> init_env = {};
 
     ///setup json report output. If not set, no json report is generated 
     /** When set, default report.csv is not generated
