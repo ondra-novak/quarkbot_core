@@ -1,5 +1,6 @@
 #pragma once
 
+#include "quarkbot/abstract/imarket_instrument.hpp"
 #include "quarkbot/order_defs.hpp"
 #include "simexecutor.hpp"
 #include "siminstrument.hpp"
@@ -27,8 +28,8 @@ class SimAccount;
 
 class SimTradableInstrument final: public TradableInstrumentBase {
 public:
-    SimTradableInstrument(std::shared_ptr<SimInstrument> instr, std::shared_ptr<SimAccount> account)
-        :TradableInstrumentBase(std::move(instr), std::move(account)) {}
+    SimTradableInstrument(std::shared_ptr<IMarketInstrument> instr, std::shared_ptr<SimAccount> account, SimExecutor &executor)
+        :TradableInstrumentBase(std::move(instr), std::move(account)),_executor(executor) {}
 
 
     void report_fill(const Fill &fill);    
@@ -42,13 +43,15 @@ public:
 
     void on_order_update(POrder ord, OrderStatusUpdate &&status);
     auto get_sim_account() const {return std::static_pointer_cast<SimAccount>(_account);}
-    auto get_sim_instrument() const {return std::static_pointer_cast<SimInstrument>(_instrument);}
+//    auto get_sim_instrument() const {return std::static_pointer_cast<SimInstrument>(_instrument);}
 
     virtual POrderData create_order(const OrderParameters &params, POrder replaced_order, std::size_t class_hash) override;
     virtual void submit_order(POrderData order) override;
     virtual bool need_local_trigger(OrderType type) const override;
 
 protected:
+
+    SimExecutor &_executor;
 
     struct RegOrder {
     void on_order_update(POrder ord, OrderStatusUpdate &&status);

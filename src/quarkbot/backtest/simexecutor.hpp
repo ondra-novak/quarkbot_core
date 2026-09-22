@@ -31,7 +31,16 @@ public:
     void on_event(PSimInstrument instrument, Quote &quote);
     void on_event(PSimInstrument instrument, Auction &auction);
 
-    StrategyFragment place_order(POrder ord);
+    void place_order(POrder ord) {
+    auto rep_ord =ord->get_replaced_order().lock();
+    if (rep_ord) {
+        replace_order(ord, rep_ord);
+    } else {
+        place_new_order(ord);
+    }
+}
+
+    StrategyFragment place_new_order(POrder ord);
     StrategyFragment replace_order(POrder ord, POrder prev_order);
     StrategyFragment cancel_order(POrder ord);
     StrategyFragment cancel_order(IOrder *ord);
@@ -119,7 +128,7 @@ protected:
     std::default_random_engine _rnd_gen;
 
 
-    void place_order_internal(POrder ord);
+    void place_new_order_internal(POrder ord);
     void place_order_internal(POrder ord, POrder prev_order);
     void cancel_order_internal(IOrder *ord);
     void stop_latency_queue();

@@ -1,5 +1,8 @@
 #include "simtradableinstrument.hpp"
 #include "../common/orderdata.hpp"
+#include "quarkbot/abstract/iexchange.hpp"
+#include "quarkbot/backtest/simexecutor.hpp"
+#include "quarkbot/backtest/simhistoryadapter.hpp"
 #include "quarkbot/defs.hpp"
 #include "quarkbot/selector.hpp"
 #include "quarkbot/order_defs.hpp"
@@ -60,7 +63,7 @@ std::shared_ptr<IEventStreamBase> SimTradableInstrument::subscribe_stream(std::s
 
 
 bool SimTradableInstrument::cancel_all_orders() {
-    return get_sim_instrument()->get_sim_exchange()->cancel_all_orders(shared_from_this());
+    return _executor.cancel_all(shared_from_this());
 }
 
 void SimTradableInstrument::liquidation() {
@@ -86,9 +89,10 @@ void SimTradableInstrument::liquidation() {
 }
 
 struct CancelCallback {
-    std::shared_ptr<SimExchange> exchange;
+    std::shared_ptr<IExchange> exchange;
+    SimExecutor &executor;
     void operator()(IOrder *ord) {
-        exchange->cancel_order(ord);
+        executor.cancel_order(ord);
     }
 };
 
@@ -144,7 +148,7 @@ POrderData SimTradableInstrument::create_order(const OrderParameters &params, PO
         shared_from_this(),
         replaced_order,
         worker.required().now(),
-        CancelCallback{get_sim_instrument()->get_sim_exchange()}
+        CancelCallback{get_instrument()->get_exchange(), _executor}
     );
     return st;
 }
@@ -190,7 +194,7 @@ void SimTradableInstrument::submit_order(POrderData order) {
         return update_order(order,OrderRejectionReason::insufficient_funds);
     }
 
-    get_sim_instrument()->get_sim_exchange()->place_order(order);    
+    _executor.place_order(order);    
             
 }
 bool SimTradableInstrument::need_local_trigger(OrderType ) const {

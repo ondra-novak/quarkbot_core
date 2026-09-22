@@ -55,7 +55,7 @@ namespace quarkbot {
         return std::dynamic_pointer_cast<SimInstrument>(minstr.get_handle());        
     }
 
-    void SimExecutor::place_order_internal(POrder ord) {
+    void SimExecutor::place_new_order_internal(POrder ord) {
 
 
         auto instrument = extract_instrument(ord);
@@ -570,9 +570,9 @@ void  SimExecutor::accept_order(const POrder &ord) {
     set_order_status(ord, OrderOpenStatus{id, rk});
 }
 
-StrategyFragment SimExecutor::place_order(POrder ord) {
+StrategyFragment SimExecutor::place_new_order(POrder ord) {
     if (co_await _timer.sleep_for(latency)){
-        place_order_internal(std::move(ord));
+        place_new_order_internal(std::move(ord));
     } else {
         auto &simt = *static_cast<SimTradableInstrument *>(ord->get_instrument().get());    
         simt.on_order_update(ord, OrderRejectionReason::adapter_stopped);
