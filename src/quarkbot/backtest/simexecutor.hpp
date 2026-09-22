@@ -2,6 +2,7 @@
 
 #include "../common/orderdata.hpp"
 #include "quarkbot/abstract/backtest_data_source.hpp"
+#include "quarkbot/backtest/isimexecutor.hpp"
 #include <quarkbot/defs.hpp>
 #include <quarkbot/order_defs.hpp>
 #include <quarkbot/strategy_fragment.hpp>
@@ -19,26 +20,25 @@ class SimInstrument;
 class SimTradableInstrument;
 
 
-class SimExecutor {
+class SimExecutor: public ISimExecutor {
 public:
 
     using Timestamp = std::chrono::system_clock::time_point;
 
 
-    using PSimInstrument = std::shared_ptr<SimInstrument>;
 
-    void on_event(PSimInstrument instrument, Trade &trade);
-    void on_event(PSimInstrument instrument, Quote &quote);
-    void on_event(PSimInstrument instrument, Auction &auction);
+    void on_event(PMarketInstrument instrument, Trade &trade);
+    void on_event(PMarketInstrument instrument, Quote &quote);
+    void on_event(PMarketInstrument instrument, Auction &auction);
 
-    void place_order(POrder ord) {
-    auto rep_ord =ord->get_replaced_order().lock();
-    if (rep_ord) {
-        replace_order(ord, rep_ord);
-    } else {
-        place_new_order(ord);
+    StrategyFragment place_order(POrder ord) {
+        auto rep_ord =ord->get_replaced_order().lock();
+        if (rep_ord) {
+            return replace_order(ord, rep_ord);
+        } else {
+            return place_new_order(ord);
+        }
     }
-}
 
     StrategyFragment place_new_order(POrder ord);
     StrategyFragment replace_order(POrder ord, POrder prev_order);
@@ -62,7 +62,7 @@ protected:
 
     struct ActiveOrder {
         POrder ord;
-        PSimInstrument instrument;
+        PMarketInstrument instrument;
         TimeInForce time_in_force;
         OrderFillStats calcs;
         bool trig = false;
@@ -119,7 +119,7 @@ protected:
     OrderType real_order_type(const ActiveOrder &order);
     Decimal slipped_price(Decimal price, Side side) const;
 
-    static PSimInstrument extract_instrument(const POrder &ord);
+    static PMarketInstrument extract_instrument(const POrder &ord);
 
     void set_order_status(const POrder &ord, OrderInternalData::Update &&st);
     void accept_order(const POrder &ord);
@@ -132,10 +132,10 @@ protected:
     void place_order_internal(POrder ord, POrder prev_order);
     void cancel_order_internal(IOrder *ord);
     void stop_latency_queue();
-    void close_day(PSimInstrument instrument);
+    void close_day(PMarketInstrument instrument);
 
 
-    StrategyFragment expire_auction(PSimInstrument instrument, std::chrono::system_clock::time_point tp);
+    StrategyFragment expire_auction(PMarketInstrument instrument, std::chrono::system_clock::time_point tp);
     void seed_random(std::chrono::system_clock::time_point tp);
 };
 

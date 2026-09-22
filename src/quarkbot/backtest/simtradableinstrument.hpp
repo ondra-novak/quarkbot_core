@@ -2,7 +2,7 @@
 
 #include "quarkbot/abstract/imarket_instrument.hpp"
 #include "quarkbot/order_defs.hpp"
-#include "simexecutor.hpp"
+#include "isimexecutor.hpp"
 #include "siminstrument.hpp"
 #include "../streaming/queue_event_stream.hpp"
 
@@ -28,7 +28,7 @@ class SimAccount;
 
 class SimTradableInstrument final: public TradableInstrumentBase {
 public:
-    SimTradableInstrument(std::shared_ptr<IMarketInstrument> instr, std::shared_ptr<SimAccount> account, SimExecutor &executor)
+    SimTradableInstrument(std::shared_ptr<IMarketInstrument> instr, std::shared_ptr<SimAccount> account, ISimExecutor &executor)
         :TradableInstrumentBase(std::move(instr), std::move(account)),_executor(executor) {}
 
 
@@ -51,7 +51,7 @@ public:
 
 protected:
 
-    SimExecutor &_executor;
+    ISimExecutor &_executor;
 
     struct RegOrder {
     void on_order_update(POrder ord, OrderStatusUpdate &&status);

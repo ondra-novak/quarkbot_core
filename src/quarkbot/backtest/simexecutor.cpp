@@ -49,10 +49,10 @@ namespace quarkbot {
         return Decimal(price.to_double() + price.to_double() * _slippage * static_cast<double>(side));
     }
 
-    SimExecutor::PSimInstrument SimExecutor::extract_instrument(const POrder &ord) {
+    PMarketInstrument SimExecutor::extract_instrument(const POrder &ord) {
         TradableInstrument instr( ord->get_instrument());
         MarketInstrument minstr = instr;
-        return std::dynamic_pointer_cast<SimInstrument>(minstr.get_handle());        
+        return minstr.get_handle();        
     }
 
     void SimExecutor::place_new_order_internal(POrder ord) {
@@ -364,7 +364,7 @@ namespace quarkbot {
 
     }
 
-    void SimExecutor::on_event(PSimInstrument instrument, Trade &trade){
+    void SimExecutor::on_event(PMarketInstrument instrument, Trade &trade){
         seed_random(trade.time);
         const auto &info = instrument->get_info();
         auto auction_iter = _auction_state.find(info.name);
@@ -392,7 +392,7 @@ namespace quarkbot {
         _active_orders.erase(e, _active_orders.end());
     }
 
-    void SimExecutor::on_event(PSimInstrument instrument, Quote &quote){
+    void SimExecutor::on_event(PMarketInstrument instrument, Quote &quote){
         seed_random(quote.time);
         //new_quote starts as the raw feed data and collects the limit prices of
         //resting orders; book is what matching works on, so the liquidity our
@@ -420,7 +420,7 @@ namespace quarkbot {
 
     }
 
-    void SimExecutor::on_event(PSimInstrument instrument, Auction &auction_data) {
+    void SimExecutor::on_event(PMarketInstrument instrument, Auction &auction_data) {
         seed_random(auction_data.time);
 
         bool is_open_auction = auction_data.auction_type == AuctionType::opening;
@@ -491,7 +491,7 @@ namespace quarkbot {
         }
     }
 
-    void SimExecutor::close_day(PSimInstrument instrument) {
+    void SimExecutor::close_day(PMarketInstrument instrument) {
         auto iter = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
             if (ord.instrument == instrument) {
                 const auto &params = ord.ord->get_parameters();
@@ -605,7 +605,7 @@ void SimExecutor::stop_latency_queue() {
 
 }
 
-StrategyFragment SimExecutor::expire_auction(PSimInstrument instrument, std::chrono::system_clock::time_point tp) {
+StrategyFragment SimExecutor::expire_auction(PMarketInstrument instrument, std::chrono::system_clock::time_point tp) {
     if (co_await _timer.sleep_until(tp+std::chrono::minutes(30))) {
         auto &st = _auction_state[instrument->get_info().name];
         if (!st.at_close_finished) {

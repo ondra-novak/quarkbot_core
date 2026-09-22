@@ -74,8 +74,8 @@ public:
     }
 
     ///Cancel alll orders on this instrument
-    bool cancel_all_orders() {
-        return _ptr->cancel_all_orders();
+    void cancel_all_orders() {
+         _ptr->cancel_all_orders();
     }
 
     ///Get current position on this instrument

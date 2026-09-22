@@ -173,11 +173,13 @@ inline ReportSink open_report(const std::filesystem::path &output) {
     if (!(*f)) throw std::runtime_error(std::format("Failed to open {}", output.string()));
     return open_report([f](std::string_view line) mutable{
         (*f) << line << "\n";
+        f->flush();
     });
 }
 inline ReportSink open_report(std::ostream &output) {
     return open_report([&output](std::string_view line) mutable{
         output << line << "\n";
+        output.flush();
     });
 
 }

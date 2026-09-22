@@ -90,7 +90,7 @@ void SimTradableInstrument::liquidation() {
 
 struct CancelCallback {
     std::shared_ptr<IExchange> exchange;
-    SimExecutor &executor;
+    ISimExecutor &executor;
     void operator()(IOrder *ord) {
         executor.cancel_order(ord);
     }
