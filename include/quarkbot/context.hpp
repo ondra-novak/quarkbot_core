@@ -7,6 +7,7 @@
 #include "strategy_fragment.hpp"
 #include "execution_worker.hpp"
 #include <concepts>
+#include <functional>
 #include <memory>
 #include "tradable_instrument.hpp"
 #include <utility>
@@ -49,12 +50,27 @@ namespace quarkbot {
         AwaitableStopToken stop_signal;
 
         std::shared_ptr<StrategyFragmentGroup> active_group = {};
+
+        std::function<void()> request_stop_fn = {};
         
         ///start strategy fragment and add it to fragment group ensuring that strategy will not be destroyed until fragment is finished        
         void run(StrategyFragment fragment) {
             active_group->run(std::move(fragment), exec_worker);
         }
 
+        ///request stop
+        /**
+            @retval true stop requested succesfully
+            @retval false feature is not enabled
+        */
+        bool request_stop() {
+            if (request_stop_fn) {
+                request_stop_fn();
+                return true;
+            } else {
+                return false;
+            }
+        }
 
       
 
