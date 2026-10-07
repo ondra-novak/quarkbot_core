@@ -4,6 +4,7 @@
 #include "quarkbot/log.hpp"
 #include <filesystem>
 #include <fstream>
+#include <ranges>
 #include <regex>
 #include <string>
 #include <string_view>
@@ -74,6 +75,16 @@ int main() {
 
     logOutput( LogLevel::debug,"{}", []{return 42;});
     CHECK_EQUAL(prev_line, "42");
+
+    auto rp = std::views::repeat("C++", 1000);
+    std::string long_output;
+    for (auto x: rp) long_output.append(x);
+
+    logOutput(LogLevel::debug, "{}", long_output);
+    CHECK_NOT_EQUAL(prev_line.find("... (truncated)"), prev_line.npos);
+    
+
+
     std::error_code ec;
 
     std::filesystem::path p = std::filesystem::temp_directory_path()/"quarkbot_test_log.log";
@@ -101,26 +112,26 @@ int main() {
     auto ex = extract_log(ln);
     CHECK_EQUAL(ex.context,"");
     CHECK_EQUAL(ex.payload,"{\"a\":10,\"b\":[1,2,3]}");
-    CHECK_EQUAL(ex.line,86);
+    CHECK_EQUAL(ex.line,97);
 
 
     std::getline(f,ln);
     ex = extract_log(ln);
     CHECK_EQUAL(ex.context,"");
     CHECK_EQUAL(ex.payload,"x=12");
-    CHECK_EQUAL(ex.line,87);
+    CHECK_EQUAL(ex.line,98);
 
     std::getline(f,ln);
     ex = extract_log(ln);
     CHECK_EQUAL(ex.payload,"new\x7fline");
-    CHECK_EQUAL(ex.line,88);
+    CHECK_EQUAL(ex.line,99);
 
 
     std::getline(f,ln);
     ex = extract_log(ln);
     CHECK_EQUAL(ex.context,"TesterClass");
     CHECK_EQUAL(ex.payload,"y=test");
-    CHECK_EQUAL(ex.line,29);
+    CHECK_EQUAL(ex.line,30);
 
     std::getline(f,ln);
     ex = extract_log(ln);
