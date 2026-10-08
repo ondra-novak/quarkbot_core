@@ -130,6 +130,16 @@ namespace quarkbot {
 
             if (params.init_env) params.init_env(cfg.as_config(), bt);
             if (params.debugger) params.debugger(bt.enable_debugger(), ctx.storage);
+
+            ctx.request_stop_fn = [&bt]{
+                bt.stop();
+            };
+
+
+            std::stop_callback reporting_end(bt.get_stop_token(), []{
+                quarkbot::logInfo("***STOP REQUESTED***");
+            });
+
             bt.add_strategy([start_fn = std::move(params.start_fn)](StrategyContext &&context){
                 return start_fn(std::move(context));
             },  std::move(ctx));
