@@ -1,6 +1,7 @@
 #include "leveldb_storage.hpp"
 #include "../common/storage_common.hpp"
 #include "quarkbot/abstract/istorage.hpp"
+#include "quarkbot/execution_worker.hpp"
 #include <algorithm>
 #include <bit>
 #include <bitset>
@@ -287,7 +288,7 @@ static std::atomic<std::uint64_t> unique_key_generator = {};
 
 RecordKey LevelDBTransaction::put(std::string_view variable_name, std::string_view content) {
     RecordKey key{
-        static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count()),
+        static_cast<std::uint64_t>(ExecutionWorker::current().now().time_since_epoch().count()),
         unique_key_generator++
     };
     put(variable_name, key, content, UpdateLastRevision::enable);

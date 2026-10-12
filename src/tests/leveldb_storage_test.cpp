@@ -1,9 +1,11 @@
 #include "../quarkbot/leveldb/leveldb_storage.hpp"
 #include "../quarkbot/common/mem_storage.hpp"
+#include "quarkbot/abstract/iexecution_worker.hpp"
 #include "quarkbot/storage.hpp"
 #include "tests/check.h"
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <leveldb/options.h>
 #include <leveldb/status.h>
@@ -714,6 +716,41 @@ void test_replication_to_mem_storage() {
     check_replication_fixture(target);
 }
 
+///minimal execution worker with a fixed clock, registered as the current worker of this thread
+class FixedClockWorker final: public IExecutionWorker {
+public:
+    explicit FixedClockWorker(std::chrono::system_clock::time_point tp):_tp(tp) {}
+    static std::shared_ptr<FixedClockWorker> make_current(std::chrono::system_clock::time_point tp) {
+        auto w = std::make_shared<FixedClockWorker>(tp);
+        _current_worker = w;
+        return w;
+    }
+    virtual void resume(std::coroutine_handle<> h) noexcept override {h.resume();}
+    virtual void resume_idle(std::coroutine_handle<> h) noexcept override {h.resume();}
+    virtual PExecutionWorker spawn() noexcept override {return {};}
+    virtual std::chrono::system_clock::time_point now() const override {return _tp;}
+    virtual awaitable<bool> sleep_until(std::chrono::system_clock::time_point, cancel_signal * = nullptr) override {return false;}
+    virtual awaitable<bool> sleep_for(std::chrono::system_clock::duration, cancel_signal * = nullptr) override {return false;}
+    virtual bool cancel(coro::cancel_signal *) override {return false;}
+    virtual bool quiesce() override {return false;}
+protected:
+    std::chrono::system_clock::time_point _tp;
+};
+
+///a put without explicit key takes `ordered` from the current execution worker's clock
+///(simulated time in a backtest), so repeated backtests produce identical keys
+void test_put_key_uses_worker_time() {
+    TempDB tmp("worker_time");
+    auto mgr = open_fresh(tmp.path);
+    Storage storage(mgr.get_storage("s"));
+    auto tp = std::chrono::system_clock::time_point(std::chrono::seconds(1577836800)); //2020-01-01
+    auto worker = FixedClockWorker::make_current(tp);
+    auto wr = storage.write();
+    auto key = wr.put("v", "x");
+    wr.commit();
+    CHECK_EQUAL(key.ordered, static_cast<std::uint64_t>(tp.time_since_epoch().count()));
+}
+
 int main() {
     test_manager_directory();
     test_delete_storage();
@@ -736,5 +773,6 @@ int main() {
     test_apply_pointer_and_data_independently();
     test_replication_to_other_keyspace();
     test_replication_to_mem_storage();
+    test_put_key_uses_worker_time();
     return 0;
 }

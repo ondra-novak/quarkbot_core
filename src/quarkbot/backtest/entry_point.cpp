@@ -10,8 +10,8 @@
 #include "quarkbot/log.hpp"
 #include "quarkbot/utils/cli_options.hpp"
 #include "simple_stdio_debugger.hpp"
+#include "storage_dump.hpp"
 #include "../common/strategy_config.hpp"
-#include "../common/mem_storage.hpp"
 #include "quarkbot/utils/simple_ini.hpp"
 #include "quarkbot/strategy_main.hpp"
 #include <chrono>
@@ -24,6 +24,7 @@
 #include <optional>
 #include <ostream>
 #include <print>
+#include <stdexcept>
 #include <thread>
 
 namespace quarkbot {
@@ -119,7 +120,9 @@ namespace quarkbot {
 
 
             StrategyContext ctx;
-            ctx.storage = MemStorage::create(MemStorage::no_history);        
+            auto storage_dump = cfg.configure_storage_dump();
+            ctx.storage = cfg.configure_storage();
+            Storage storage = ctx.storage;
             ctx.config = load_strategy_config(params.strategy_config);
 
             if (params.json_report) {
@@ -138,6 +141,13 @@ namespace quarkbot {
             logInfo("Backtest started");
             bt.run(std::move(data_source));
             logInfo("Backtest ended");        
+
+            if (storage_dump.has_value()) {
+                std::ofstream dump_out(*storage_dump, std::ios::trunc|std::ios::out);
+                if (!dump_out) throw std::runtime_error("Failed to open storage dump for writing: " + storage_dump->string());
+                dump_storage_csv(storage, dump_out);
+                logInfo("Storage dumped to {}", storage_dump->string());
+            }
 
         } catch (const std::exception &e) {
             logFatal("Exception: {}",e.what());
