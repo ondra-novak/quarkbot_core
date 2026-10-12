@@ -173,7 +173,11 @@ namespace quarkbot {
         char buffer[1024];
         auto res = std::format_to_n<char *, typename LoggerTypeType<Args>::type...>(
                     buffer, sizeof(buffer), format,  LoggerTypeType<Args>()(std::forward<Args>(args))...);
-        Logger::instance.log_sink(level, Logger::from(format._loc), {buffer, static_cast<std::size_t>(res.size)});
+        if (res.size > 1024) {
+            constexpr std::string_view truncated = "... (truncated)";
+            std::copy(truncated.begin(), truncated.end(), std::end(buffer)-truncated.size());
+        }
+        Logger::instance.log_sink(level, Logger::from(format._loc), {buffer, res.out});
         
     }
 

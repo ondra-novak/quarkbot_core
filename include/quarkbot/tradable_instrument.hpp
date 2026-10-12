@@ -74,6 +74,10 @@ public:
     }
 
     ///Cancel alll orders on this instrument
+    /**
+       @retval true there were orders to cancel; cancelling itself is asynchronous
+       @retval false there was nothing to cancel
+    */
     bool cancel_all_orders() {
         return _ptr->cancel_all_orders();
     }

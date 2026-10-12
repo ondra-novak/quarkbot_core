@@ -163,7 +163,9 @@ public:
         
         template<std::size_t n>
         constexpr std::string_view operator()(const char (&def)[n]) const {
-            return this->operator()(std::string_view(def, n));
+            std::size_t adj = 0;
+            if (n && def[n-1] == 0) adj = 1;
+            return this->operator()(std::string_view(def, n-adj));
         }
     };
 

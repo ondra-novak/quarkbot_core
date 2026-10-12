@@ -107,28 +107,11 @@ void SimExchange::on_event(const std::string &instrument, const OrderBookIncreme
 
 
 PTradableInstrument SimExchange::create_tradable_instrument(std::shared_ptr<SimInstrument> instrument,std::shared_ptr<SimAccount> account) {
-    auto r = std::make_shared<SimTradableInstrument>(instrument, account);
+    auto r = std::make_shared<SimTradableInstrument>(instrument, account, _executor);
     _tradable_instruments.push_back(r);
     return r;
 }
 
-bool SimExchange::cancel_all_orders(PTradableInstrument instrument ) {
-    return _executor.cancel_all(instrument);
-}
-void SimExchange::cancel_order(POrder ord) {
-    _executor.cancel_order(ord);
-}
-void SimExchange::cancel_order(IOrder *ord) {
-    _executor.cancel_order(ord);
-}
-void SimExchange::place_order(POrder ord) {
-    auto rep_ord =ord->get_replaced_order().lock();
-    if (rep_ord) {
-        _executor.replace_order(ord, rep_ord);
-    } else {
-        _executor.place_order(ord);
-    }
-}
 
 PMarketInstrument SimExchange::add_instrument(std::unique_ptr<IMarketInstrument::Info> def) {
     auto &instr = _instrument_names[def->name];

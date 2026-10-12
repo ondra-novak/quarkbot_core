@@ -1,5 +1,6 @@
 #include "check.h"
 #include "quarkbot/backtest/backtest_executor.hpp"
+#include "quarkbot/backtest/simexecutor.hpp"
 #include "quarkbot/backtest/siminstrument.hpp"
 #include "quarkbot/backtest/simtradableinstrument.hpp"
 #include "../quarkbot/backtest/json_report.hpp"
@@ -10,6 +11,8 @@
 #include <sstream>
 
 using namespace quarkbot;
+
+SimExecutor fakeexec;
 
 ///create_report_sink() is protected - the report is otherwise only reachable
 ///through a whole simulated exchange
@@ -32,8 +35,9 @@ void test_stop_price_reported() {
     SimInstrument::Info nfo;
     nfo.name = "TestInstr";
 
+    
     auto instr = std::make_shared<SimInstrument>(nfo, nullptr);
-    auto tinstr = std::make_shared<SimTradableInstrument>(instr, std::shared_ptr<SimAccount>{});
+    auto tinstr = std::make_shared<SimTradableInstrument>(instr, std::shared_ptr<SimAccount>{}, fakeexec);
 
     auto cancelcb = [](auto){};
     using OrderData = OrderWithCancelCallback<decltype(cancelcb)>;

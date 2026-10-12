@@ -28,10 +28,11 @@ void test_report() {
     std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(1780670224);
 
     SimInstrument::Info nfo;
+    SimExecutor exe;
     nfo.name = "TestInstr";
 
     std::shared_ptr<SimInstrument> instr = std::make_shared<SimInstrument>(nfo, nullptr);
-    std::shared_ptr<SimTradableInstrument> tinstr = std::make_shared<SimTradableInstrument>(instr, std::shared_ptr<SimAccount>{});
+    std::shared_ptr<SimTradableInstrument> tinstr = std::make_shared<SimTradableInstrument>(instr, std::shared_ptr<SimAccount>{}, exe);
 
     auto cancelcb = [](auto){};
     using CancelCB = decltype(cancelcb);

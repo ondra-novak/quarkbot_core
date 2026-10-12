@@ -71,10 +71,10 @@ public:
     void on_event(const std::string &instrument, const OrderBookSnapshot &sn);
     void on_event(const std::string &instrument, const OrderBookIncrement &inc);
 
-    bool cancel_all_orders(PTradableInstrument instrument );
-    void cancel_order(POrder ord);
-    void cancel_order(IOrder *ord);
-    void place_order(POrder ord);
+    //Order routing is no longer the exchange's business: SimTradableInstrument
+    //talks to ISimExecutor directly, so a sim executor can be reused without a
+    //SimExchange (paper trading). The former cancel_all_orders/cancel_order/
+    //place_order forwarders were dropped along with their definitions.
 
     void stop_on(std::stop_token tkn);
 

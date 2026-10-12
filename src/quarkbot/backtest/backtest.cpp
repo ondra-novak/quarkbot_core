@@ -106,9 +106,10 @@ namespace quarkbot {
 
         auto finish = [&]{
             auto timeout = executor->now()+std::chrono::days(1);
-            while (executor->advance_time(std::chrono::system_clock::time_point::max())) {
+            executor->flush_queue();
+            while (!executor->advance_time(std::chrono::system_clock::time_point::max())) {
                 if (executor->now() > timeout) {
-                    logError("Failed to finish all timers");                    
+                    logError("Failed to finish all timers (in one simmulated day) - exiting");                    
                     break;
                 }
             }

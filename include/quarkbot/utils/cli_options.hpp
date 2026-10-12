@@ -137,10 +137,10 @@ public:
 
     template<typename _CharType>
     struct Error {
-        ParseErrorType errtype;
-        std::basic_string_view<_CharType> subject;
-        std::ptrdiff_t nth_argument;
-        std::ptrdiff_t nth_option;
+        ParseErrorType errtype = {};
+        std::basic_string_view<_CharType> subject = {};
+        std::ptrdiff_t nth_argument = 0;
+        std::ptrdiff_t nth_option = 0;
     };
 
     using Def = OptionDef<_Target>;
