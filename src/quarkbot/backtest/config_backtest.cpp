@@ -1,14 +1,21 @@
 #include "config_backtest.hpp"
 #include "../common/logger.hpp"
+#include "../common/mem_storage.hpp"
 #include "quarkbot/common/strategy_config.hpp"
 #include "quarkbot/config.hpp"
+#include "quarkbot/log.hpp"
 #include "quarkbot/config_backend_with_paths.hpp"
 #include "quarkbot/utils/simple_ini.hpp"
 #include "simexec_report_csv.hpp"
+#include "quarkbot_compile_config.h"
+#ifdef QUARKBOT_LEVELDB
+#include "../leveldb/leveldb_storage.hpp"
+#endif
 #include <algorithm>
 #include <cstddef>
 #include <fstream>
 #include <optional>
+#include <stdexcept>
 #include <string_view>
 
 namespace quarkbot {
@@ -68,6 +75,40 @@ namespace quarkbot {
             }
         }
         return out;
+    }
+
+    Storage BacktestConfig::configure_storage(std::string_view section) {
+        auto stor_config = as_config() / section;
+        std::optional<std::filesystem::path> database = stor_config["database"](std::nullopt);
+        if (!database.has_value()) return Storage(MemStorage::create(MemStorage::no_history));
+#ifdef QUARKBOT_LEVELDB
+        std::optional<std::filesystem::path> preset = stor_config["preset"](std::nullopt);
+        std::string name = stor_config["name"](std::string("strategy"));
+
+        if (std::filesystem::exists(*database)) {
+            if (preset.has_value() && std::filesystem::exists(*preset)
+                && std::filesystem::equivalent(*database, *preset)) {
+                throw std::runtime_error("Storage: working database is the same as the preset: " + database->string());
+            }
+            if (!std::filesystem::exists(*database / "CURRENT")) {
+                throw std::runtime_error("Storage: refusing to delete, not a LevelDB database: " + database->string());
+            }
+            std::filesystem::remove_all(*database);
+        }
+        if (preset.has_value()) {
+            if (!std::filesystem::exists(*preset / "CURRENT")) {
+                throw std::runtime_error("Storage: preset is not a LevelDB database: " + preset->string());
+            }
+            std::filesystem::copy(*preset, *database, std::filesystem::copy_options::recursive);
+        }
+        logInfo("Storage: LevelDB {} (preset: {}, name: {})", database->string(),
+                preset.has_value()?preset->string():std::string("none"), name);
+        leveldb::Options opts;
+        opts.create_if_missing = true;
+        return Storage(LevelDBStorageManager::open_db(*database, opts).get_storage(name));
+#else
+        throw std::runtime_error("Storage: `database` requires LevelDB support (compile with QUARKBOT_LEVELDB=ON)");
+#endif
     }
 
 }

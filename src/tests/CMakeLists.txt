@@ -80,5 +80,9 @@ if (QUARKBOT_LEVELDB)
     add_executable(test_leveldb_storage_test leveldb_storage_test.cpp)
     target_link_libraries(test_leveldb_storage_test PRIVATE quarkbot::sdk quarkbot::impl ${LEVELDB_LIBRARIES})
     add_test(NAME "tests/leveldb_storage_test" COMMAND test_leveldb_storage_test)
+
+    add_executable(test_backtest_storage_config backtest_storage_config.cpp)
+    target_link_libraries(test_backtest_storage_config PRIVATE quarkbot::sdk quarkbot::backtest ${LEVELDB_LIBRARIES})
+    add_test(NAME "tests/backtest_storage_config" COMMAND test_backtest_storage_config)
 endif()
 

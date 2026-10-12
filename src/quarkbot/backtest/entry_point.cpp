@@ -11,7 +11,6 @@
 #include "quarkbot/utils/cli_options.hpp"
 #include "simple_stdio_debugger.hpp"
 #include "../common/strategy_config.hpp"
-#include "../common/mem_storage.hpp"
 #include "quarkbot/utils/simple_ini.hpp"
 #include "quarkbot/strategy_main.hpp"
 #include <chrono>
@@ -119,7 +118,7 @@ namespace quarkbot {
 
 
             StrategyContext ctx;
-            ctx.storage = MemStorage::create(MemStorage::no_history);        
+            ctx.storage = cfg.configure_storage();
             ctx.config = load_strategy_config(params.strategy_config);
 
             if (params.json_report) {
