@@ -35,6 +35,7 @@ set(BASIC_TESTS
     history_formats.cpp
     csv_history_source.cpp
     var_inspector_test.cpp
+    storage_dump_test.cpp
     thread_executor.cpp
     simple_ini.cpp
 )

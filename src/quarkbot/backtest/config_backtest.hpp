@@ -7,6 +7,7 @@
 #include "quarkbot/types.hpp"
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -73,6 +74,7 @@ struct BacktestConfig {
     @code
     preset=preset.db       ;optional - template database copied into working database before the run
     database=work.db       ;working database (LevelDB). If missing, in-memory storage is used
+    dump=result.csv        ;optional - CSV dump of the storage written at the end (requires database)
     name=strategy          ;name of the storage inside of the database (default: strategy)
     @endcode
 
@@ -83,6 +85,15 @@ struct BacktestConfig {
     @note LevelDB requires QUARKBOT_LEVELDB at compile time, otherwise setting `database` throws
      */
     Storage configure_storage(std::string_view section = "storage");
+
+    ///configure path of the storage dump written at the end of the backtest
+    /**
+        @param section which section contains storage setup (key `dump`)
+        @return path to CSV file (see dump_storage_csv), or nullopt when no dump is requested
+
+        @note dump is available only with LevelDB storage (`database` must be set), otherwise throws
+     */
+    std::optional<std::filesystem::path> configure_storage_dump(std::string_view section = "storage");
 
 };
 

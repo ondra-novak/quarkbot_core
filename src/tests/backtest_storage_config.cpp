@@ -116,6 +116,27 @@ void test_refuses_database_same_as_preset() {
     CHECK_EQUAL(read_v(preset), std::string("from_preset"));
 }
 
+void test_dump_requires_database() {
+    TempDir tmp("dump_nodb");
+    auto cfg = write_config(tmp.path, "[storage]\ndump=result.csv\n");
+    CHECK_EXCEPTION(std::runtime_error, cfg.configure_storage_dump());
+}
+
+void test_dump_path_resolved() {
+    TempDir tmp("dump_path");
+    auto cfg = write_config(tmp.path, "[storage]\ndatabase=work.db\ndump=result.csv\n");
+    auto dump = cfg.configure_storage_dump();
+    CHECK(dump.has_value());
+    CHECK(std::filesystem::equivalent(dump->parent_path(), tmp.path));
+    CHECK_EQUAL(dump->filename().string(), std::string("result.csv"));
+}
+
+void test_no_dump_configured() {
+    TempDir tmp("dump_none");
+    auto cfg = write_config(tmp.path, "[storage]\ndatabase=work.db\n");
+    CHECK(!cfg.configure_storage_dump().has_value());
+}
+
 int main() {
     test_no_section_uses_memory();
     test_preset_is_copied();
@@ -124,5 +145,8 @@ int main() {
     test_no_preset_starts_empty();
     test_refuses_to_delete_non_leveldb_directory();
     test_refuses_database_same_as_preset();
+    test_dump_requires_database();
+    test_dump_path_resolved();
+    test_no_dump_configured();
     return 0;
 }

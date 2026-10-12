@@ -111,4 +111,14 @@ namespace quarkbot {
 #endif
     }
 
+    std::optional<std::filesystem::path> BacktestConfig::configure_storage_dump(std::string_view section) {
+        auto stor_config = as_config() / section;
+        std::optional<std::filesystem::path> dump = stor_config["dump"](std::nullopt);
+        std::optional<std::filesystem::path> database = stor_config["database"](std::nullopt);
+        if (dump.has_value() && !database.has_value()) {
+            throw std::runtime_error("Storage: `dump` requires LevelDB storage (`database` is not set)");
+        }
+        return dump;
+    }
+
 }

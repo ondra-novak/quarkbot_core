@@ -41,5 +41,7 @@ target_sources(quarkbot_backtest PRIVATE
     simhistoryadapter.hpp
     simhistoryadapter.cpp
     history_collector.hpp
+    storage_dump.hpp
+    storage_dump.cpp
  
 )
