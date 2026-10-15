@@ -37,13 +37,14 @@ constexpr bool has_flag(std::uint32_t flags, AlgoseekTradeFlag f) {
     return ((flags >> static_cast<unsigned>(f)) & 1U) != 0;
 }
 
-///Backtest data source generating Trade and Auction events from an Algoseek trades export
+///Backtest data source generating Trade events from an Algoseek trades export
 /**
     Reads one gzipped CSV file with the eight column layout
     Date,Timestamp,EventType,Ticker,Price,Quantity,Exchange,Conditions
 
-    Only Trade and final Auction events are produced; the format carries no
-    quotes and no indicative auction data. Rows that do not represent a
+    Only Trade events are produced; opening, closing and reopening prints are
+    Trade events with an auction qualifier. The format carries no quotes and no
+    indicative auction data. Rows that do not represent a
     tradable execution are counted and skipped, and the counters are logged
     when the file is exhausted.
 */

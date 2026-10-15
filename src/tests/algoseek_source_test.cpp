@@ -189,39 +189,54 @@ static void test_auctions_and_skips() {
         // the cancellation row, the unexpected event type) leaves 5 events
         CHECK_EQUAL(evs.size(), std::size_t(5));
 
-        // 1: opening auction
-        CHECK(std::holds_alternative<Auction>(evs[0].data));
+        // 1: opening auction print
+        CHECK(std::holds_alternative<Trade>(evs[0].data));
         {
-            auto &a = std::get<Auction>(evs[0].data);
-            CHECK(a.auction_type == AuctionType::opening);
-            CHECK(a.final);
-            CHECK(a.price == Decimal::from_string("47.58"));
-            CHECK(a.quantity == Decimal::from_string("4000"));
-            CHECK(a.quantity_traded == a.quantity);
-            CHECK(a.imbalance == Decimal(0));
-            CHECK(a.time == mk_utc("2023-06-09 13:30:00.791480832"));
+            auto &t = std::get<Trade>(evs[0].data);
+            CHECK(t.qualifier == TradeQualifier::opening_auction);
+            CHECK(t.price == Decimal::from_string("47.58"));
+            CHECK(t.size == Decimal::from_string("4000"));
+            CHECK(t.side == Side::undetermined);
+            CHECK(t.time == mk_utc("2023-06-09 13:30:00.791480832"));
         }
 
         // 2: ordinary trade (the official open row in between was dropped)
         CHECK(std::holds_alternative<Trade>(evs[1].data));
+        CHECK(std::get<Trade>(evs[1].data).qualifier == TradeQualifier::continuous);
         CHECK(std::get<Trade>(evs[1].data).price == Decimal::from_string("47.60"));
 
         // 3: reopening auction maps to unscheduled
-        CHECK(std::holds_alternative<Auction>(evs[2].data));
-        CHECK(std::get<Auction>(evs[2].data).auction_type == AuctionType::unscheduled);
+        CHECK(std::holds_alternative<Trade>(evs[2].data));
+        CHECK(std::get<Trade>(evs[2].data).qualifier == TradeQualifier::unscheduled_auction);
 
         // 4: the cancelled trade survives
         CHECK(std::holds_alternative<Trade>(evs[3].data));
+        CHECK(std::get<Trade>(evs[3].data).qualifier == TradeQualifier::continuous);
         CHECK(std::get<Trade>(evs[3].data).size == Decimal::from_string("42"));
 
         // 5: closing auction wins over the official_close bit on the same row
-        CHECK(std::holds_alternative<Auction>(evs[4].data));
+        CHECK(std::holds_alternative<Trade>(evs[4].data));
         {
-            auto &a = std::get<Auction>(evs[4].data);
-            CHECK(a.auction_type == AuctionType::closing);
-            CHECK(a.final);
-            CHECK(a.quantity == Decimal::from_string("23455"));
-            CHECK(a.time == mk_utc("2023-06-09 20:00:02.164273920"));
+            auto &t = std::get<Trade>(evs[4].data);
+            CHECK(t.qualifier == TradeQualifier::closing_auction);
+            CHECK(t.size == Decimal::from_string("23455"));
+            CHECK(t.time == mk_utc("2023-06-09 20:00:02.164273920"));
+        }
+    }
+
+    // fake quotes follow continuous trades only, never an auction print
+    {
+        AlgoseekSpec spec{path,{},std::chrono::locate_zone("America/New_York")};
+        spec.fake_quotes_distance = Decimal::from_string("0.01");
+        AlgoseekDataSource src(spec);
+        auto evs = drain(src);
+        // the 5 events above plus one quote after each of the 2 continuous trades
+        CHECK_EQUAL(evs.size(), std::size_t(7));
+        for (std::size_t i = 0; i < evs.size(); ++i) {
+            if (!std::holds_alternative<Quote>(evs[i].data)) continue;
+            CHECK(i > 0);
+            CHECK(std::holds_alternative<Trade>(evs[i-1].data));
+            CHECK(std::get<Trade>(evs[i-1].data).qualifier == TradeQualifier::continuous);
         }
     }
 }
@@ -423,10 +438,12 @@ static EventCounts count_events(const AlgoseekSpec &spec) {
     EventCounts c;
     for (const auto &ev: drain(src)) {
         ++c.total;
-        if (std::holds_alternative<Trade>(ev.data)) {
+        if (!std::holds_alternative<Trade>(ev.data)) continue;
+        const auto &t = std::get<Trade>(ev.data);
+        if (!is_auction_trade(t.qualifier)) {
             ++c.trades;
-        } else if (std::holds_alternative<Auction>(ev.data)) {
-            switch (std::get<Auction>(ev.data).auction_type) {
+        } else {
+            switch (to_auction_type(t.qualifier)) {
                 case AuctionType::opening: ++c.opening; break;
                 case AuctionType::closing: ++c.closing; break;
                 case AuctionType::unscheduled: ++c.unscheduled; break;
@@ -488,19 +505,19 @@ static void test_real_files() {
     // official close, the last at 19:00; exactly one closing auction must survive.
     {
         AlgoseekDataSource src({bipc,"NYSE",tz});
-        const Auction *opening = nullptr;
-        const Auction *closing = nullptr;
+        const Trade *opening = nullptr;
+        const Trade *closing = nullptr;
         auto evs = drain(src);
         for (const auto &ev: evs) {
-            if (!std::holds_alternative<Auction>(ev.data)) continue;
-            const auto &a = std::get<Auction>(ev.data);
-            if (a.auction_type == AuctionType::opening) {
+            if (!std::holds_alternative<Trade>(ev.data)) continue;
+            const auto &a = std::get<Trade>(ev.data);
+            if (a.qualifier == TradeQualifier::opening_auction) {
                 // self-contained: fails here if a second opening auction ever
                 // survives, rather than relying on the aggregate count check below
                 CHECK(opening == nullptr);
                 opening = &a;
             }
-            if (a.auction_type == AuctionType::closing) {
+            if (a.qualifier == TradeQualifier::closing_auction) {
                 // ditto for the four official-close re-broadcasts of the same
                 // print, which must all be filtered before this loop runs
                 CHECK(closing == nullptr);
@@ -509,11 +526,11 @@ static void test_real_files() {
         }
         CHECK(opening != nullptr);
         CHECK(opening->price == Decimal::from_string("47.58"));
-        CHECK(opening->quantity == Decimal::from_string("4000"));
+        CHECK(opening->size == Decimal::from_string("4000"));
         CHECK(opening->time == mk_utc("2023-06-09 13:30:00.791480832"));
         CHECK(closing != nullptr);
         CHECK(closing->price == Decimal::from_string("47.92"));
-        CHECK(closing->quantity == Decimal::from_string("23455"));
+        CHECK(closing->size == Decimal::from_string("23455"));
         CHECK(closing->time == mk_utc("2023-06-09 20:00:02.164273920"));
 
         // the real files come out ordered, which MergedDataSource depends on

@@ -280,27 +280,20 @@ bool AlgoseekDataSource::operator()(BacktestEvent &ev) {
         ev.symbol = _spec.symbol.empty() ? _row.ticker : _spec.symbol;
         ev.time = time;
 
-        if (auction_type != AuctionType::unknown) {
-            Auction &a = ev.data.emplace<Auction>();
-            a.auction_type = auction_type;
-            //the export carries no indicative data, so the print is final and
-            //the unavailable fields take defaults
-            a.final = true;
-            a.price = price;
-            a.quantity = quantity;
-            a.quantity_traded = quantity;
-            a.imbalance = 0;
-            a.time = time;
+        Trade &t = ev.data.emplace<Trade>();
+        t.price = price;
+        t.size = quantity;
+        t.time = time;
+        //the export carries no aggressor side
+        t.side = Side::undetermined;
+        //an auction print is the auction result itself - the export carries
+        //no indicative auction data
+        t.qualifier = to_trade_qualifier(auction_type);
+        if (is_auction_trade(t.qualifier)) {
             ++_counters.auctions;
         } else {
-            Trade &t = ev.data.emplace<Trade>();
-            t.price = price;
-            t.size = quantity;
-            t.time = time;
-            //the export carries no aggressor side
-            t.side = Side::undetermined;
             ++_counters.trades;
-            
+
             if (_spec.fake_quotes_distance) {
                 Quote q;
                 _next_quote.emplace();
