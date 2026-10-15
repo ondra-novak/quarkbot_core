@@ -199,8 +199,20 @@ static void test_opening_without_indicative() {
         buy("gtc_stop", OrderType::stop, 3_dec, TimeInForce::gtc, {}, 99.5_dec),
         buy("alert", OrderType::alert, 1_dec, TimeInForce::gtc, {}, 99.5_dec),
         buy("day_lim", OrderType::limit, 1_dec, TimeInForce::day, 102_dec),
+        buy("stoplim_far", OrderType::stoplimit, 2_dec, TimeInForce::gtc, 106_dec, 105_dec),
+        buy("stoplim_trig", OrderType::stoplimit, 2_dec, TimeInForce::gtc, 102_dec, 99.5_dec),
     };
     auto out = run(sc);
+
+    //stop-limit whose stop is not reached: its limit crosses the auction price,
+    //but an untriggered order must not take part in the uncross
+    check_fills(out, "stoplim_far", {});
+    CHECK(!get(out, "stoplim_far").terminated());
+    //triggered by the auction price, but joins the next phase: the uncross does
+    //not fill it, the duplicate continuous print (100 x 3) fills it as a limit
+    //order at its limit price, 2 of 3
+    check_fills(out, "stoplim_trig", {{102_dec, 2_dec}});
+    CHECK(get(out, "stoplim_trig").status == OrderStatus::filled);
 
     //auction order: full quantity at the auction price, no volume cap for market
     check_fills(out, "ato_mkt", {{100_dec, 7_dec}});
@@ -377,6 +389,29 @@ static void test_no_auctions() {
     check_fills(out, "gtc_lim", {{101_dec, 1_dec}});
 }
 
+///auction orders placed while the day is closed wait overnight; when the next
+///day starts without an opening auction they expire
+static void test_overnight_order_expires_without_opening() {
+    std::cout << "--- test_overnight_order_expires_without_opening" << std::endl;
+    Scenario sc;
+    sc.events = {
+        {0s,   trade(99_dec, 100_dec, TradeQualifier::closing_auction)},
+        {60s,  quote(100_dec, 101_dec)},                                   //closed: orders placed
+        {120s, trade(101_dec, 5_dec)},                                     //next day, no opening
+        {121s, quote(100_dec, 101_dec)},
+    };
+    sc.orders = {
+        buy("ato_mkt", OrderType::market, 1_dec, TimeInForce::ato),
+        buy("crs_lim", OrderType::limit, 1_dec, TimeInForce::crossing, 101_dec),
+    };
+    auto out = run(sc);
+
+    check_fills(out, "ato_mkt", {});
+    CHECK(get(out, "ato_mkt").reason == OrderRejectionReason::expired);
+    check_fills(out, "crs_lim", {});
+    CHECK(get(out, "crs_lim").reason == OrderRejectionReason::expired);
+}
+
 int main() {
     test_opening_without_indicative();
     test_call_phase();
@@ -385,5 +420,6 @@ int main() {
     test_closing_timeout();
     test_unscheduled_duplicate();
     test_no_auctions();
+    test_overnight_order_expires_without_opening();
     return 0;
 }
