@@ -159,7 +159,7 @@ be recreated. It replaces `SimExecutor::AuctionState`.
 | auction `Trade(T)` | duplicate | handled as a continuous trade (rows below) | as for a continuous trade |
 | continuous `Trade` | phase `call(opening / intraday / unscheduled)` | the auction did not happen → `continuous`; for opening set `opening_done` | `finish(T)` (expire the auction orders for T) |
 | continuous `Trade` | phase `call(closing)` | none; stays in the call phase (cannot happen on clean data) | none |
-| continuous `Trade` | phase `closed` | new day → `continuous`, `opening_done = true` (the opening auction was missing) | none |
+| continuous `Trade` | phase `closed` | new day → `continuous`, `opening_done = true` (the opening auction was missing) | `finish(opening)` (expire the orders that waited overnight for the opening) |
 | continuous `Trade` | phase `continuous` | none | match the trade (`can_match_continuous`) |
 | closing timeout fires | phase is not `closed` | → `closed` | `finish(closing)` + `close_day` |
 
@@ -193,7 +193,11 @@ machine handles as a continuous trade.
 - `check_auction_order(name, tif)` returns either a rejection reason or
   "rest". It takes over today's validation from `match_order(Quote)`:
   - `not_tradable` when `!seen_auction`,
-  - `too_late` when `closed`,
+  - when `closed`: `ato` and `crossing` rest for the next day's opening
+    auction, and `atc` is `too_late`. Without indicative data (Algoseek,
+    IQFeed) the next day starts directly with the opening print, so the
+    evening after the close is the only time an `ato` order can be placed,
+    and rejecting it would make `ato` unusable on such sources,
   - `too_late` when `tif == ato && opening_done`.
 - `is_closed(name)` is used by the rule that rejects a `day` order with
   `too_late`.
