@@ -117,7 +117,9 @@ static void test_closing_with_indicative() {
     CHECK(tr.phase(X) == Phase::closed);
     CHECK(!tr.can_match_continuous(X));
     CHECK(tr.check_auction_order(X, TimeInForce::atc) == OrderRejectionReason::too_late);
-    CHECK(tr.check_auction_order(X, TimeInForce::ato) == OrderRejectionReason::too_late);
+    //ato and crossing rest for the next day's opening
+    CHECK(!tr.check_auction_order(X, TimeInForce::ato).has_value());
+    CHECK(!tr.check_auction_order(X, TimeInForce::crossing).has_value());
 
     //duplicate closing print: does nothing and must not reopen the day
     CHECK(no_action(tr.on_trade(X, TradeQualifier::closing_auction, t0 + 3s)));
@@ -182,7 +184,9 @@ static void test_new_day_by_continuous_trade() {
     std::cout << "--- test_new_day_by_continuous_trade" << std::endl;
     AuctionPhaseTracker tr;
     tr.on_trade(X, TradeQualifier::closing_auction, t0);
-    CHECK(no_action(tr.on_trade(X, TradeQualifier::continuous, t0 + 24h)));
+    auto na = tr.on_trade(X, TradeQualifier::continuous, t0 + 24h);
+    CHECK(!na.uncross);
+    CHECK(na.finish == AuctionType::opening);
     CHECK(!tr.is_closed(X));
     CHECK(tr.can_match_continuous(X));
     //the opening auction was missed today

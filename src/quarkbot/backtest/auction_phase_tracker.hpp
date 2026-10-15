@@ -67,7 +67,8 @@ public:
     ///true after the close of the trading day
     bool is_closed(const std::string &name) const;
     ///Decide whether an order with an auction time in force may rest
-    /** @return rejection reason, or nullopt when the order may rest */
+    /** @return rejection reason, or nullopt when the order may rest
+     *  (after the close only ato and crossing may rest, for the next opening) */
     std::optional<OrderRejectionReason> check_auction_order(const std::string &name, TimeInForce tif) const;
 
     ///current phase, continuous for an unknown instrument

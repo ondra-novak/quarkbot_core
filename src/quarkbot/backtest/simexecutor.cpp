@@ -78,7 +78,8 @@ namespace quarkbot {
 
         accept_order(aord.ord);
 
-        if (match_order(aord,true)) return;
+        if (admit_order(aord)) return;
+        if (match_on_placement(aord)) return;
         if (finish_if_cannot_rest(aord)) return;
 
         _active_orders.push_back(std::move(aord));
@@ -114,7 +115,7 @@ namespace quarkbot {
 
         set_order_status(found->ord, {OrderStatus::replaced});        
 
-        if (match_order(aord,true) || finish_if_cannot_rest(aord)) {
+        if (admit_order(aord) || match_on_placement(aord) || finish_if_cannot_rest(aord)) {
             _active_orders.erase(found);
         } else {
             *found = std::move(aord);
@@ -144,6 +145,33 @@ namespace quarkbot {
             default:
                 return false;
         }
+    }
+
+    bool SimExecutor::admit_order(ActiveOrder &order) {
+        const auto &name = order.instrument->get_info().name;
+        const auto &params = order.ord->get_parameters();
+        if (is_auction_order(params.time_in_force)) {
+            //an auction order only waits for its auction - never matched now
+            auto rejection = _auctions.check_auction_order(name, params.time_in_force);
+            if (rejection) {
+                set_order_status(order.ord, *rejection);
+                return true;
+            }
+            return false;
+        }
+        if (params.time_in_force == TimeInForce::day && _auctions.is_closed(name)) {
+            set_order_status(order.ord, OrderRejectionReason::too_late);
+            return true;
+        }
+        return false;
+    }
+
+    bool SimExecutor::match_on_placement(ActiveOrder &order) {
+        if (is_auction_order(order.time_in_force)) return false;
+        //in a call phase or after the close the order waits - an ioc/fok is
+        //then canceled by finish_if_cannot_rest()
+        if (!_auctions.can_match_continuous(order.instrument->get_info().name)) return false;
+        return match_order(order, true);
     }
 
     bool SimExecutor::validate_order(ActiveOrder &order) {
@@ -189,40 +217,9 @@ namespace quarkbot {
     
 
     bool SimExecutor::match_order(ActiveOrder &order, Quote quote, bool taker) {
+        //auction orders and the phase of the day are handled before matching
+        //(admit_order, can_match_continuous) - this only does the matching math
         auto &params  = order.ord->get_parameters();
-        //attempt to find auction information about this instrument
-        const auto &info  = order.ord->get_instrument()->get_instrument()->get_info();        
-        auto auction_state_iter = _auction_state.find(info.name);        
-
-        //if order is auction order
-        if (is_auction_order(params.time_in_force)) {            
-            //no auction information, nor open auction is not yet started
-            if (auction_state_iter == _auction_state.end() || !auction_state_iter->second.at_open_started) {
-                //reject
-                set_order_status(order.ord, OrderRejectionReason::not_tradable);
-                return true;
-            }
-            //close auction already finished (day closed)
-            if (auction_state_iter->second.at_close_finished) {
-                //reject
-                set_order_status(order.ord,OrderRejectionReason::too_late);
-                return true;
-            }            
-            const auto &params_ = order.ord->get_parameters();
-            //order is ato but open auction finished
-            if (params_.time_in_force == TimeInForce::ato && auction_state_iter->second.at_open_finished) {
-                //reject
-                set_order_status(order.ord,OrderRejectionReason::too_late);
-                return true;
-            }
-            //keep order
-            return false;
-        }
-        if (params.time_in_force == TimeInForce::day  && auction_state_iter != _auction_state.end() 
-                    && auction_state_iter->second.at_close_finished) {
-            set_order_status(order.ord,OrderRejectionReason::too_late);
-            return true;
-        }        
         if (real_order_type(order) == OrderType::alert) {
             //an alert works like a stop that generates no fill - it just goes to
             //filled once triggered
@@ -366,27 +363,18 @@ namespace quarkbot {
 
     void SimExecutor::on_event(PMarketInstrument instrument, Trade &trade){
         seed_random(trade.time);
-        const auto &info = instrument->get_info();
-        auto auction_iter = _auction_state.find(info.name);
-        //first continuous-phase trade signals end of open auction (if one was started)
-        if (auction_iter != _auction_state.end() && !auction_iter->second.at_open_finished) {
-            auction_iter->second.at_open_finished = true;
-            auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord) {
-                if (ord.instrument == instrument) {
-                    const auto &params = ord.ord->get_parameters();
-                    if (params.time_in_force == TimeInForce::ato) {
-                        set_order_status(ord.ord, OrderRejectionReason::expired);
-                        return true;
-                    }
-                }
-                return false;
-            });
-            _active_orders.erase(e, _active_orders.end());
+        const auto &name = instrument->get_info().name;
+        auto act = _auctions.on_trade(name, trade.qualifier, trade.time);
+        if (act.uncross) {
+            uncross(instrument, to_auction_type(trade.qualifier), trade.price, trade.size, trade.time);
         }
+        apply_auction_actions(instrument, act, trade.time);
+        //an uncross is the auction itself, it is not matched once more as a trade
+        if (act.uncross || !_auctions.can_match_continuous(name)) return;
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
-            if (ord.instrument == instrument) {
+            if (ord.instrument == instrument && !is_auction_order(ord.time_in_force)) {
                 return match_order(ord, trade);
-            } 
+            }
             return false;
         });
         _active_orders.erase(e, _active_orders.end());
@@ -401,11 +389,14 @@ namespace quarkbot {
         //untouched book - see its declaration for why.
         Quote new_quote = quote;
         Quote book = with_normalized_sizes(quote);
-        _last_quote[instrument->get_info().name] = book;
+        const auto &name = instrument->get_info().name;
+        _last_quote[name] = book;
+        //the quote is remembered always, but only matched in continuous trading
+        bool can_match = _auctions.can_match_continuous(name);
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
-            if (ord.instrument == instrument) {
-                bool b =  match_order(ord, book, false);
-                if (b) return true;
+            //auction orders are not in the continuous book
+            if (ord.instrument == instrument && !is_auction_order(ord.time_in_force)) {
+                if (can_match && match_order(ord, book, false)) return true;
                 if (is_limit_order(real_order_type(ord) )) {
                     auto &p =ord.ord->get_parameters(); 
                     if (p.side == Side::sell) new_quote.ask = std::min(new_quote.ask, p.limit_price);
@@ -422,73 +413,75 @@ namespace quarkbot {
 
     void SimExecutor::on_event(PMarketInstrument instrument, Auction &auction_data) {
         seed_random(auction_data.time);
+        //indicative data only drives the phase - it never fills anything
+        auto act = _auctions.on_indicative(instrument->get_info().name, auction_data.auction_type);
+        apply_auction_actions(instrument, act, auction_data.time);
+    }
 
-        bool is_open_auction = auction_data.auction_type == AuctionType::opening;
-        bool is_close_auction = auction_data.auction_type == AuctionType::closing;
+    void SimExecutor::apply_auction_actions(const PMarketInstrument &instrument, const AuctionPhaseTracker::Actions &act, Timestamp tp) {
+        if (act.finish) finish_auction(instrument, *act.finish);
+        if (act.close_day) close_day(instrument);
+        if (act.start_close_timeout) expire_auction(instrument, tp);
+    }
 
-        auto &st = _auction_state[instrument->get_info().name];        
-        if (is_open_auction) {
-            st.at_open_started = true;
-            st.at_open_finished = false;
-            st.at_close_started = false;
-            st.at_close_finished = false;
-        } else if (is_close_auction) {
-            if (!st.at_close_started) {
-                st.at_close_started = true;
-                expire_auction(instrument, auction_data.time);
-            }
-            st.at_close_finished = false;
-        }
-
-        if (auction_data.final) {
-            //auction is done
-            auto iter = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord) {
-                if (ord.instrument == instrument) {
-                    const auto &params = ord.ord->get_parameters();
-                    if (is_valid_order_for_auction_type(params.time_in_force, auction_data.auction_type)) {
-
-                        if (params.type == OrderType::market
-                            //or type is limit
-                            || (params.type == OrderType::limit && 
-                                //and depend on side, check price
-                                ((params.side == Side::buy && params.limit_price >= auction_data.price)
-                                || (params.side == Side::sell && params.limit_price <= auction_data.price))
-                            )    
-                        ) {
-                                //fill only what is still outstanding - never more
-                                Decimal leave_quant = params.quantity - ord.calcs.filled;
-                                Decimal fill_quant = std::min(auction_data.quantity, leave_quant);
-                                if (fill_quant > 0) {
-                                    create_fill(ord, auction_data.price, fill_quant, auction_data.time, true);
-                                }
-                                //the auction is over, so an unfilled remainder can
-                                //no longer trade - that is expired, not filled
-                                if (ord.calcs.filled >= params.quantity) {
-                                    set_order_status(ord.ord, OrderStatus::filled);
-                                } else {
-                                    set_order_status(ord.ord, OrderRejectionReason::expired);
-                                }
-                                //remove order
-                                return true;
-                        } else {
-                            //order did not matched - send expired
-                            set_order_status(ord.ord, OrderRejectionReason::expired);
-                            //remove order
-                            return true;
-
-                        }
-                    }
-                }
-                //don't remove any other order (yet)
+    void SimExecutor::uncross(const PMarketInstrument &instrument, AuctionType type, Decimal price, Decimal size, Timestamp tp) {
+        auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord) {
+            if (ord.instrument != instrument) return false;
+            const auto &params = ord.ord->get_parameters();
+            //an auction order takes part in its own auction only
+            if (is_auction_order(params.time_in_force)
+                    && !is_valid_order_for_auction_type(params.time_in_force, type)) {
                 return false;
-            });
-            _active_orders.erase(iter, _active_orders.end());
-            if (is_open_auction) st.at_open_finished = true;
-            if (is_close_auction) {
-                st.at_close_finished = true;
-                close_day(instrument);
             }
-        }
+            auto otype = real_order_type(ord);
+            if (otype == OrderType::stop || otype == OrderType::alert) {
+                //the auction price triggers stops, but a triggered stop joins
+                //the next phase, not this uncross - same as on a real venue
+                if (!stop_reached(params.stop_price, price, params.side)) return false;
+                if (otype == OrderType::alert) {
+                    set_order_status(ord.ord, {OrderStatus::filled});
+                    return true;
+                }
+                ord.trig = true;
+                return false;
+            }
+            Decimal leave_quant = params.quantity - ord.calcs.filled;
+            Decimal fill_quant;
+            if (otype == OrderType::market) {
+                //the simulator is not a market participant - the printed
+                //volume does not limit a market order
+                fill_quant = leave_quant;
+            } else if (is_limit_order(otype)) {
+                bool crosses = (params.side == Side::buy && params.limit_price >= price)
+                            || (params.side == Side::sell && params.limit_price <= price);
+                if (!crosses) return false;
+                //every participant gets the single auction price; the print
+                //size roughly models a partial execution
+                fill_quant = std::min(leave_quant, size);
+            } else {
+                return false;
+            }
+            if (fill_quant > 0) create_fill(ord, price, fill_quant, tp, true);
+            if (ord.calcs.filled >= params.quantity) {
+                set_order_status(ord.ord, {OrderStatus::filled});
+                return true;
+            }
+            return false;
+        });
+        _active_orders.erase(e, _active_orders.end());
+    }
+
+    void SimExecutor::finish_auction(const PMarketInstrument &instrument, AuctionType type) {
+        auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord) {
+            if (ord.instrument != instrument) return false;
+            auto tif = ord.ord->get_parameters().time_in_force;
+            if (!is_auction_order(tif) || !is_valid_order_for_auction_type(tif, type)) return false;
+            //the auction is over, so an unfilled remainder can no longer trade -
+            //that is expired, not filled
+            set_order_status(ord.ord, OrderRejectionReason::expired);
+            return true;
+        });
+        _active_orders.erase(e, _active_orders.end());
     }
 
     void SimExecutor::close_day(PMarketInstrument instrument) {
@@ -607,11 +600,8 @@ void SimExecutor::stop_latency_queue() {
 
 StrategyFragment SimExecutor::expire_auction(PMarketInstrument instrument, std::chrono::system_clock::time_point tp) {
     if (co_await _timer.sleep_until(tp+std::chrono::minutes(30))) {
-        auto &st = _auction_state[instrument->get_info().name];
-        if (!st.at_close_finished) {
-            st.at_close_finished = true;
-            close_day(instrument);
-        }
+        auto act = _auctions.on_close_timeout(instrument->get_info().name);
+        apply_auction_actions(instrument, act, tp);
     }
 }
 

@@ -28,6 +28,8 @@ AuctionPhaseTracker::Actions AuctionPhaseTracker::continuous_trade(State &st) {
             //next day - which started without an opening auction
             new_day(st);
             st.opening_done = true;
+            //orders that waited overnight for the opening - it did not happen
+            a.finish = AuctionType::opening;
             break;
         case Phase::call:
             //a continuous trade in the closing call cannot happen on clean data
@@ -141,7 +143,13 @@ std::optional<OrderRejectionReason> AuctionPhaseTracker::check_auction_order(con
     //no auction seen yet - the instrument is not known to have auctions
     if (iter == _states.end()) return OrderRejectionReason::not_tradable;
     const State &st = iter->second;
-    if (st.phase == Phase::closed) return OrderRejectionReason::too_late;
+    if (st.phase == Phase::closed) {
+        //without indicative data the next day starts directly with the opening
+        //print, so the evening after the close is the only time an ato order
+        //can be placed - it rests until the next opening
+        if (tif == TimeInForce::ato || tif == TimeInForce::crossing) return std::nullopt;
+        return OrderRejectionReason::too_late;
+    }
     if (tif == TimeInForce::ato && st.opening_done) return OrderRejectionReason::too_late;
     return std::nullopt;
 }

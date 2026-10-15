@@ -3,6 +3,7 @@
 #include "../common/orderdata.hpp"
 #include "quarkbot/abstract/backtest_data_source.hpp"
 #include "quarkbot/backtest/isimexecutor.hpp"
+#include "auction_phase_tracker.hpp"
 #include <quarkbot/defs.hpp>
 #include <quarkbot/order_defs.hpp>
 #include <quarkbot/strategy_fragment.hpp>
@@ -69,29 +70,15 @@ protected:
     };
 
 
-    struct AuctionState {
-        //at open auction started - found auction event in phase at open
-        //you can place any other you want
-        bool at_open_started = false;
-        //at open auction finished - either by final trade, or by first trade from continuous trading phase
-        //ato orders are rejected
-        bool at_open_finished = false;
-        //at close auction started - found auction event
-        //day orders are rejected
-        bool at_close_started = false;
-        //at close auction finished - either by final trade, or by expiration after certain period (day is closed)
-        //all orders except GTC are closed and rejected
-        bool at_close_finished = false;
-    };
-
-    std::unordered_map<std::string, AuctionState> _auction_state;
+    ///auction phase of every instrument - decides when orders may be matched
+    AuctionPhaseTracker _auctions;
 
     std::vector<ActiveOrder> _active_orders;
     ///last seen quote per instrument, keyed by instrument name
     /** Must be per instrument - an order may only ever be matched against market
      *  data of its own instrument. Keyed by name (not by SimInstrument pointer)
      *  because instances are cached through a weak_ptr and can be recreated,
-     *  while the name is the stable identity - same as _auction_state.
+     *  while the name is the stable identity - same as _auctions.
      */
     std::unordered_map<std::string, Quote> _last_quote;
     std::uint64_t _random_key = 0;
@@ -133,6 +120,18 @@ protected:
     void cancel_order_internal(IOrder *ord);
     void stop_latency_queue();
     void close_day(PMarketInstrument instrument);
+    ///Check an order against the auction phase on placement
+    /** @retval true the order was terminated and must not be kept */
+    bool admit_order(ActiveOrder &order);
+    ///Match an order right on placement, when the phase allows it
+    /** @retval true the order is done */
+    bool match_on_placement(ActiveOrder &order);
+    ///Execute an auction of the given type at a single price
+    /** @param size size of the auction print - caps limit orders only */
+    void uncross(const PMarketInstrument &instrument, AuctionType type, Decimal price, Decimal size, Timestamp tp);
+    ///The auction is over - expire the auction orders valid for it
+    void finish_auction(const PMarketInstrument &instrument, AuctionType type);
+    void apply_auction_actions(const PMarketInstrument &instrument, const AuctionPhaseTracker::Actions &act, Timestamp tp);
 
 
     StrategyFragment expire_auction(PMarketInstrument instrument, std::chrono::system_clock::time_point tp);
