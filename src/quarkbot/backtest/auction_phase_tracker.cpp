@@ -76,6 +76,7 @@ AuctionPhaseTracker::Actions AuctionPhaseTracker::on_trade(const std::string &na
 
     AuctionType type = to_auction_type(qualifier);
     State &st = _states[name];
+    bool reopened = false;
     //one auction may arrive as several prints (multiple market centers). The
     //first one runs the auction, every following one is a continuous trade.
     switch (type) {
@@ -88,8 +89,19 @@ AuctionPhaseTracker::Actions AuctionPhaseTracker::on_trade(const std::string &na
             if (st.phase == Phase::closed) return {};
             break;
         default: {
+            //the print after the close is the next day, which started without
+            //an opening auction (same as a continuous trade after the close)
+            if (st.phase == Phase::closed) {
+                new_day(st);
+                st.opening_done = true;
+                reopened = true;
+            }
             const auto &last = last_uncross(st, type);
-            if (last && time - *last < duplicate_window) return continuous_trade(st);
+            if (last && time - *last < duplicate_window) {
+                Actions d = continuous_trade(st);
+                if (reopened) d.finish = AuctionType::opening;
+                return d;
+            }
             break;
         }
     }
@@ -97,6 +109,10 @@ AuctionPhaseTracker::Actions AuctionPhaseTracker::on_trade(const std::string &na
     Actions a;
     a.uncross = true;
     a.finish = type;
+    //finish(opening) expires the orders waiting overnight for the missed
+    //opening. It also covers the intraday/unscheduled auction itself: the only
+    //auction order valid for it is crossing, and that is valid for any type.
+    if (reopened) a.finish = AuctionType::opening;
     switch (type) {
         case AuctionType::opening:
             st.opening_done = true;

@@ -170,7 +170,10 @@ namespace quarkbot {
         if (is_auction_order(order.time_in_force)) return false;
         //in a call phase or after the close the order waits - an ioc/fok is
         //then canceled by finish_if_cannot_rest()
-        if (!_auctions.can_match_continuous(order.instrument->get_info().name)) return false;
+        if (!_auctions.can_match_continuous(order.instrument->get_info().name)) {
+            order.held = true;
+            return false;
+        }
         return match_order(order, true);
     }
 
@@ -342,7 +345,12 @@ namespace quarkbot {
                 || (params.side == Side::sell && trade.price >= params.limit_price))
             {                
                 Decimal leave_quant = params.quantity - order.calcs.filled;
-                create_fill(order, params.limit_price, std::min(leave_quant, trade.size), trade.time,false);
+                //a held order is a taker of this print (post-only never is - it
+                //must stay on the maker side); a resting order is the maker and
+                //trades at its own limit
+                bool as_taker = order.held && type != OrderType::limit_post_only;
+                Decimal price = as_taker ? trade.price : params.limit_price;
+                create_fill(order, price, std::min(leave_quant, trade.size), trade.time, as_taker);
                 bool filled = order.calcs.filled >= params.quantity;
                 if (filled) set_order_status(order.ord, {OrderStatus::filled});
                 return filled;
@@ -373,7 +381,10 @@ namespace quarkbot {
         if (act.uncross || !_auctions.can_match_continuous(name)) return;
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
             if (ord.instrument == instrument && !is_auction_order(ord.time_in_force)) {
-                return match_order(ord, trade);
+                bool done = match_order(ord, trade);
+                //the first continuous evaluation is over, filled or not
+                ord.held = false;
+                return done;
             }
             return false;
         });
@@ -396,8 +407,17 @@ namespace quarkbot {
         auto e = std::remove_if(_active_orders.begin(), _active_orders.end(), [&](ActiveOrder &ord){
             //auction orders are not in the continuous book
             if (ord.instrument == instrument && !is_auction_order(ord.time_in_force)) {
-                if (can_match && match_order(ord, book, false)) return true;
-                if (is_limit_order(real_order_type(ord) )) {
+                if (can_match) {
+                    //a held order takes liquidity (post-only stays on the maker side)
+                    bool taker = ord.held && real_order_type(ord) != OrderType::limit_post_only;
+                    bool done = match_order(ord, book, taker);
+                    ord.held = false;
+                    if (done) return true;
+                }
+                //limits are reflected into the published quote only in continuous
+                //trading - otherwise a limit beyond the other side would publish
+                //a crossed quote (and a crossed mid price to the account)
+                if (can_match && is_limit_order(real_order_type(ord) )) {
                     auto &p =ord.ord->get_parameters(); 
                     if (p.side == Side::sell) new_quote.ask = std::min(new_quote.ask, p.limit_price);
                     else if (p.side == Side::buy) new_quote.bid = std::max(new_quote.bid, p.limit_price);
@@ -451,7 +471,9 @@ namespace quarkbot {
                 //the simulator is not a market participant - the printed
                 //volume does not limit a market order
                 fill_quant = leave_quant;
-            } else if (is_limit_order(otype)) {
+            } else if (is_limit_order(otype) && otype != OrderType::limit_post_only) {
+                //post-only never takes part - it rests untouched into the
+                //continuous phase, keeping the maker guarantee
                 bool crosses = (params.side == Side::buy && params.limit_price >= price)
                             || (params.side == Side::sell && params.limit_price <= price);
                 if (!crosses) return false;
@@ -466,6 +488,8 @@ namespace quarkbot {
                 set_order_status(ord.ord, {OrderStatus::filled});
                 return true;
             }
+            //the remainder is a leftover of the auction - see ActiveOrder::held
+            if (fill_quant > 0) ord.held = true;
             return false;
         });
         _active_orders.erase(e, _active_orders.end());

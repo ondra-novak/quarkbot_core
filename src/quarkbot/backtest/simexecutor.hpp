@@ -67,6 +67,12 @@ protected:
         TimeInForce time_in_force;
         OrderFillStats calcs;
         bool trig = false;
+        ///The order waited out a call phase or a closed day, or kept a remainder
+        ///after an uncross. Its first continuous evaluation is priced as a taker.
+        /** In the real auction such leftovers would have executed; filling them
+         *  later as a maker at their own limit would be a systematic adverse bias,
+         *  especially when the first print is a small secondary-venue print. */
+        bool held = false;
     };
 
 

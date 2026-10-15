@@ -90,6 +90,14 @@ OrderRequest buy(std::string label, OrderType type, Decimal qty, TimeInForce tif
     };
 }
 
+OrderRequest sell(std::string label, OrderType type, Decimal qty, TimeInForce tif,
+                  Decimal limit = {}) {
+    return OrderRequest{
+        .label = std::move(label), .side = Side::sell, .type = type, .quantity = qty,
+        .limit_price = limit, .time_in_force = tif
+    };
+}
+
 InstrumentDescription make_desc() {
     return InstrumentDescription{
         {},
@@ -209,9 +217,9 @@ static void test_opening_without_indicative() {
     check_fills(out, "stoplim_far", {});
     CHECK(!get(out, "stoplim_far").terminated());
     //triggered by the auction price, but joins the next phase: the uncross does
-    //not fill it, the duplicate continuous print (100 x 3) fills it as a limit
-    //order at its limit price, 2 of 3
-    check_fills(out, "stoplim_trig", {{102_dec, 2_dec}});
+    //not fill it. It was placed while closed, so it is held and the duplicate
+    //print (100 x 3) fills it as a taker at the print price, 2 of 3
+    check_fills(out, "stoplim_trig", {{100_dec, 2_dec}});
     CHECK(get(out, "stoplim_trig").status == OrderStatus::filled);
 
     //auction order: full quantity at the auction price, no volume cap for market
@@ -223,9 +231,10 @@ static void test_opening_without_indicative() {
     //closing order placed while the day is closed - it cannot take part in anything
     check_fills(out, "atc_lim", {});
     CHECK(get(out, "atc_lim").reason == OrderRejectionReason::too_late);
-    //regular limit: capped by the first print at the auction price, then the
-    //duplicate is a continuous trade filled at the limit price
-    check_fills(out, "gtc_lim", {{100_dec, 5_dec}, {102_dec, 3_dec}});
+    //regular limit: capped by the first print at the auction price. The leftover
+    //was held through the call, so the duplicate (100 x 3) is taken as a taker
+    //at the print price, not as a maker at the limit 102
+    check_fills(out, "gtc_lim", {{100_dec, 5_dec}, {100_dec, 3_dec}});
     //regular market: no volume cap
     check_fills(out, "gtc_mkt", {{100_dec, 20_dec}});
     //stop: triggered by the auction price, filled in continuous trading at the ask
@@ -253,6 +262,10 @@ static void test_call_phase() {
         buy("gtc_lim", OrderType::limit, 4_dec, TimeInForce::gtc, 102_dec),
         buy("ioc_lim", OrderType::limit, 1_dec, TimeInForce::ioc, 102_dec),
         buy("ato_lim", OrderType::limit, 2_dec, TimeInForce::ato, 101_dec),
+        //post-only never takes part in the uncross - it rests untouched
+        buy("post_lim", OrderType::limit_post_only, 1_dec, TimeInForce::gtc, 102_dec),
+        //sell side of the uncross: limit below the auction price, capped by S
+        sell("sell_lim", OrderType::limit, 3_dec, TimeInForce::gtc, 99_dec),
     };
     auto out = run(sc);
 
@@ -262,6 +275,10 @@ static void test_call_phase() {
     CHECK(get(out, "ioc_lim").reason == OrderRejectionReason::not_filled);
     check_fills(out, "ato_lim", {{100.5_dec, 2_dec}});
     CHECK(get(out, "ato_lim").status == OrderStatus::filled);
+    check_fills(out, "post_lim", {});
+    CHECK(!get(out, "post_lim").terminated());
+    check_fills(out, "sell_lim", {{100.5_dec, 3_dec}});
+    CHECK(get(out, "sell_lim").status == OrderStatus::filled);
 }
 
 ///the opening call ends with a continuous trade - the auction did not happen
@@ -283,8 +300,9 @@ static void test_opening_did_not_happen() {
 
     check_fills(out, "ato_lim", {});
     CHECK(get(out, "ato_lim").reason == OrderRejectionReason::expired);
-    //the first continuous trade is matched as usual - at the limit price
-    check_fills(out, "gtc_lim", {{102_dec, 1_dec}});
+    //placed during the call, so held: the first continuous trade (101) is taken
+    //as a taker at the print price, not as a maker at the limit 102
+    check_fills(out, "gtc_lim", {{101_dec, 1_dec}});
 }
 
 ///closing auction with indicative data, close of the day, duplicate print
@@ -356,18 +374,25 @@ static void test_unscheduled_duplicate() {
         {1s,  quote(100_dec, 101_dec)},                                    //orders placed
         {10s, trade(99_dec, 4_dec, TradeQualifier::unscheduled_auction)},
         {20s, trade(99_dec, 4_dec, TradeQualifier::unscheduled_auction)},  //duplicate
+        {30s, trade(97.5_dec, 2_dec)},                                     //continuous
     };
     sc.orders = {
         buy("crs_lim", OrderType::limit, 10_dec, TimeInForce::crossing, 100_dec),
         buy("gtc_lim", OrderType::limit, 10_dec, TimeInForce::gtc, 99.5_dec),
+        buy("gtc_rest", OrderType::limit, 5_dec, TimeInForce::gtc, 98_dec),
     };
     auto out = run(sc);
 
+    //resting since continuous trading and untouched by the uncross: not held, so
+    //it is still a maker at its own limit 98 (a held order would get 97.5)
+    check_fills(out, "gtc_rest", {{98_dec, 2_dec}});
     //crossing joins any auction; the remainder expires with it
     check_fills(out, "crs_lim", {{99_dec, 4_dec}});
     CHECK(get(out, "crs_lim").reason == OrderRejectionReason::expired);
-    //auction price first, then the duplicate as a continuous trade at the limit
-    check_fills(out, "gtc_lim", {{99_dec, 4_dec}, {99.5_dec, 4_dec}});
+    //auction price first. The remainder (6) is held: the duplicate (99 x 4) is
+    //taken as a taker at 99. After that it is an ordinary resting order again,
+    //so the last 2 are filled as a maker at the limit by the trade at 97.5
+    check_fills(out, "gtc_lim", {{99_dec, 4_dec}, {99_dec, 4_dec}, {99.5_dec, 2_dec}});
 }
 
 ///an instrument without any auction event trades exactly as before
@@ -412,6 +437,30 @@ static void test_overnight_order_expires_without_opening() {
     CHECK(get(out, "crs_lim").reason == OrderRejectionReason::expired);
 }
 
+///an unscheduled auction after the close starts a new day without an opening
+static void test_unscheduled_after_close() {
+    std::cout << "--- test_unscheduled_after_close" << std::endl;
+    Scenario sc;
+    sc.events = {
+        {0s,   trade(99_dec, 100_dec, TradeQualifier::closing_auction)},
+        {60s,  quote(100_dec, 101_dec)},                                   //closed: orders placed
+        {120s, trade(100_dec, 4_dec, TradeQualifier::unscheduled_auction)},
+        {121s, quote(100_dec, 101_dec)},
+    };
+    sc.orders = {
+        buy("ato_mkt", OrderType::market, 1_dec, TimeInForce::ato),
+        buy("crs_lim", OrderType::limit, 10_dec, TimeInForce::crossing, 101_dec),
+    };
+    auto out = run(sc);
+
+    //the opening was missed
+    check_fills(out, "ato_mkt", {});
+    CHECK(get(out, "ato_mkt").reason == OrderRejectionReason::expired);
+    //crossing joins the unscheduled auction, the remainder expires with it
+    check_fills(out, "crs_lim", {{100_dec, 4_dec}});
+    CHECK(get(out, "crs_lim").reason == OrderRejectionReason::expired);
+}
+
 int main() {
     test_opening_without_indicative();
     test_call_phase();
@@ -421,5 +470,6 @@ int main() {
     test_unscheduled_duplicate();
     test_no_auctions();
     test_overnight_order_expires_without_opening();
+    test_unscheduled_after_close();
     return 0;
 }

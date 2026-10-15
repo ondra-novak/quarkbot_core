@@ -196,6 +196,22 @@ static void test_new_day_by_continuous_trade() {
     CHECK(no_action(tr.on_trade(X, TradeQualifier::opening_auction, t0 + 24h + 1s)));
 }
 
+///an intraday/unscheduled print after the close is a new day without an opening
+static void test_new_day_by_unscheduled_trade() {
+    std::cout << "--- test_new_day_by_unscheduled_trade" << std::endl;
+    AuctionPhaseTracker tr;
+    tr.on_trade(X, TradeQualifier::closing_auction, t0);
+    CHECK(tr.is_closed(X));
+    auto a = tr.on_trade(X, TradeQualifier::unscheduled_auction, t0 + 24h);
+    CHECK(a.uncross);
+    CHECK(a.finish == AuctionType::opening);
+    CHECK(!a.close_day);
+    CHECK(tr.phase(X) == Phase::continuous);
+    CHECK(tr.check_auction_order(X, TimeInForce::ato) == OrderRejectionReason::too_late);
+    //the opening auction was missed - a late opening print is a duplicate
+    CHECK(no_action(tr.on_trade(X, TradeQualifier::opening_auction, t0 + 24h + 1s)));
+}
+
 static void test_indicative_ignored_while_closed() {
     std::cout << "--- test_indicative_ignored_while_closed" << std::endl;
     AuctionPhaseTracker tr;
@@ -271,6 +287,7 @@ int main() {
     test_new_day_by_indicative_opening();
     test_new_day_by_opening_trade();
     test_new_day_by_continuous_trade();
+    test_new_day_by_unscheduled_trade();
     test_indicative_ignored_while_closed();
     test_intraday_window();
     test_intraday_call_without_trade();
