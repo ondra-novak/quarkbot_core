@@ -26,6 +26,7 @@ set(BASIC_TESTS
     strategy_fragment.cpp
     replay_csv.cpp
     trade_qualifier.cpp
+    auction_phase_tracker_test.cpp
     persistent.cpp
     json_number.cpp
     sim_instrument_identity.cpp
