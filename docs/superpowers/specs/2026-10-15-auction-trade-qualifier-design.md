@@ -154,8 +154,9 @@ be recreated. It replaces `SimExecutor::AuctionState`.
 |---|---|---|---|
 | indicative `Auction(T)` | T = unknown | none | none |
 | indicative `Auction(opening)` | phase `closed` | new day (`opening_done = false`, `close_timeout_started = false`), → `call(opening)` | none |
+| indicative `Auction(opening)` | `opening_done` | none (today's opening is over) | none |
 | indicative `Auction(T)` | otherwise | → `call(T)` | for T = closing, the first time today: start the closing timeout |
-| auction `Trade(T)` | not a duplicate (see below) | opening → `continuous` + `opening_done`; closing → `closed`; intraday/unscheduled → `continuous`. An opening trade in `closed` first starts a new day. | `uncross(T)`, then `finish(T)`, and for closing also `close_day` |
+| auction `Trade(T)` | not a duplicate (see below) | opening → `continuous` + `opening_done`; closing → `closed`; intraday/unscheduled → `continuous`. An opening trade in `closed` first starts a new day. An intraday/unscheduled trade in `closed` (a halt over the close reopened by a reopening print) first starts a new day with `opening_done = true`. | `uncross(T)`, then `finish(T)`, and for closing also `close_day`. For an intraday/unscheduled trade in `closed`, `finish(opening)` instead, which also covers `crossing` and expires the `ato` orders that waited overnight |
 | auction `Trade(T)` | duplicate | handled as a continuous trade (rows below) | as for a continuous trade |
 | continuous `Trade` | phase `call(opening / intraday / unscheduled)` | the auction did not happen → `continuous`; for opening set `opening_done` | `finish(T)` (expire the auction orders for T) |
 | continuous `Trade` | phase `call(closing)` | none; stays in the call phase (cannot happen on clean data) | none |
@@ -215,6 +216,7 @@ Every active order of the instrument is handled as follows:
 | regular **market** (`day` / `gtc`), including a triggered stop | yes | the full remaining quantity at P; no volume cap |
 | regular **limit** crossing P (buy ≥ P, sell ≤ P), including a triggered stop limit | yes | `min(remaining, S)` at P, not at its own limit |
 | limit not crossing P | no | none |
+| `limit_post_only` | no | none; it rests into the continuous phase. Filling it in the auction would charge the taker fee and break the post-only guarantee |
 | **untriggered** stop / stop limit / alert | no | P is compared with the stop price, and if reached the order is triggered (`trig`; an alert goes to filled). It does not join this uncross; it is matched in the continuous phase. |
 
 - An auction market order with an auction TIF follows the market row, and an
@@ -227,6 +229,18 @@ Every active order of the instrument is handled as follows:
   small print from a secondary market center, auction orders are under-filled.
   This simplification is known and accepted.
 
+### Orders held back by an auction
+
+An order placed while `can_match_continuous` is false (call phase, closed), or
+one that took part in an uncross and kept a remainder because of the
+first-print cap, is marked *held*. In the real auction such an order would
+have executed; it never rested in the continuous book while the market moved
+through it. Its first continuous evaluation therefore prices it as a taker:
+at the touch against a quote, at the trade price against a trade (including a
+duplicate auction print). After that first evaluation the mark is cleared and
+the order is an ordinary resting order. Orders that rested before the call
+phase and did not take part in the uncross keep maker-at-limit pricing.
+
 ### `finish(T)`
 
 - An auction-TIF order valid for T that is fully filled becomes `filled`. Any
@@ -238,8 +252,11 @@ Every active order of the instrument is handled as follows:
 ### Other events
 
 - **`on_event(Quote)`:** `_last_quote` is always updated, and matching runs only
-  when `can_match_continuous`. Our resting limits are still reflected in the
-  published quote, as today.
+  when `can_match_continuous`. In continuous trading our resting limits are
+  still reflected in the published quote, as today. Outside it (call phase,
+  closed) the raw feed is published: unmatched crossing limits would make the
+  quote crossed and skew the mid used for valuation. Auction-TIF orders are
+  never reflected; they are not in the continuous book.
 - **`on_event(Trade)`:** the event goes to the tracker first, and its actions
   run (uncross, finish, close_day). If the trade is continuous, or an auction
   duplicate, today's `match_order(order, trade)` then runs, but only when
