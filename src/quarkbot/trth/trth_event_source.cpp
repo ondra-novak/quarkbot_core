@@ -97,11 +97,9 @@ bool TRTHEventSource::operator()(BacktestEvent &ev) {
             else if (inst_phase == "E") a.auction_type = quarkbot::AuctionType::closing;
             else continue;
             if (_data.Price.empty()) continue;
-            a.final = false;
             a.imbalance = 0;
             a.price = Decimal::from_string(_data.Price);
             a.quantity = _data.Volume.empty()?0_dec:Decimal::from_string(_data.Volume);
-            a.quantity_traded = 0;
             a.time = ev.time;
         } else if (_data.Type == "Quote") {
             Quote &q = ev.data.emplace<Quote>();
@@ -133,20 +131,12 @@ bool TRTHEventSource::operator()(BacktestEvent &ev) {
             } else {
                 continue;
             }
-            if (atype == quarkbot::AuctionType::unknown) {
-                auto &t = ev.data.emplace<Trade>();
-                t.price = Decimal::from_string(_data.Price);
-                t.size = _data.Volume.empty()?0_dec:Decimal::from_string(_data.Volume);
-                t.time = ev.time;
-            } else {
-                auto &a = ev.data.emplace<Auction>();
-                a.auction_type = atype;
-                a.final = true;
-                a.quantity = a.quantity_traded =  _data.Volume.empty()?0_dec:Decimal::from_string(_data.Volume);
-                a.imbalance = 0;
-                a.price = Decimal::from_string(_data.Price);
-                a.time = ev.time;
-            }        
+            auto &t = ev.data.emplace<Trade>();
+            t.price = Decimal::from_string(_data.Price);
+            t.size = _data.Volume.empty()?0_dec:Decimal::from_string(_data.Volume);
+            t.time = ev.time;
+            //an auction uncross is reported as a trade with the auction's MMT trading mode
+            t.qualifier = to_trade_qualifier(atype);
         } else {
             continue;
         }

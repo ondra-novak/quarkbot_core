@@ -113,8 +113,6 @@ bool ReplayCSVDataSource::operator()(BacktestEvent &ev) {
             Auction a;
             a.price = Decimal::from_string(tmp.price);
             a.quantity = Decimal::from_string(tmp.quantity);
-            a.final = false;
-            a.quantity_traded = 0;
             if (compare_icase(tmp.side,"BUY") ==0) a.imbalance=1;
             else if (compare_icase(tmp.side,"SELL") ==0) a.imbalance=-1;
             else if (!tmp.side.empty()) a.imbalance = Decimal::from_string(tmp.side);
