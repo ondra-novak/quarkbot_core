@@ -94,6 +94,19 @@ bool ReplayCSVDataSource::operator()(BacktestEvent &ev) {
             else if (compare_icase(tmp.side,"SELL") ==0) tr.side = Side::sell;
             else tr.side = Side::undetermined;
             tr.time = ev.time;
+            for (auto c: tmp.flags) {
+                switch (c) {
+                    case 'o':
+                    case 'O': tr.qualifier = TradeQualifier::opening_auction;break;
+                    case 'c':
+                    case 'C': tr.qualifier = TradeQualifier::closing_auction;break;
+                    case 'i':
+                    case 'I': tr.qualifier = TradeQualifier::intraday_auction;break;
+                    case 'u':
+                    case 'U': tr.qualifier = TradeQualifier::unscheduled_auction;break;
+                    default:break;
+                }
+            }
             ev.data = tr;
             return true;
         } else if (compare_icase(tmp.event, "auction") == 0) {
@@ -118,7 +131,9 @@ bool ReplayCSVDataSource::operator()(BacktestEvent &ev) {
                     case 'u':
                     case 'U': a.auction_type = AuctionType::unscheduled;break;
                     case 'f':
-                    case 'F': a.final = true;a.quantity_traded = a.quantity;break;
+                    case 'F': throw std::runtime_error(
+                        "Replay CSV: the final auction flag 'F' is no longer supported - "
+                        "write the auction result as a trade row with an auction flag (O/C/I/U)");
                     default:break;
                 }
             }
