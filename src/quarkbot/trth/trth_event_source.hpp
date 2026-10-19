@@ -31,6 +31,18 @@ protected:
     TRTHRawSource _raw_source;
     bool _eof = false;
     TRTHRawSource::Data _data;
+    ///row read ahead and not consumed yet
+    TRTHRawSource::Data _next;
+    bool _has_next = false;
+
+    ///read next row, the row read ahead first
+    bool read_row(TRTHRawSource::Data &data);
+    ///read the row following _data into _next, false at eof
+    bool peek_row();
+    ///fill the Auction from _data and the rows following it
+    bool parse_auction(Auction &a);
+    ///fill the Trade from _data and the rows following it
+    bool parse_trade(Trade &t);
 
 
 };

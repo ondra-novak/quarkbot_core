@@ -18,8 +18,8 @@ venues and data vendors work:
 - Feeds and vendors report the auction uncross as a **trade** with a qualifier.
   Under MiFID II this is the FIX Trading Community *Market Model Typology*
   (MMT) Level 2 "trading mode". FIX's `TradingSessionSubID (625)` carries the
-  same idea. TRTH's `MMT_CLASS`, already parsed in `trth_event_source.cpp`, uses
-  exactly these values.
+  same idea. TRTH's `MMT_CLASS`, already parsed in `trth_event_source.cpp`,
+  carries it too, though with venue-specific characters (see the TRTH section).
 - On a venue (Xetra T7 market model is the reference here), **regular** resting
   orders take part in scheduled auctions. Every participating order executes at
   the single auction price, not at its own limit. A stop order is triggered by
@@ -96,8 +96,8 @@ constexpr AuctionType to_auction_type(TradeQualifier q);      // continuous -> u
 constexpr TradeQualifier to_trade_qualifier(AuctionType t);   // unknown -> continuous
 ```
 
-- The enum values reuse the `AuctionType` characters (O/C/I/U) and match MMT
-  Level 2.
+- The enum values reuse the `AuctionType` characters (O/C/I/U). MMT Level 2
+  uses O/I/U as well, but K for the closing auction.
 - The new field goes last and has a default, so existing aggregate
   initialization (`Trade{price, size, time, side}` in `minute_data_source.cpp`
   and in tests) still compiles, and every source without auctions keeps
@@ -291,9 +291,29 @@ updated: there are no `Auction` events any more.
 
 ### TRTH (`trth_event_source.cpp`)
 
-A trade whose `MMT_CLASS` level 2 is O/C/U/I becomes `Trade` with the matching
-qualifier. Indicative `Auction` events stay, without `final` and
-`quantity_traded`.
+Verified against `TickHistoryTimeAndSales_JYSK.CO` (Nasdaq Copenhagen):
+
+- `MMT_CLASS` level 1 is `1` (order book) or `5`: Nasdaq Nordic reports its
+  auctions as `5O` (opening) and `5K` (closing). Level 2 maps `2` to
+  `continuous`, `O` to opening, `K` (and `C`) to closing, `I` to intraday and
+  `U` to unscheduled. Anything else is dropped, like dark (`3x`), reporting
+  (`9x`) and after-close (`13`) trades.
+- `5P` is Nasdaq Nordic's Auction on Demand: only AOD orders take part and the
+  continuous book keeps trading next to it. Regular orders cannot be matched at
+  its price, so it is dropped, together with its indicatives.
+- One uncross arrives as one print per execution (40-190 prints within
+  ~30 ms, the first one often a few shares). Contiguous prints with the same
+  qualifier and price are merged into one auction `Trade` with the summed
+  size and the first print's time. Without it the size cap of the uncross
+  would be the first print's size.
+- The `Auction` rows of this source carry no `INST_PHASE`. The auction type
+  and the imbalance side come in the quote without prices that follows the
+  Auction row(s) with the same timestamp: `IMB_ACT_TP` O/C gives
+  opening/closing, F is Auction on Demand (dropped), anything else unknown;
+  `IMB_SIDE` B/S/N gives imbalance 1/-1/0 (the quantity is not in the data).
+  That quote is consumed, and repeated identical Auction rows with the same
+  timestamp are merged. `INST_PHASE`, when present, still takes precedence.
+- Indicative `Auction` events no longer have `final` and `quantity_traded`.
 
 ### Replay CSV (`replay_csv_file.{hpp,cpp}`)
 

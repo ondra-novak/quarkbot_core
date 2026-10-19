@@ -3,6 +3,7 @@
 #include "quarkbot/utils/string_utils.hpp"
 #include "trth_raw_source.hpp"
 #include <chrono>
+#include <optional>
 #include <sstream>
 #include <utility>
 
@@ -66,15 +67,127 @@ char get_mmt_level(std::string_view mmt_class, std::size_t level) {
     return mmt_class[level];
 }
 
+///qualifier value without the quotes and padding TRTH puts around some values
+std::string_view unquote(std::string_view value) {
+    value = trim(value);
+    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
+        value = trim(value.substr(1, value.size() - 2));
+    }
+    return value;
+}
+
+///trading phase of a trade from its MMT_CLASS, nullopt for a trade outside the lit order book
+std::optional<TradeQualifier> classify_trade(std::string_view qualifiers) {
+    std::string_view mmt_class;
+    parse_qualifiers(qualifiers, [&](auto key, auto val){
+        if (key == "MMT_CLASS") mmt_class = val;
+    });
+    //level 1: 1 = central limit order book, Nasdaq Nordic reports its auctions as 5
+    char l1 = get_mmt_level(mmt_class, 0);
+    if (l1 != '1' && l1 != '5') return std::nullopt;
+    switch (get_mmt_level(mmt_class, 1)) {
+        case '2': return TradeQualifier::continuous;
+        case 'O': return TradeQualifier::opening_auction;
+        case 'K':
+        case 'C': return TradeQualifier::closing_auction;
+        case 'I': return TradeQualifier::intraday_auction;
+        case 'U': return TradeQualifier::unscheduled_auction;
+        //P is Auction on Demand on Nasdaq Nordic - only AOD orders take part,
+        //so regular orders cannot be matched at its price
+        default: return std::nullopt;
+    }
+}
+
+bool TRTHEventSource::read_row(TRTHRawSource::Data &data) {
+    if (_has_next) {
+        std::swap(data, _next);
+        _has_next = false;
+        return true;
+    }
+    return _raw_source.read(data);
+}
+
+bool TRTHEventSource::peek_row() {
+    if (!_has_next) _has_next = _raw_source.read(_next);
+    return _has_next;
+}
+
+bool TRTHEventSource::parse_auction(Auction &a) {
+    if (_data.Price.empty()) return false;
+    std::string_view inst_phase;
+    parse_qualifiers(_data.Qualifiers, [&](auto key, auto val){
+        if (key == "INST_PHASE") inst_phase = val;
+    });
+    a.price = Decimal::from_string(_data.Price);
+    a.quantity = _data.Volume.empty()?0_dec:Decimal::from_string(_data.Volume);
+    a.imbalance = 0;
+    a.auction_type = quarkbot::AuctionType::unknown;
+    if (!inst_phase.empty()) {
+        if (inst_phase == "I") a.auction_type = quarkbot::AuctionType::intraday;
+        else if (inst_phase == "U") a.auction_type = quarkbot::AuctionType::unscheduled;
+        else if (inst_phase == "O") a.auction_type = quarkbot::AuctionType::opening;
+        else if (inst_phase == "E") a.auction_type = quarkbot::AuctionType::closing;
+        else return false;
+        return true;
+    }
+    //without INST_PHASE the auction type and the imbalance side come in a quote
+    //without prices that follows the Auction row(s) with the same timestamp
+    while (peek_row()) {
+        if (_next.RIC != _data.RIC || _next.Date_Time != _data.Date_Time) break;
+        if (_next.Type == "Auction") {
+            //the same indicative repeated
+            if (_next.Price != _data.Price || _next.Volume != _data.Volume) break;
+            _has_next = false;
+            continue;
+        }
+        if (_next.Type != "Quote" || !_next.Bid_Price.empty() || !_next.Ask_Price.empty()) break;
+        bool imb = false;
+        std::string_view act_tp, side;
+        parse_qualifiers(_next.Qualifiers, [&](auto key, auto val){
+            if (key == "IMB_ACT_TP") {imb = true; act_tp = unquote(val);}
+            else if (key == "IMB_SIDE") side = unquote(val);
+        });
+        if (!imb) break;
+        _has_next = false;
+        if (act_tp == "O") a.auction_type = quarkbot::AuctionType::opening;
+        else if (act_tp == "C") a.auction_type = quarkbot::AuctionType::closing;
+        //Auction on Demand - see classify_trade()
+        else if (act_tp == "F") return false;
+        if (side == "B") a.imbalance = 1;
+        else if (side == "S") a.imbalance = -1;
+        break;
+    }
+    return true;
+}
+
+bool TRTHEventSource::parse_trade(Trade &t) {
+    if (_data.Price.empty()) return false;
+    auto qualifier = classify_trade(_data.Qualifiers);
+    if (!qualifier) return false;
+    t.price = Decimal::from_string(_data.Price);
+    t.size = _data.Volume.empty()?0_dec:Decimal::from_string(_data.Volume);
+    t.qualifier = *qualifier;
+    if (!is_auction_trade(t.qualifier)) return true;
+    //one uncross arrives as one print per execution, a few ms apart. The venue
+    //ran a single auction, so the prints make a single auction trade.
+    while (peek_row()) {
+        if (_next.RIC != _data.RIC || _next.Type != "Trade" || _next.Price.empty()) break;
+        if (classify_trade(_next.Qualifiers) != qualifier) break;
+        if (Decimal::from_string(_next.Price) != t.price) break;
+        if (!_next.Volume.empty()) t.size += Decimal::from_string(_next.Volume);
+        _has_next = false;
+    }
+    return true;
+}
 
 bool TRTHEventSource::operator()(BacktestEvent &ev) {
     if (_eof) return false;
 
     while (true)  {
-        if (!_raw_source.read(_data)) {
-            _eof = true;   
-            return false;         
-        } 
+        if (!read_row(_data)) {
+            _eof = true;
+            return false;
+        }
 
         std::string dt = _data.Date_Time;
         if (!dt.empty() && dt.back() == 'Z') dt.pop_back();
@@ -86,20 +199,7 @@ bool TRTHEventSource::operator()(BacktestEvent &ev) {
         ev.symbol = _data.RIC;
         if (_data.Type == "Auction") {
             Auction &a = ev.data.emplace<Auction>();
-            std::string_view inst_phase;
-            parse_qualifiers(_data.Qualifiers, [&](auto key, auto val){
-                if (key == "INST_PHASE") inst_phase = val;
-            });
-            if (inst_phase.empty()) a.auction_type = quarkbot::AuctionType::unknown;
-            else if (inst_phase == "I") a.auction_type = quarkbot::AuctionType::intraday;
-            else if (inst_phase == "U") a.auction_type = quarkbot::AuctionType::unscheduled;
-            else if (inst_phase == "O") a.auction_type = quarkbot::AuctionType::opening;
-            else if (inst_phase == "E") a.auction_type = quarkbot::AuctionType::closing;
-            else continue;
-            if (_data.Price.empty()) continue;
-            a.imbalance = 0;
-            a.price = Decimal::from_string(_data.Price);
-            a.quantity = _data.Volume.empty()?0_dec:Decimal::from_string(_data.Volume);
+            if (!parse_auction(a)) continue;
             a.time = ev.time;
         } else if (_data.Type == "Quote") {
             Quote &q = ev.data.emplace<Quote>();
@@ -110,40 +210,15 @@ bool TRTHEventSource::operator()(BacktestEvent &ev) {
             q.bid_size = _data.Bid_Size.empty()?0_dec:Decimal::from_string(_data.Bid_Size);
             q.time =  ev.time;
         } else if (_data.Type == "Trade") {
-            if (_data.Price.empty()) continue;
-            std::string_view mmt_class;
-            parse_qualifiers(_data.Qualifiers, [&](auto key, auto val){
-                if (key == "MMT_CLASS") mmt_class = val;
-            });
-            quarkbot::AuctionType atype = {};
-            if (!mmt_class.empty()) {
-                char tm = get_mmt_level(mmt_class, 0);
-                if (tm != '1') continue;
-                char l2 = get_mmt_level(mmt_class, 1);
-                switch (l2) {
-                    case '2': ;break;
-                    case 'O': atype = quarkbot::AuctionType::opening;break;
-                    case 'C': atype = quarkbot::AuctionType::closing;break;
-                    case 'U': atype = quarkbot::AuctionType::unscheduled;break;
-                    case 'I': atype = quarkbot::AuctionType::intraday;break;
-                    default: continue;
-                }            
-            } else {
-                continue;
-            }
             auto &t = ev.data.emplace<Trade>();
-            t.price = Decimal::from_string(_data.Price);
-            t.size = _data.Volume.empty()?0_dec:Decimal::from_string(_data.Volume);
+            if (!parse_trade(t)) continue;
             t.time = ev.time;
-            //an auction uncross is reported as a trade with the auction's MMT trading mode
-            t.qualifier = to_trade_qualifier(atype);
         } else {
             continue;
         }
-        return true;        
-    }   
+        return true;
+    }
 }
-
 
 }
 
