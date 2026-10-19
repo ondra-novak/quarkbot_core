@@ -13,22 +13,19 @@ namespace quarkbot {
         unscheduled = 'U',
     };
 
+    ///Indicative auction data - the auction result itself is a Trade with an auction qualifier
     struct Auction {
         struct MarketInstrumentStream {};
-        ///total size
+        ///indicative executable volume
         Decimal quantity;
-        ///total price
+        ///indicative price
         Decimal price;
-        ///size traded if final is true
-        Decimal quantity_traded;
-        ///imbalance
+        ///imbalance (surplus)
         Decimal imbalance;
         ///auction type
-        AuctionType auction_type;
-        ///if true, the auction is final
-        bool final;       
+        AuctionType auction_type = AuctionType::unknown;
         ///timestamp
-        std::chrono::system_clock::time_point time;        
+        std::chrono::system_clock::time_point time;
     };
 
     constexpr bool is_valid_order_for_auction_type(TimeInForce tif, AuctionType at) {

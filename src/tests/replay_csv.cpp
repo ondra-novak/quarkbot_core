@@ -2,6 +2,7 @@
 #include "quarkbot/abstract/backtest_data_source.hpp"
 #include "quarkbot/backtest/replay_csv_file.hpp"
 #include <chrono>
+#include <stdexcept>
 #include <string_view>
 #include <variant>
 #include "check.h"
@@ -23,7 +24,7 @@ constexpr std::string_view source_csv
 1598918402348000,"ETHUSD","book",65789,0,"ASK",
 1598918403348000,"TSCO.L","auction",123,456,-125,O
 1598918404348000,"TSCO.L","auction",123,4.56,333,C
-1598918405348000,"TSCO.L","auction",222,45.6,111,CF
+1598918405348000,"TSCO.L","trade",222,45.6,"",C
 )csv";
 
 void test1() {
@@ -37,6 +38,7 @@ void test1() {
     CHECK_EQUAL(std::get<quarkbot::Trade>(ev.data).price , 65785_dec);
     CHECK_EQUAL(std::get<quarkbot::Trade>(ev.data).size , 0.258_dec);
     CHECK(std::get<quarkbot::Trade>(ev.data).side == quarkbot::Side::buy);
+    CHECK(std::get<quarkbot::Trade>(ev.data).qualifier == quarkbot::TradeQualifier::continuous);
 
     CHECK(replay(ev));
     CHECK_EQUAL(std::chrono::duration_cast<std::chrono::microseconds>(ev.time.time_since_epoch()).count(), 1598918400245000);
@@ -121,23 +123,53 @@ void test1() {
     CHECK_EQUAL(std::get<quarkbot::Auction>(ev.data).price , 123_dec);
     CHECK_EQUAL(std::get<quarkbot::Auction>(ev.data).quantity, 4.56_dec);
     CHECK_EQUAL(std::get<quarkbot::Auction>(ev.data).imbalance, 333_dec);
-    CHECK(!std::get<quarkbot::Auction>(ev.data).final);
     CHECK(std::get<quarkbot::Auction>(ev.data).auction_type == quarkbot::AuctionType::closing);
  
     CHECK(replay(ev));
     CHECK_EQUAL(std::chrono::duration_cast<std::chrono::microseconds>(ev.time.time_since_epoch()).count(), 1598918405348000);
     CHECK_EQUAL(ev.symbol, "TSCO.L");
-    CHECK(std::holds_alternative<quarkbot::Auction>(ev.data));
-    CHECK_EQUAL(std::get<quarkbot::Auction>(ev.data).price , 222_dec);
-    CHECK_EQUAL(std::get<quarkbot::Auction>(ev.data).quantity, 45.6_dec);
-    CHECK_EQUAL(std::get<quarkbot::Auction>(ev.data).imbalance, 111_dec);
-    CHECK(std::get<quarkbot::Auction>(ev.data).auction_type == quarkbot::AuctionType::closing);
-    CHECK(std::get<quarkbot::Auction>(ev.data).final);
+    CHECK(std::holds_alternative<quarkbot::Trade>(ev.data));
+    CHECK_EQUAL(std::get<quarkbot::Trade>(ev.data).price , 222_dec);
+    CHECK_EQUAL(std::get<quarkbot::Trade>(ev.data).size, 45.6_dec);
+    CHECK(std::get<quarkbot::Trade>(ev.data).side == quarkbot::Side::undetermined);
+    CHECK(std::get<quarkbot::Trade>(ev.data).qualifier == quarkbot::TradeQualifier::closing_auction);
 
+}
+
+constexpr std::string_view qualifiers_csv
+= R"csv("timestamp","symbol","event","price","quantity","side","flags"
+1598918400000000,"TSCO.L","trade",100,1,"",o
+1598918401000000,"TSCO.L","trade",100,1,"",I
+1598918402000000,"TSCO.L","trade",100,1,"",u
+)csv";
+
+void test_qualifiers() {
+    quarkbot::ReplayCSVDataSource replay(qualifiers_csv);
+    quarkbot::BacktestEvent ev;
+    CHECK(replay(ev));
+    CHECK(std::get<quarkbot::Trade>(ev.data).qualifier == quarkbot::TradeQualifier::opening_auction);
+    CHECK(replay(ev));
+    CHECK(std::get<quarkbot::Trade>(ev.data).qualifier == quarkbot::TradeQualifier::intraday_auction);
+    CHECK(replay(ev));
+    CHECK(std::get<quarkbot::Trade>(ev.data).qualifier == quarkbot::TradeQualifier::unscheduled_auction);
+    CHECK(!replay(ev));
+}
+
+constexpr std::string_view final_flag_csv
+= R"csv("timestamp","symbol","event","price","quantity","side","flags"
+1598918405348000,"TSCO.L","auction",222,45.6,111,CF
+)csv";
+
+///old files with the final auction flag must fail loudly, not load with another meaning
+void test_final_flag_rejected() {
+    quarkbot::ReplayCSVDataSource replay(final_flag_csv);
+    quarkbot::BacktestEvent ev;
+    CHECK_EXCEPTION(std::runtime_error, replay(ev));
 }
 
 
 int main() {
     test1();
-
+    test_qualifiers();
+    test_final_flag_rejected();
 }

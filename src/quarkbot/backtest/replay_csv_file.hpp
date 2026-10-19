@@ -22,15 +22,17 @@ price - quote: bid or ask  price
 quantity - quote: bid or ask quantity
            trade: trade quantity
            book: quantity on level
-           auction: inticative size
+           auction: indicative size
 side -  quote: ASK or BID
         trade: BUY or SELL, or empty
         book: ASK or BID
         auction: inbalance side
 flags:  quote - empty
-        trade - empty
+        trade - empty = continuous trade, {O,C,I,U} = auction result
+                (opening, closing, intraday, unscheduled)
         book - clear or empty (clear = initiate snapshot)
-        auction - {O,C,I,U}, F- final (OF = opening final)
+        auction - {O,C,I,U}, indicative data only. The former F (final) flag
+                is rejected - write the auction result as a trade row
 
 
 */

@@ -6,6 +6,8 @@ target_sources(quarkbot_backtest PRIVATE
     simaccount.cpp 
     simaccount.hpp 
     simexec_report_csv.hpp 
+    auction_phase_tracker.cpp
+    auction_phase_tracker.hpp
     simexecutor.cpp 
     simexecutor.hpp 
     simexchange.cpp 

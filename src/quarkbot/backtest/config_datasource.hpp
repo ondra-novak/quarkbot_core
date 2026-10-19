@@ -24,7 +24,7 @@ trth=file.gz         ;trth trades, quotes, auctions gzip
 algoseek=file.csv.gz ;algoseek US equity "Trades Only" export - gzip CSV
 
 The algoseek key reads an Algoseek US equity "Trades Only" export (one file per
-ticker per day) and produces Trade and final Auction events. It is configured by
+ticker per day) and produces Trade events (auction prints carry an auction qualifier). It is configured by
 separate option keys rather than by parameters on the value, so that one option
 block can serve many files:
 
