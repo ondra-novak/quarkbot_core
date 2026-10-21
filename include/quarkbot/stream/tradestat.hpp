@@ -26,6 +26,17 @@ struct TradeStatCounter {
     Decimal weighted_price_sq_sum = {};    
     /// time of last even
     std::chrono::system_clock::time_point time;
+    /// total count of auction trades - a Trade can be missed, this can't
+    /** a venue can report one auction as several prints (multiple market centers) */
+    std::uint64_t auctions = 0;
+    /// total volume of auction trades
+    Decimal auction_volume = {};
+    /// total turnover (price * volume) of auction trades
+    Decimal auction_turnover = {};
+    /// time of last auction trade
+    std::chrono::system_clock::time_point last_auction_time;
+    /// type of last auction trade, unknown before the first one
+    AuctionType last_auction_type = AuctionType::unknown;
 
     ///calculate count of trades between two samples
     friend std::uint64_t delta_trades(const TradeStatCounter &beg, const TradeStatCounter &end) {
@@ -57,12 +68,28 @@ struct TradeStatCounter {
         return  avg2 - avg*avg;
     }   
 
+    ///calculate count of auction trades between two samples
+    friend std::uint64_t delta_auctions(const TradeStatCounter &beg, const TradeStatCounter &end) {
+        return end.auctions - beg.auctions;
+    }
+    ///calculate auction volume between two samples
+    friend Decimal delta_auction_volume(const TradeStatCounter &beg, const TradeStatCounter &end) {
+        return end.auction_volume - beg.auction_volume;
+    }
+    ///calculate volume weighted average price of auctions between two samples
+    /** with a single auction between the samples it is the auction price */
+    friend Decimal auction_vwap(const TradeStatCounter &beg, const TradeStatCounter &end) {
+        Decimal vol = delta_auction_volume(beg, end);
+        return vol?(end.auction_turnover - beg.auction_turnover)/vol: 0_dec;
+    }
+
     ///update statistics adding one trade
     /**
     It is recommended to process trades in chronological order
     Function returns new data point (original data point remains untouched)
      */
     TradeStatCounter add(const Trade &tr) const {
+        bool auction = is_auction_trade(tr.qualifier);
         return {
             trades+1,
             volume + tr.size,
@@ -71,7 +98,12 @@ struct TradeStatCounter {
             tr.price,
             weighted_price_sum+tr.price*tr.size,
             weighted_price_sq_sum + tr.price*tr.price*tr.size,
-            tr.time};
+            tr.time,
+            auctions + (auction?1:0),
+            auction_volume + (auction?tr.size:0),
+            auction_turnover + (auction?tr.price*tr.size:0),
+            auction?tr.time:last_auction_time,
+            auction?to_auction_type(tr.qualifier):last_auction_type};
 
     }
 };
